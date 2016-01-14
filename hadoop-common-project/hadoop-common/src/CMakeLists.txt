@@ -22,12 +22,42 @@
 
 cmake_minimum_required(VERSION 2.6 FATAL_ERROR)
 
+# Default to release builds
+set(CMAKE_BUILD_TYPE, Release)
+include(JNIFlags.cmake NO_POLICY_SCOPE)
+
 list(APPEND CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/..)
 include(HadoopCommon)
 
-# Source and test locations.
 set(SRC main/native/src/org/apache/hadoop)
 set(TST main/native/src/test/org/apache/hadoop)
+
+# Compile a library with both shared and static variants
+function(add_dual_library LIBNAME)
+    add_library(${LIBNAME} SHARED ${ARGN})
+    add_library(${LIBNAME}_static STATIC ${ARGN})
+    set_target_properties(${LIBNAME}_static PROPERTIES OUTPUT_NAME ${LIBNAME})
+endfunction(add_dual_library)
+
+# Link both a static and a dynamic target against some libraries
+function(target_link_dual_libraries LIBNAME)
+    target_link_libraries(${LIBNAME} ${ARGN})
+    target_link_libraries(${LIBNAME}_static ${ARGN})
+endfunction(target_link_dual_libraries)
+
+function(output_directory TGT DIR)
+    SET_TARGET_PROPERTIES(${TGT} PROPERTIES
+        RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${DIR}")
+    SET_TARGET_PROPERTIES(${TGT} PROPERTIES
+        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${DIR}")
+    SET_TARGET_PROPERTIES(${TGT} PROPERTIES
+        LIBRARY_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/${DIR}")
+endfunction(output_directory TGT DIR)
+
+function(dual_output_directory TGT DIR)
+    output_directory(${TGT} "${DIR}")
+    output_directory(${TGT}_static "${DIR}")
+endfunction(dual_output_directory TGT DIR)
 
 #
 # Main configuration.
@@ -89,10 +119,10 @@ if(SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
 else()
     set(SNAPPY_INCLUDE_DIR "")
     set(SNAPPY_SOURCE_FILES "")
-    if(REQUIRE_SNAPPY)
-        message(FATAL_ERROR "Required snappy library could not be found.  SNAPPY_LIBRARY=${SNAPPY_LIBRARY}, SNAPPY_INCLUDE_DIR=${SNAPPY_INCLUDE_DIR}, CUSTOM_SNAPPY_INCLUDE_DIR=${CUSTOM_SNAPPY_INCLUDE_DIR}, CUSTOM_SNAPPY_PREFIX=${CUSTOM_SNAPPY_PREFIX}, CUSTOM_SNAPPY_INCLUDE=${CUSTOM_SNAPPY_INCLUDE}")
-    endif()
-endif()
+    IF(REQUIRE_SNAPPY)
+        MESSAGE(FATAL_ERROR "Required snappy library could not be found.  SNAPPY_LIBRARY=${SNAPPY_LIBRARY}, SNAPPY_INCLUDE_DIR=${SNAPPY_INCLUDE_DIR}, CUSTOM_SNAPPY_INCLUDE_DIR=${CUSTOM_SNAPPY_INCLUDE_DIR}, CUSTOM_SNAPPY_PREFIX=${CUSTOM_SNAPPY_PREFIX}, CUSTOM_SNAPPY_INCLUDE=${CUSTOM_SNAPPY_INCLUDE}")
+    ENDIF(REQUIRE_SNAPPY)
+endif (SNAPPY_LIBRARY AND SNAPPY_INCLUDE_DIR)
 
 # Build hardware CRC32 acceleration, if supported on the platform.
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "^i.86$" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "x86_64" OR CMAKE_SYSTEM_PROCESSOR STREQUAL "amd64")
@@ -121,7 +151,39 @@ find_path(OPENSSL_INCLUDE_DIR
     PATHS ${CUSTOM_OPENSSL_PREFIX} ${CUSTOM_OPENSSL_PREFIX}/include
           ${CUSTOM_OPENSSL_INCLUDE} NO_DEFAULT_PATH)
 find_path(OPENSSL_INCLUDE_DIR NAMES openssl/evp.h)
+hadoop_set_find_shared_library_version("2")
+find_library(ISAL_LIBRARY
+    NAMES isal
+     PATHS ${CUSTOM_ISAL_PREFIX} ${CUSTOM_ISAL_PREFIX}/lib
+              ${CUSTOM_ISAL_PREFIX}/lib64 ${CUSTOM_ISAL_LIB})
 set(CMAKE_FIND_LIBRARY_SUFFIXES ${STORED_CMAKE_FIND_LIBRARY_SUFFIXES})
+if (ISAL_LIBRARY)
+    GET_FILENAME_COMPONENT(HADOOP_ISAL_LIBRARY ${ISAL_LIBRARY} NAME)
+    set(ISAL_INCLUDE_DIR ${SRC}/io/erasurecode/include)
+    set(ISAL_SOURCE_FILES
+        ${SRC}/io/erasurecode/erasure_code.c
+        ${SRC}/io/erasurecode/erasure_coder.c
+        ${SRC}/io/erasurecode/coder/coder_util.c
+        ${SRC}/io/erasurecode/coder/erasure_code_native.c
+        ${SRC}/io/erasurecode/coder/rs_encoder.c
+        ${SRC}/io/erasurecode/coder/rs_decoder.c)
+
+        add_executable(erasure_code_test
+             ${SRC}/io/erasurecode/erasure_code.c
+             ${TST}/io/erasurecode/erasure_code_test.c
+        )
+        target_link_libraries(erasure_code_test ${CMAKE_DL_LIBS})
+        add_executable(erasure_code_test2
+             ${SRC}/io/erasurecode/erasure_code.c
+             ${SRC}/io/erasurecode/erasure_coder.c
+             ${TST}/io/erasurecode/erasure_code_test2.c
+         )
+         target_link_libraries(erasure_code_test2 ${CMAKE_DL_LIBS})
+else (ISAL_LIBRARY)
+    IF(REQUIRE_ISAL)
+        MESSAGE(FATAL_ERROR "Required ISA-L library could not be found.  ISAL_LIBRARY=${ISAL_LIBRARY}, CUSTOM_ISAL_PREFIX=${CUSTOM_ISAL_PREFIX}")
+    ENDIF(REQUIRE_ISAL)
+endif (ISAL_LIBRARY)
 set(USABLE_OPENSSL 0)
 if(OPENSSL_LIBRARY AND OPENSSL_INCLUDE_DIR)
     include(CheckCSourceCompiles)
@@ -170,6 +232,7 @@ include_directories(
     ${BZIP2_INCLUDE_DIR}
     ${SNAPPY_INCLUDE_DIR}
     ${OPENSSL_INCLUDE_DIR}
+	${ISAL_INCLUDE_DIR}
     ${SRC}/util
 )
 configure_file(${CMAKE_SOURCE_DIR}/config.h.cmake ${CMAKE_BINARY_DIR}/config.h)
@@ -180,7 +243,10 @@ hadoop_add_dual_library(hadoop
     ${SRC}/io/compress/lz4/Lz4Compressor.c
     ${SRC}/io/compress/lz4/Lz4Decompressor.c
     ${SRC}/io/compress/lz4/lz4.c
-    ${SRC}/io/compress/lz4/lz4hc.c
+    ${SRC}/io/compress/lz4/lz4hc.c${ISAL_SOURCE_FILES}
+    ${SRC}/io/erasurecode/coder/erasure_code_native.c
+    ${ISAL_SOURCE_FILES}
+    ${SRC}/io/erasurecode/coder/erasure_code_native.c
     ${SNAPPY_SOURCE_FILES}
     ${OPENSSL_SOURCE_FILES}
     ${SRC}/io/compress/zlib/ZlibCompressor.c
