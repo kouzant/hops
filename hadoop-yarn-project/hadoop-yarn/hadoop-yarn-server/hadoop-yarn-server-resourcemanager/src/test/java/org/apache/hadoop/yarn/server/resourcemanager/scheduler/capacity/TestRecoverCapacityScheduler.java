@@ -47,10 +47,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerState;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplication;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.*;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAddedSchedulerEvent;
@@ -476,6 +473,18 @@ public class TestRecoverCapacityScheduler {
     //check that nodes are recovered properly
     Map<NodeId, FiCaSchedulerNode> afterRecoveryNodes = scheduler.getAllNodes();
     assertEquals(2, afterRecoveryNodes.size());
+
+    // Start of YARN-2022
+
+    assertNotNull("Attempt1 master container id should not be null", attempt_1.getMasterContainer().getId());
+    assertNotNull("Attempt1 RM container should not be null", scheduler.getRMContainer(
+            attempt_1.getMasterContainer().getId()));
+
+    assertTrue(scheduler.getRMContainer(
+            attempt_1.getMasterContainer().getId()).isAMContainer());
+
+    // End of YARN-2022
+
 
     //TODO, check that the queuemetrics are good
     QueueMetrics queueMetrics = scheduler.getRootQueueMetrics();
