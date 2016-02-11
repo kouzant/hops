@@ -451,8 +451,9 @@ public class ProportionalCapacityPreemptionPolicy
       List<TempQueue> queues, Resource clusterResource,
       TransactionState transactionState) {
 
-    Map<ApplicationAttemptId, Set<RMContainer>> list =
+    Map<ApplicationAttemptId, Set<RMContainer>> preemptMap =
         new HashMap<ApplicationAttemptId, Set<RMContainer>>();
+    List<RMContainer> skippedAMContainerlist = new ArrayList<RMContainer>();
 
     for (TempQueue qT : queues) {
       // we act only if we are violating balance by more than
@@ -463,6 +464,7 @@ public class ProportionalCapacityPreemptionPolicy
         // accounts for natural termination of containers
         Resource resToObtain =
             Resources.multiply(qT.toBePreempted, naturalTerminationFactor);
+        Resource skippedAMSize = Resource.newInstance(0, 0);
 
         // lock the leafqueue while we scan applications and unreserve
         synchronized (qT.leafQueue) {
@@ -476,14 +478,66 @@ public class ProportionalCapacityPreemptionPolicy
                 Resources.none())) {
               break;
             }
-            list.put(fc.getApplicationAttemptId(),
+            preemptMap.put(fc.getApplicationAttemptId(),
                 preemptFrom(fc, clusterResource, resToObtain,
-                    transactionState));
+                    skippedAMContainerlist, skippedAMSize, transactionState));
           }
+          Resource maxAMCapacityForThisQueue = Resources.multiply(
+                  Resources.multiply(clusterResource,
+                          qT.leafQueue.getAbsoluteCapacity()),
+                  qT.leafQueue.getMaxAMResourcePerQueuePercent());
+
+          // Can try preempting AMContainers (still saving atmost
+          // maxAMCapacityForThisQueue AMResource's) if more resources are
+          // required to be preempted from this Queue.
+          preemptAMContainers(clusterResource, preemptMap,
+                  skippedAMContainerlist, resToObtain, skippedAMSize,
+                  maxAMCapacityForThisQueue);
         }
       }
     }
-    return list;
+    return preemptMap;
+  }
+
+  /**
+   * As more resources are needed for preemption, saved AMContainers has to be
+   * rescanned. Such AMContainers can be preempted based on resToObtain, but
+   * maxAMCapacityForThisQueue resources will be still retained.
+   *
+   * @param clusterResource
+   * @param preemptMap
+   * @param skippedAMContainerlist
+   * @param resToObtain
+   * @param skippedAMSize
+   * @param maxAMCapacityForThisQueue
+   */
+  private void preemptAMContainers(Resource clusterResource,
+                                   Map<ApplicationAttemptId, Set<RMContainer>> preemptMap,
+                                   List<RMContainer> skippedAMContainerlist, Resource resToObtain,
+                                   Resource skippedAMSize, Resource maxAMCapacityForThisQueue) {
+    for (RMContainer c : skippedAMContainerlist) {
+      // Got required amount of resources for preemption, can stop now
+      if (Resources.lessThanOrEqual(rc, clusterResource, resToObtain,
+              Resources.none())) {
+        break;
+      }
+      // Once skippedAMSize reaches down to maxAMCapacityForThisQueue,
+      // container selection iteration for the preemption will be stopped.
+      if (Resources.lessThanOrEqual(rc, clusterResource, skippedAMSize,
+              maxAMCapacityForThisQueue)) {
+        break;
+      }
+      Set<RMContainer> contToPreempt = preemptMap.get(c.getApplicationAttemptId());
+      if (null == contToPreempt) {
+        contToPreempt = new HashSet<RMContainer>();
+        preemptMap.put(c.getApplicationAttemptId(), contToPreempt);
+      }
+      contToPreempt.add(c);
+
+      Resources.subtractFrom(resToObtain, c.getContainer().getResource());
+      Resources.subtractFrom(skippedAMSize, c.getContainer().getResource());
+    }
+    skippedAMContainerlist.clear();
   }
 
   /**
@@ -497,6 +551,7 @@ public class ProportionalCapacityPreemptionPolicy
    */
   private Set<RMContainer> preemptFrom(FiCaSchedulerApp app,
       Resource clusterResource, Resource rsrcPreempt,
+      List<RMContainer> skippedAMContainerlist, Resource skippedAMSize,
       TransactionState transactionState) {
     Set<RMContainer> ret = new HashSet<RMContainer>();
     ApplicationAttemptId appId = app.getApplicationAttemptId();
@@ -528,6 +583,12 @@ public class ProportionalCapacityPreemptionPolicy
       if (Resources.lessThanOrEqual(rc, clusterResource, rsrcPreempt,
           Resources.none())) {
         return ret;
+      }
+      // Skip AM Container from preemption now.
+      if (c.isAMContainer()) {
+        skippedAMContainerlist.add(c);
+        Resources.addTo(skippedAMSize, c.getContainer().getResource());
+        continue;
       }
       ret.add(c);
       Resources.subtractFrom(rsrcPreempt, c.getContainer().getResource());
