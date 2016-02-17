@@ -26,6 +26,8 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+
+import junit.framework.Assert;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -405,6 +407,34 @@ public class TestRecoverCapacityScheduler {
     }
 
     mockResMan.stop();
+  }
+
+  /**
+   * YARN-2022
+   * @throws Exception
+   */
+  @Test(timeout = 90000)
+  public void testAMContainerStatusWithRMRestart() throws Exception {
+    MockRM rm1 = new MockRM(conf);
+    rm1.start();
+
+    MockNM nm = new MockNM("127.0.0.1:1234", 4 * GB, 4, rm1.getResourceTrackerService());
+    nm.registerNode();
+
+    RMApp app1_1 = rm1.submitApp(1 * GB);
+    nm.nodeHeartbeat(true);
+
+    Thread.sleep(1000);
+    MockAM am1_1 = MockRM.launchAndRegisterAM(app1_1, rm1, nm);
+
+    RMAppAttempt attempt0 = app1_1.getCurrentAppAttempt();
+    AbstractYarnScheduler scheduler =
+            ((AbstractYarnScheduler) rm1.getResourceScheduler());
+
+    Assert.assertTrue(scheduler.getRMContainer(
+            attempt0.getMasterContainer().getId()).isAMContainer());
+
+    rm1.stop();
   }
 
   @Test(timeout = 90000)
