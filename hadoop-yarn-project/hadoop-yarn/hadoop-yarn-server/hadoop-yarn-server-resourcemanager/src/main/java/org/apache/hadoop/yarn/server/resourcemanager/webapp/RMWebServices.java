@@ -22,25 +22,38 @@ import com.google.inject.Inject;
 import com.google.inject.Singleton;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.commons.codec.binary.Base64;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.security.AccessControlException;
+import org.apache.hadoop.io.DataOutputBuffer;
+import org.apache.hadoop.io.Text;
+import org.apache.hadoop.security.Credentials;
+import org.apache.hadoop.security.token.Token;
+import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
+import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHandler;
 import org.apache.hadoop.security.authorize.AuthorizationException;
-import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationsRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationRequest;
-import org.apache.hadoop.yarn.api.protocolrecords.KillApplicationResponse;
-import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
-import org.apache.hadoop.yarn.api.records.ApplicationId;
-import org.apache.hadoop.yarn.api.records.ApplicationReport;
-import org.apache.hadoop.yarn.api.records.FinalApplicationStatus;
-import org.apache.hadoop.yarn.api.records.NodeId;
-import org.apache.hadoop.yarn.api.records.NodeState;
-import org.apache.hadoop.yarn.api.records.QueueACL;
-import org.apache.hadoop.yarn.api.records.YarnApplicationState;
+import org.apache.hadoop.yarn.api.protocolrecords.*;
+import org.apache.hadoop.security.token.SecretManager.InvalidToken;
+import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.CancelDelegationTokenResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.GetDelegationTokenRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.GetDelegationTokenResponse;
+import org.apache.hadoop.yarn.api.protocolrecords.RenewDelegationTokenRequest;
+import org.apache.hadoop.yarn.api.protocolrecords.RenewDelegationTokenResponse;
+import org.apache.hadoop.yarn.api.records.*;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.factories.RecordFactory;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
+import org.apache.hadoop.yarn.security.client.RMDelegationTokenIdentifier;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.NewApplication;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ApplicationSubmissionContextInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.CredentialsInfo;
+    import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.DelegationToken;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.LocalResourceInfo;
+import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.ResourceInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger.AuditConstants;
 import org.apache.hadoop.yarn.server.resourcemanager.RMServerUtils;
@@ -54,6 +67,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.Capacity
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fifo.FifoScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.webapp.dao.*;
+import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.webapp.BadRequestException;
 import org.apache.hadoop.yarn.webapp.NotFoundException;
@@ -69,15 +83,11 @@ import javax.ws.rs.core.Response;
 import javax.ws.rs.core.Response.Status;
 import java.io.IOException;
 import java.lang.reflect.UndeclaredThrowableException;
+import java.nio.ByteBuffer;
+import java.security.Principal;
+import java.security.AccessControlException;
 import java.security.PrivilegedExceptionAction;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentMap;
 
 @Singleton
@@ -94,6 +104,9 @@ public class RMWebServices {
   private
   @Context
   HttpServletResponse response;
+  
+  public final static String DELEGATION_TOKEN_HEADER =
+      "Hadoop-YARN-RM-Delegation-Token";
 
   @Inject
   public RMWebServices(final ResourceManager rm, Configuration conf) {
@@ -103,11 +116,7 @@ public class RMWebServices {
 
   protected Boolean hasAccess(RMApp app, HttpServletRequest hsr) {
     // Check for the authorization.
-    String remoteUser = hsr.getRemoteUser();
-    UserGroupInformation callerUGI = null;
-    if (remoteUser != null) {
-      callerUGI = UserGroupInformation.createRemoteUser(remoteUser);
-    }
+    UserGroupInformation callerUGI = getCallerUserGroupInformation(hsr, true);
     if (callerUGI != null && !(this.rm.getApplicationACLsManager()
         .checkAccess(callerUGI, ApplicationAccessType.VIEW_APP, app.getUser(),
             app.getApplicationId()) || this.rm.getQueueACLsManager()
@@ -609,7 +618,7 @@ public class RMWebServices {
   public AppState getAppState(@Context HttpServletRequest hsr,
                               @PathParam("appid") String appId) throws AuthorizationException {
     init();
-    UserGroupInformation callerUGI = getCallerUserGroupInformation(hsr);
+    UserGroupInformation callerUGI = getCallerUserGroupInformation(hsr, true);
     String userName = "";
     if (callerUGI != null) {
       userName = callerUGI.getUserName();
@@ -643,7 +652,7 @@ public class RMWebServices {
           IOException {
 
     init();
-    UserGroupInformation callerUGI = getCallerUserGroupInformation(hsr);
+    UserGroupInformation callerUGI = getCallerUserGroupInformation(hsr, true);
     if (callerUGI == null) {
       String msg = "Unable to obtain user name, user not authenticated";
       throw new AuthorizationException(msg);
@@ -753,13 +762,501 @@ public class RMWebServices {
   }
 
   private UserGroupInformation getCallerUserGroupInformation(
-          HttpServletRequest hsr) {
+          HttpServletRequest hsr, boolean usePrincipal) {
 
     String remoteUser = hsr.getRemoteUser();
+    if (usePrincipal) {
+      Principal princ = hsr.getUserPrincipal();
+      remoteUser = princ == null ? null : princ.getName();
+    }
+
     UserGroupInformation callerUGI = null;
     if (remoteUser != null) {
       callerUGI = UserGroupInformation.createRemoteUser(remoteUser);
     }
     return callerUGI;
+  }
+
+  /**
+  * Generates a new ApplicationId which is then sent to the client
+  *
+  * @param hsr
+  *          the servlet request
+  * @return Response containing the app id and the maximum resource
+  *         capabilities
+  * @throws AuthorizationException
+  * @throws IOException
+  * @throws InterruptedException
+  */
+
+  @POST
+  @Path("/apps/new-application")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public Response createNewApplication(@Context HttpServletRequest hsr)
+          throws AuthorizationException, IOException, InterruptedException {
+    init();
+    UserGroupInformation callerUGI = getCallerUserGroupInformation(hsr, true);
+    if (callerUGI == null) {
+      throw new AuthorizationException("Unable to obtain user name, "
+              + "user not authenticated");
+    }
+
+    NewApplication appId = createNewApplication();
+    return Response.status(Status.OK).entity(appId).build();
+  }
+
+  // reuse the code in ClientRMService to create new app
+  // get the new app id and submit app
+  // set location header with new app location
+  /**
+  * Function to submit an app to the RM
+  *
+  * @param newApp
+  *          structure containing information to construct the
+  *          ApplicationSubmissionContext
+  * @param hsr
+  *          the servlet request
+  * @return Response containing the status code
+  * @throws AuthorizationException
+  * @throws IOException
+  * @throws InterruptedException
+  */
+  @POST
+  @Path("/apps")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  @Consumes({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public Response submitApplication(ApplicationSubmissionContextInfo newApp,
+                                    @Context HttpServletRequest hsr) throws AuthorizationException,
+          IOException, InterruptedException {
+
+    init();
+    UserGroupInformation callerUGI = getCallerUserGroupInformation(hsr, true);
+    if (callerUGI == null) {
+      throw new AuthorizationException("Unable to obtain user name, "
+              + "user not authenticated");
+    }
+
+    ApplicationSubmissionContext appContext =
+            createAppSubmissionContext(newApp);
+    final SubmitApplicationRequest req =
+    SubmitApplicationRequest.newInstance(appContext);
+
+    try {
+      callerUGI
+              .doAs(new PrivilegedExceptionAction<SubmitApplicationResponse>() {
+                @Override
+                public SubmitApplicationResponse run() throws IOException,
+                        YarnException {
+                  return rm.getClientRMService().submitApplication(req);
+                }
+              });
+    } catch (UndeclaredThrowableException ue) {
+    if (ue.getCause() instanceof YarnException) {
+      throw new BadRequestException(ue.getCause().getMessage());
+    }
+      LOG.info("Submit app request failed", ue);
+      throw ue;
+    }
+
+    String url = hsr.getRequestURL() + "/" + newApp.getApplicationId();
+    return Response.status(Status.ACCEPTED).header(HttpHeaders.LOCATION, url)
+            .build();
+  }
+
+  /**
+  * Function that actually creates the ApplicationId by calling the
+  * ClientRMService
+  *
+  * @return returns structure containing the app-id and maximum resource
+  *         capabilities
+  */
+  private NewApplication createNewApplication() {
+    GetNewApplicationRequest req =
+            recordFactory.newRecordInstance(GetNewApplicationRequest.class);
+    GetNewApplicationResponse resp;
+    try {
+      resp = rm.getClientRMService().getNewApplication(req);
+    } catch (YarnException e) {
+      String msg = "Unable to create new app from RM web service";
+      LOG.error(msg, e);
+      throw new YarnRuntimeException(msg, e);
+    }
+    NewApplication appId =
+            new NewApplication(resp.getApplicationId().toString(),
+                new ResourceInfo(resp.getMaximumResourceCapability()));
+    return appId;
+  }
+
+  /**
+  * Create the actual ApplicationSubmissionContext to be submitted to the RM
+  * from the information provided by the user.
+  *
+  * @param newApp
+  *          the information provided by the user
+  * @return returns the constructed ApplicationSubmissionContext
+  * @throws IOException
+  */
+  protected ApplicationSubmissionContext createAppSubmissionContext(
+          ApplicationSubmissionContextInfo newApp) throws IOException {
+
+    // create local resources and app submission context
+    ApplicationId appid;
+    String error =
+            "Could not parse application id " + newApp.getApplicationId();
+    try {
+      appid =
+              ConverterUtils.toApplicationId(recordFactory,
+                      newApp.getApplicationId());
+    } catch (Exception e) {
+      throw new BadRequestException(error);
+    }
+    ApplicationSubmissionContext appContext =
+            ApplicationSubmissionContext.newInstance(appid,
+                    newApp.getApplicationName(), newApp.getQueue(),
+                    Priority.newInstance(newApp.getPriority()),
+                    createContainerLaunchContext(newApp), newApp.getUnmanagedAM(),
+                    newApp.getCancelTokensWhenComplete(), newApp.getMaxAppAttempts(),
+                    createAppSubmissionContextResource(newApp),
+                    newApp.getApplicationType(),
+                    newApp.getKeepContainersAcrossApplicationAttempts());
+    appContext.setApplicationTags(newApp.getApplicationTags());
+
+    return appContext;
+    }
+
+  protected Resource createAppSubmissionContextResource(
+          ApplicationSubmissionContextInfo newApp) throws BadRequestException {
+    if (newApp.getResource().getvCores() > rm.getConfig().getInt(
+            YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES,
+            YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES)) {
+      String msg = "Requested more cores than configured max";
+      throw new BadRequestException(msg);
+    }
+    if (newApp.getResource().getMemory() > rm.getConfig().getInt(
+            YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_MB,
+            YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_MB)) {
+      String msg = "Requested more memory than configured max";
+      throw new BadRequestException(msg);
+    }
+    Resource r =
+            Resource.newInstance(newApp.getResource().getMemory(), newApp
+                    .getResource().getvCores());
+    return r;
+  }
+
+  /**
+  * Create the ContainerLaunchContext required for the
+  * ApplicationSubmissionContext. This function takes the user information and
+  * generates the ByteBuffer structures required by the ContainerLaunchContext
+  *
+  * @param newApp
+  *          the information provided by the user
+  * @return
+  * @throws BadRequestException
+  * @throws IOException
+  */
+  protected ContainerLaunchContext createContainerLaunchContext(
+          ApplicationSubmissionContextInfo newApp) throws BadRequestException,
+          IOException {
+
+    // create container launch context
+
+    HashMap<String, ByteBuffer> hmap = new HashMap<String, ByteBuffer>();
+    for (Map.Entry<String, String> entry : newApp
+            .getContainerLaunchContextInfo().getAuxillaryServiceData().entrySet()) {
+      if (entry.getValue().isEmpty() == false) {
+        Base64 decoder = new Base64(0, null, true);
+        byte[] data = decoder.decode(entry.getValue());
+        hmap.put(entry.getKey(), ByteBuffer.wrap(data));
+      }
+    }
+
+    HashMap<String, LocalResource> hlr = new HashMap<String, LocalResource>();
+    for (Map.Entry<String, LocalResourceInfo> entry : newApp
+            .getContainerLaunchContextInfo().getResources().entrySet()) {
+      LocalResourceInfo l = entry.getValue();
+      LocalResource lr =
+              LocalResource.newInstance(
+                      ConverterUtils.getYarnUrlFromURI(l.getUrl()), l.getType(),
+                      l.getVisibility(), l.getSize(), l.getTimestamp());
+      hlr.put(entry.getKey(), lr);
+    }
+
+    DataOutputBuffer out = new DataOutputBuffer();
+    Credentials cs =
+            createCredentials(newApp.getContainerLaunchContextInfo()
+                    .getCredentials());
+    cs.writeTokenStorageToStream(out);
+    ByteBuffer tokens = ByteBuffer.wrap(out.getData());
+
+    ContainerLaunchContext ctx =
+            ContainerLaunchContext.newInstance(hlr, newApp
+                    .getContainerLaunchContextInfo().getEnvironment(), newApp
+                    .getContainerLaunchContextInfo().getCommands(), hmap, tokens, newApp
+                    .getContainerLaunchContextInfo().getAcls());
+
+    return ctx;
+    }
+
+  /**
+  * Generate a Credentials object from the information in the CredentialsInfo
+  * object.
+  *
+  * @param credentials
+  *          the CredentialsInfo provided by the user.
+  * @return
+  */
+  private Credentials createCredentials(CredentialsInfo credentials) {
+  Credentials ret = new Credentials();
+    try {
+      for (Map.Entry<String, String> entry : credentials.getTokens().entrySet()) {
+        Text alias = new Text(entry.getKey());
+        Token<TokenIdentifier> token = new Token<TokenIdentifier>();
+        token.decodeFromUrlString(entry.getValue());
+        ret.addToken(alias, token);
+      }
+      for (Map.Entry<String, String> entry : credentials.getTokens().entrySet()) {
+        Text alias = new Text(entry.getKey());
+        Base64 decoder = new Base64(0, null, true);
+        byte[] secret = decoder.decode(entry.getValue());
+        ret.addSecretKey(alias, secret);
+      }
+    } catch (IOException ie) {
+      throw new BadRequestException(
+              "Could not parse credentials data; exception message = "
+                      + ie.getMessage());
+    }
+    return ret;
+  }
+ 
+  private UserGroupInformation createKerberosUserGroupInformation(
+      HttpServletRequest hsr) throws AuthorizationException, YarnException {
+
+    UserGroupInformation callerUGI = getCallerUserGroupInformation(hsr, true);
+    if (callerUGI == null) {
+      String msg = "Unable to obtain user name, user not authenticated";
+      throw new AuthorizationException(msg);
+    }
+
+    String authType = hsr.getAuthType();
+    if (!KerberosAuthenticationHandler.TYPE.equals(authType)) {
+      String msg =
+         "Delegation token operations can only be carried out on a "
+              + "Kerberos authenticated channel";
+      throw new YarnException(msg);
+    }
+
+    callerUGI.setAuthenticationMethod(AuthenticationMethod.KERBEROS);
+    return callerUGI;
+  }
+
+  @POST
+ @Path("/delegation-token")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  @Consumes({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public Response postDelegationToken(DelegationToken tokenData,
+      @Context HttpServletRequest hsr) throws AuthorizationException,
+     IOException, InterruptedException, Exception {
+
+    init();
+    UserGroupInformation callerUGI;
+    try {
+      callerUGI = createKerberosUserGroupInformation(hsr);
+    } catch (YarnException ye) {
+      return Response.status(Status.FORBIDDEN).entity(ye.getMessage()).build();
+    }
+   return createDelegationToken(tokenData, hsr, callerUGI);
+  }
+
+  @POST
+  @Path("/delegation-token/expiration")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  @Consumes({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public Response
+      postDelegationTokenExpiration(@Context HttpServletRequest hsr)
+          throws AuthorizationException, IOException, InterruptedException,
+          Exception {
+    init();
+    UserGroupInformation callerUGI;
+    try {
+     callerUGI = createKerberosUserGroupInformation(hsr);
+    } catch (YarnException ye) {
+      return Response.status(Status.FORBIDDEN).entity(ye.getMessage()).build();
+    }
+
+    DelegationToken requestToken = new DelegationToken();
+    requestToken.setToken(extractToken(hsr).encodeToUrlString());
+    return renewDelegationToken(requestToken, hsr, callerUGI);
+  }
+
+  private Response createDelegationToken(DelegationToken tokenData,
+     HttpServletRequest hsr, UserGroupInformation callerUGI)
+      throws AuthorizationException, IOException, InterruptedException,
+      Exception {
+    final String renewer = tokenData.getRenewer();
+    GetDelegationTokenResponse resp;
+    try {
+      resp =
+          callerUGI
+            .doAs(new PrivilegedExceptionAction<GetDelegationTokenResponse>() {
+              @Override
+              public GetDelegationTokenResponse run() throws IOException,
+                  YarnException {
+                GetDelegationTokenRequest createReq =
+                    GetDelegationTokenRequest.newInstance(renewer);
+                return rm.getClientRMService().getDelegationToken(createReq);
+              }
+            });
+    } catch (Exception e) {
+      LOG.info("Create delegation token request failed", e);
+      throw e;
+    }
+
+    Token<RMDelegationTokenIdentifier> tk =
+        new Token<RMDelegationTokenIdentifier>(resp.getRMDelegationToken()
+          .getIdentifier().array(), resp.getRMDelegationToken().getPassword()
+          .array(), new Text(resp.getRMDelegationToken().getKind()), new Text(
+          resp.getRMDelegationToken().getService()));
+    RMDelegationTokenIdentifier identifier = tk.decodeIdentifier();
+    long currentExpiration =
+        rm.getRMContext().getRMDelegationTokenSecretManager()
+          .getRenewDate(identifier);
+    DelegationToken respToken =
+        new DelegationToken(tk.encodeToUrlString(), renewer, identifier
+          .getOwner().toString(), tk.getKind().toString(), currentExpiration,
+          identifier.getMaxDate());
+    return Response.status(Status.OK).entity(respToken).build();
+  }
+
+  private Response renewDelegationToken(DelegationToken tokenData,
+      HttpServletRequest hsr, UserGroupInformation callerUGI)
+      throws AuthorizationException, IOException, InterruptedException,
+      Exception {
+
+    Token<RMDelegationTokenIdentifier> token =
+        extractToken(tokenData.getToken());
+
+    org.apache.hadoop.yarn.api.records.Token dToken =
+        BuilderUtils.newDelegationToken(token.getIdentifier(), token.getKind()
+          .toString(), token.getPassword(), token.getService().toString());
+    final RenewDelegationTokenRequest req =
+        RenewDelegationTokenRequest.newInstance(dToken);
+
+    RenewDelegationTokenResponse resp;
+    try {
+      resp =
+          callerUGI
+            .doAs(new PrivilegedExceptionAction<RenewDelegationTokenResponse>() {
+             @Override
+              public RenewDelegationTokenResponse run() throws IOException,
+                  YarnException {
+                return rm.getClientRMService().renewDelegationToken(req);
+              }
+            });
+    } catch (UndeclaredThrowableException ue) {
+      if (ue.getCause() instanceof YarnException) {
+        if (ue.getCause().getCause() instanceof InvalidToken) {
+          throw new BadRequestException(ue.getCause().getCause().getMessage());
+        } else if (ue.getCause().getCause() instanceof org.apache.hadoop.security.AccessControlException) {
+          return Response.status(Status.FORBIDDEN)
+           .entity(ue.getCause().getCause().getMessage()).build();
+        }
+        LOG.info("Renew delegation token request failed", ue);
+        throw ue;
+      }
+      LOG.info("Renew delegation token request failed", ue);
+      throw ue;
+    } catch (Exception e) {
+      LOG.info("Renew delegation token request failed", e);
+      throw e;
+    }
+    long renewTime = resp.getNextExpirationTime();
+
+    DelegationToken respToken = new DelegationToken();
+    respToken.setNextExpirationTime(renewTime);
+    return Response.status(Status.OK).entity(respToken).build();
+  }
+
+  // For cancelling tokens, the encoded token is passed as a header
+  // There are two reasons for this -
+  // 1. Passing a request body as part of a DELETE request is not
+  // allowed by Jetty
+  // 2. Passing the encoded token as part of the url is not ideal
+  // since urls tend to get logged and anyone with access to
+  // the logs can extract tokens which are meant to be secret
+  @DELETE
+  @Path("/delegation-token")
+  @Produces({ MediaType.APPLICATION_JSON, MediaType.APPLICATION_XML })
+  public Response cancelDelegationToken(@Context HttpServletRequest hsr)
+      throws AuthorizationException, IOException, InterruptedException,
+      Exception {
+
+    init();
+    UserGroupInformation callerUGI;
+   try {
+      callerUGI = createKerberosUserGroupInformation(hsr);
+    } catch (YarnException ye) {
+      return Response.status(Status.FORBIDDEN).entity(ye.getMessage()).build();
+    }
+
+    Token<RMDelegationTokenIdentifier> token = extractToken(hsr);
+
+   org.apache.hadoop.yarn.api.records.Token dToken =
+        BuilderUtils.newDelegationToken(token.getIdentifier(), token.getKind()
+          .toString(), token.getPassword(), token.getService().toString());
+   final CancelDelegationTokenRequest req =
+        CancelDelegationTokenRequest.newInstance(dToken);
+
+    try {
+      callerUGI
+        .doAs(new PrivilegedExceptionAction<CancelDelegationTokenResponse>() {
+          @Override
+          public CancelDelegationTokenResponse run() throws IOException,
+              YarnException {
+           return rm.getClientRMService().cancelDelegationToken(req);
+          }
+        });
+    } catch (UndeclaredThrowableException ue) {
+      if (ue.getCause() instanceof YarnException) {
+        if (ue.getCause().getCause() instanceof InvalidToken) {
+          throw new BadRequestException(ue.getCause().getCause().getMessage());
+        } else if (ue.getCause().getCause() instanceof org.apache.hadoop.security.AccessControlException) {
+          return Response.status(Status.FORBIDDEN)
+            .entity(ue.getCause().getCause().getMessage()).build();
+        }
+        LOG.info("Renew delegation token request failed", ue);
+        throw ue;
+      }
+      LOG.info("Renew delegation token request failed", ue);
+      throw ue;
+    } catch (Exception e) {
+      LOG.info("Renew delegation token request failed", e);
+      throw e;
+    }
+
+    return Response.status(Status.OK).build();
+ }
+
+  private Token<RMDelegationTokenIdentifier> extractToken(
+      HttpServletRequest request) {
+    String encodedToken = request.getHeader(DELEGATION_TOKEN_HEADER);
+    if (encodedToken == null) {
+      String msg =
+         "Header '" + DELEGATION_TOKEN_HEADER
+              + "' containing encoded token not found";
+      throw new BadRequestException(msg);
+    }
+   return extractToken(encodedToken);
+  }
+  private Token<RMDelegationTokenIdentifier> extractToken(String encodedToken) {
+    Token<RMDelegationTokenIdentifier> token =
+        new Token<RMDelegationTokenIdentifier>();
+    try {
+      token.decodeFromUrlString(encodedToken);
+   } catch (Exception ie) {
+      String msg = "Could not decode encoded token";
+      throw new BadRequestException(msg);
+   }
+    return token;
   }
 }

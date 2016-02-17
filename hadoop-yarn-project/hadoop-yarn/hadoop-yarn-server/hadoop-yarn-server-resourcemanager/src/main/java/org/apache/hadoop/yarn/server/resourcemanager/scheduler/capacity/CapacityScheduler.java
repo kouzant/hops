@@ -19,7 +19,6 @@
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Splitter;
 import io.hops.ha.common.TransactionState;
 import io.hops.ha.common.TransactionStateImpl;
 import io.hops.metadata.yarn.entity.AppSchedulingInfo;
@@ -34,7 +33,6 @@ import org.apache.hadoop.security.AccessControlException;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
-import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
@@ -42,11 +40,9 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.QueueACL;
 import org.apache.hadoop.yarn.api.records.QueueInfo;
 import org.apache.hadoop.yarn.api.records.QueueUserACLInfo;
-import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
-import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger.AuditConstants;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
@@ -66,8 +62,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.AbstractYarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.Allocation;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.PreemptableResourceScheduler;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppReport;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
@@ -85,6 +79,8 @@ import org.apache.hadoop.yarn.server.utils.Lock;
 import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
+import com.google.common.base.Preconditions;
+
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.ArrayList;
@@ -96,6 +92,7 @@ import java.util.Map;
 import java.util.Random;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplication;
 import org.apache.hadoop.yarn.util.ConverterUtils;
@@ -103,13 +100,16 @@ import org.apache.hadoop.yarn.util.ConverterUtils;
 @LimitedPrivate("yarn")
 @Evolving
 @SuppressWarnings("unchecked")
-public class CapacityScheduler extends AbstractYarnScheduler
+public class CapacityScheduler extends
+        AbstractYarnScheduler<FiCaSchedulerApp, FiCaSchedulerNode>
         implements PreemptableResourceScheduler, CapacitySchedulerContext,
         Configurable {
 
   private static final Log LOG = LogFactory.getLog(CapacityScheduler.class);
 
   private CSQueue root;
+    // timeout to join when we stop this service
+  protected final long THREAD_JOIN_TIMEOUT_MS = 1000;
 
   static final Comparator<CSQueue> queueComparator = new Comparator<CSQueue>() {
     @Override
@@ -186,18 +186,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
   private Map<String, CSQueue> queues = 
           new ConcurrentHashMap<String, CSQueue>();  //recovered
 
-  private Map<NodeId, FiCaSchedulerNode> nodes = 
-          new ConcurrentHashMap<NodeId, FiCaSchedulerNode>();   //recovered
-
-  private Resource clusterResource = 
-          RecordFactoryProvider.getRecordFactory(null)
-                  .newRecordInstance(Resource.class);  // recovered
-  private int numNodeManagers = 0;    //recovered
-
-  private Resource minimumAllocation;  //from config
-  private Resource maximumAllocation;   //from config
-
-  private boolean initialized = false;
+  private AtomicInteger numNodeManagers = new AtomicInteger(0);   //recovered
 
   private ResourceCalculator calculator;  //from config
   private boolean usePortForNodeName;   //from config
@@ -216,7 +205,8 @@ public class CapacityScheduler extends AbstractYarnScheduler
 
   private int maxAllocatedContainersPerRequest = -1;
   
-  public CapacityScheduler() {
+    public CapacityScheduler() {
+    super(CapacityScheduler.class.getName());
   }
 
   @Override
@@ -239,16 +229,6 @@ public class CapacityScheduler extends AbstractYarnScheduler
   }
 
   @Override
-  public Resource getMinimumResourceCapability() {
-    return minimumAllocation;
-  }
-
-  @Override
-  public Resource getMaximumResourceCapability() {
-    return maximumAllocation;
-  }
-
-  @Override
   public Comparator<FiCaSchedulerApp> getApplicationComparator() {
     return applicationComparator;
   }
@@ -264,70 +244,99 @@ public class CapacityScheduler extends AbstractYarnScheduler
   }
 
   @Override
-  public synchronized int getNumClusterNodes() {
-    return numNodeManagers;
-  }
+  public int getNumClusterNodes() {
+    return numNodeManagers.get();
+   }
 
   @Override
-  public RMContext getRMContext() {
+  public synchronized RMContext getRMContext() {
     return this.rmContext;
   }
 
-  @Override
-  public Resource getClusterResources() {
-    return clusterResource;
+//TransactionState transactionState
+ @Override
+   public synchronized void setRMContext(RMContext rmContext) {
+    this.rmContext = rmContext;
+  }
+
+  private synchronized void initScheduler(Configuration configuration) throws
+      IOException {
+    this.conf = loadCapacitySchedulerConfiguration(configuration);
+    validateConf(this.conf);
+    this.minimumAllocation = this.conf.getMinimumAllocation();
+    this.maximumAllocation = this.conf.getMaximumAllocation();
+    this.calculator = this.conf.getResourceCalculator();
+    this.usePortForNodeName = this.conf.getUsePortForNodeName();
+    this.applications =
+        new ConcurrentHashMap<ApplicationId,
+            SchedulerApplication<FiCaSchedulerApp>>();
+
+    initializeQueues(this.conf);
+
+    scheduleAsynchronously = this.conf.getScheduleAynschronously();
+    asyncScheduleInterval =
+        this.conf.getLong(ASYNC_SCHEDULER_INTERVAL,
+            DEFAULT_ASYNC_SCHEDULER_INTERVAL);
+    if (scheduleAsynchronously) {
+      asyncSchedulerThread = new AsyncScheduleThread(this);
+    }
+
+    LOG.info("Initialized CapacityScheduler with " +
+        "calculator=" + getResourceCalculator().getClass() + ", " +
+        "minimumAllocation=<" + getMinimumResourceCapability() + ">, " +
+        "maximumAllocation=<" + getMaximumResourceCapability() + ">, " +
+        "asynchronousScheduling=" + scheduleAsynchronously + ", " +
+        "asyncScheduleInterval=" + asyncScheduleInterval + "ms");
+  }
+
+  private synchronized void startSchedulerThreads() {
+    if (scheduleAsynchronously) {
+      Preconditions.checkNotNull(asyncSchedulerThread,
+          "asyncSchedulerThread is null");
+      asyncSchedulerThread.start();
+    }
   }
 
   @Override
-  public synchronized void reinitialize(Configuration conf, RMContext rmContext,
-          TransactionState transactionState)
-      throws IOException {
+  public void serviceInit(Configuration conf) throws Exception {
     Configuration configuration = new Configuration(conf);
-    if (!initialized) {
-      this.rmContext = rmContext;
-      this.conf = loadCapacitySchedulerConfiguration(configuration);
-      validateConf(this.conf);
-      this.minimumAllocation = this.conf.getMinimumAllocation();
-      this.maximumAllocation = this.conf.getMaximumAllocation();
-      this.calculator = this.conf.getResourceCalculator();
-      this.usePortForNodeName = this.conf.getUsePortForNodeName();
-      this.applications = 
-              new ConcurrentHashMap<ApplicationId, SchedulerApplication>();
-      
-      this.maxAllocatedContainersPerRequest = this.conf.getInt(
-              YarnConfiguration.MAX_ALLOCATED_CONTAINERS_PER_REQUEST,
-              YarnConfiguration.DEFAULT_MAX_ALLOCATED_CONTAINERS_PER_REQUEST);
-      
-      initializeQueues(this.conf, transactionState);
+    initScheduler(configuration);
+    super.serviceInit(conf);
+  }
 
-      scheduleAsynchronously = this.conf.getScheduleAynschronously();
-      asyncScheduleInterval = this.conf
-          .getLong(ASYNC_SCHEDULER_INTERVAL, DEFAULT_ASYNC_SCHEDULER_INTERVAL);
-      if (scheduleAsynchronously) {
-        asyncSchedulerThread = new AsyncScheduleThread(this);
-        asyncSchedulerThread.start();
-      }
+  @Override
+  public void serviceStart() throws Exception {
+    startSchedulerThreads();
+    super.serviceStart();
+  }
 
-      initialized = true;
-      LOG.info("Initialized CapacityScheduler with " +
-          "calculator=" + getResourceCalculator().getClass() + ", " +
-          "minimumAllocation=<" + getMinimumResourceCapability() + ">, " +
-          "maximumAllocation=<" + getMaximumResourceCapability() + ">, " +
-          "asynchronousScheduling=" + scheduleAsynchronously + ", " +
-          "asyncScheduleInterval=" + asyncScheduleInterval + "ms");
-
-    } else {
-      CapacitySchedulerConfiguration oldConf = this.conf;
-      this.conf = loadCapacitySchedulerConfiguration(configuration);
-      validateConf(this.conf);
-      try {
-        LOG.info("Re-initializing queues...");
-        reinitializeQueues(this.conf, transactionState);
-      } catch (Throwable t) {
-        this.conf = oldConf;
-        throw new IOException("Failed to re-init queues", t);
+  @Override
+  public void serviceStop() throws Exception {
+    synchronized (this) {
+      if (scheduleAsynchronously && asyncSchedulerThread != null) {
+        asyncSchedulerThread.interrupt();
+        asyncSchedulerThread.join(THREAD_JOIN_TIMEOUT_MS);
       }
     }
+      super.serviceStop();
+  }
+
+  @Override
+  public synchronized void
+  reinitialize(Configuration conf, RMContext rmContext, TransactionState transactionState)
+          throws IOException {
+    Configuration configuration = new Configuration(conf);
+    CapacitySchedulerConfiguration oldConf = this.conf;
+    this.conf = loadCapacitySchedulerConfiguration(configuration);
+    validateConf(this.conf);
+    try {
+      LOG.info("Re-initializing queues...");
+      reinitializeQueues(this.conf, transactionState);
+    } catch (Throwable t) {
+      this.conf = oldConf;
+      throw new IOException("Failed to re-init queues", t);
+    }  
+    
   }
 
   long getAsyncScheduleInterval() {
@@ -410,12 +419,11 @@ public class CapacityScheduler extends AbstractYarnScheduler
   private static final QueueHook noop = new QueueHook();
 
   @Lock(CapacityScheduler.class)
-  private void initializeQueues(CapacitySchedulerConfiguration conf, 
-          TransactionState transactionState)
+  private void initializeQueues(CapacitySchedulerConfiguration conf)
           throws IOException {
 
     root = parseQueue(this, conf, null, CapacitySchedulerConfiguration.ROOT,
-                    queues, queues, noop, transactionState);
+                    queues, queues, noop);
     LOG.info("Initialized root queue " + root);
   }
 
@@ -427,7 +435,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
     Map<String, CSQueue> newQueues = new HashMap<String, CSQueue>();
     CSQueue newRoot =
         parseQueue(this, conf, null, CapacitySchedulerConfiguration.ROOT,
-                    newQueues, queues, noop, transactionState);
+                    newQueues, queues, noop);
 
     // Ensure all existing queues are still present
     validateExistingQueues(queues, newQueues);
@@ -480,7 +488,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
   static CSQueue parseQueue(CapacitySchedulerContext csContext,
       CapacitySchedulerConfiguration conf, CSQueue parent, String queueName,
       Map<String, CSQueue> queues, Map<String, CSQueue> oldQueues,
-          QueueHook hook, TransactionState transactionState) throws IOException {
+          QueueHook hook) throws IOException {
     CSQueue queue;
     String[] childQueueNames = conf.getQueues((parent == null) ? queueName :
         (parent.getQueuePath() + "." + queueName));
@@ -490,8 +498,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
                 "Queue configuration missing child queue names for " + queueName);
       }
       queue =
-          new LeafQueue(csContext, queueName, parent, oldQueues.get(queueName),
-          transactionState);
+          new LeafQueue(csContext, queueName, parent, oldQueues.get(queueName));
 
       // Used only for unit tests
       queue = hook.hook(queue);
@@ -506,7 +513,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
       for (String childQueueName : childQueueNames) {
         CSQueue childQueue =
             parseQueue(csContext, conf, queue, childQueueName, queues,
-                oldQueues, hook, transactionState);
+                oldQueues, hook);
         childQueues.add(childQueue);
       }
       parentQueue.setChildQueues(childQueues);
@@ -556,7 +563,8 @@ public class CapacityScheduler extends AbstractYarnScheduler
                               transactionState));
       return;
     }
-    SchedulerApplication application = new SchedulerApplication(queue, user);
+    SchedulerApplication<FiCaSchedulerApp> application =
+            new SchedulerApplication<FiCaSchedulerApp>(queue, user);
     applications.put(applicationId, application);
 
     if (transactionState != null) {
@@ -575,7 +583,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
           ApplicationAttemptId applicationAttemptId,
           boolean transferStateFromPreviousAttempt,
           TransactionState transactionState) {
-    SchedulerApplication application =
+    SchedulerApplication<FiCaSchedulerApp> application =
         applications.get(applicationAttemptId.getApplicationId());
     CSQueue queue = (CSQueue) application.getQueue();
 
@@ -608,7 +616,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
 
   private synchronized void doneApplication(ApplicationId applicationId,
           RMAppState finalState, TransactionState transactionState) {
-    SchedulerApplication application = applications.get(applicationId);
+    SchedulerApplication<FiCaSchedulerApp> application = applications.get(applicationId);
     if (application == null) {
       // The AppRemovedSchedulerEvent maybe sent on recovery for completed apps,
       // ignore it.
@@ -639,7 +647,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
         " finalState=" + rmAppAttemptFinalState);
 
     FiCaSchedulerApp attempt = getApplicationAttempt(applicationAttemptId);
-    SchedulerApplication application =
+    SchedulerApplication<FiCaSchedulerApp> application =
         applications.get(applicationAttemptId.getApplicationId());
 
     if (application == null || attempt == null) {
@@ -702,7 +710,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
 
     // Sanity check
     SchedulerUtils
-        .normalizeRequests(ask, getResourceCalculator(), getClusterResources(),
+        .normalizeRequests(ask, getResourceCalculator(), getClusterResource(),
             getMinimumResourceCapability(), maximumAllocation);
 
     // Release containers
@@ -876,7 +884,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
 
     // Try to schedule more if there are no reservations to fulfill
     if (node.getReservedContainer() == null) {
-      if (Resources.greaterThanOrEqual(calculator, getClusterResources(),
+      if (Resources.greaterThanOrEqual(calculator, getClusterResource(),
               node.getAvailableResource(), minimumAllocation)) {
         if (LOG.isDebugEnabled()) {
           LOG.debug("Trying to schedule on node: " + node.getNodeName() +
@@ -1001,18 +1009,18 @@ public class CapacityScheduler extends AbstractYarnScheduler
 
     root.updateClusterResource(clusterResource, transactionState);
 
-    ++numNodeManagers;
+    int numNodes = numNodeManagers.incrementAndGet();
     LOG.info("Added node " + nodeManager.getNodeAddress() +
         " clusterResource: " + clusterResource);
 
-    if (scheduleAsynchronously && numNodeManagers == 1) {
+    if (scheduleAsynchronously && numNodes == 1) {
       asyncSchedulerThread.beginSchedule();
     }
   }
 
   private synchronized void removeNode(RMNode nodeInfo,
           TransactionState transactionState) {
-    FiCaSchedulerNode node = this.nodes.get(nodeInfo.getNodeID());
+    FiCaSchedulerNode node = nodes.get(nodeInfo.getNodeID());
     if (node == null) {
       return;
     }
@@ -1024,9 +1032,9 @@ public class CapacityScheduler extends AbstractYarnScheduler
               clusterResource);
     }
 
-    --numNodeManagers;
+    int numNodes = numNodeManagers.decrementAndGet();
 
-    if (scheduleAsynchronously && numNodeManagers == 0) {
+    if (scheduleAsynchronously && numNodes == 0) {
       asyncSchedulerThread.suspendSchedule();
     }
 
@@ -1098,28 +1106,10 @@ public class CapacityScheduler extends AbstractYarnScheduler
 
   @Lock(Lock.NoLock.class)
   @VisibleForTesting
+  @Override
   public FiCaSchedulerApp getApplicationAttempt(
           ApplicationAttemptId applicationAttemptId) {
-    SchedulerApplication app =
-        applications.get(applicationAttemptId.getApplicationId());
-    if (app != null) {
-      return (FiCaSchedulerApp) app.getCurrentAppAttempt();
-    }
-    return null;
-  }
-
-  @Override
-  public SchedulerAppReport getSchedulerAppInfo(
-          ApplicationAttemptId applicationAttemptId) {
-    FiCaSchedulerApp app = getApplicationAttempt(applicationAttemptId);
-    return app == null ? null : new SchedulerAppReport(app);
-  }
-
-  @Override
-  public ApplicationResourceUsageReport getAppResourceUsageReport(
-          ApplicationAttemptId applicationAttemptId) {
-    FiCaSchedulerApp app = getApplicationAttempt(applicationAttemptId);
-    return app == null ? null : app.getResourceUsageReport();
+    return super.getApplicationAttempt(applicationAttemptId);
   }
 
   @Lock(Lock.NoLock.class)
@@ -1130,23 +1120,6 @@ public class CapacityScheduler extends AbstractYarnScheduler
   @Lock(Lock.NoLock.class)
   Map<NodeId, FiCaSchedulerNode> getAllNodes() {
     return nodes;
-  }
-
-  @Override
-  public RMContainer getRMContainer(ContainerId containerId) {
-    FiCaSchedulerApp attempt = getCurrentAttemptForContainer(containerId);
-    return (attempt == null) ? null : attempt.getRMContainer(containerId);
-  }
-
-  @VisibleForTesting
-  public FiCaSchedulerApp getCurrentAttemptForContainer(
-          ContainerId containerId) {
-    SchedulerApplication app = applications
-        .get(containerId.getApplicationAttemptId().getApplicationId());
-    if (app != null) {
-      return (FiCaSchedulerApp) app.getCurrentAppAttempt();
-    }
-    return null;
   }
 
   @Override
@@ -1169,7 +1142,7 @@ public class CapacityScheduler extends AbstractYarnScheduler
         ficaNode.recover(state);
         Resources.addTo(clusterResource, ficaNode.getTotalResource());
         nodes.put(nodeId, ficaNode);
-        numNodeManagers++;
+        numNodeManagers.set(numNodeManagers.get()+1); 
       }
 
       //recover csqueues
@@ -1261,12 +1234,6 @@ public class CapacityScheduler extends AbstractYarnScheduler
       ex.printStackTrace();
     }
 
-  }
-
-  @Override
-  public SchedulerNodeReport getNodeReport(NodeId nodeId) {
-    FiCaSchedulerNode node = getNode(nodeId);
-    return node == null ? null : new SchedulerNodeReport(node);
   }
 
   @Override

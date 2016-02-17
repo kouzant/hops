@@ -64,7 +64,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.server.utils.Lock;
 import org.apache.hadoop.yarn.server.utils.Lock.NoLock;
@@ -171,7 +170,7 @@ public class LeafQueue implements CSQueue {
   }
   
   public LeafQueue(CapacitySchedulerContext cs, String queueName, 
-          CSQueue parent, CSQueue old, TransactionState transactionState) {
+          CSQueue parent, CSQueue old) {
     this.scheduler = cs;
     this.queueName = queueName;
     this.parent = parent;
@@ -215,11 +214,11 @@ public class LeafQueue implements CSQueue {
             .getMaximumApplicationMasterResourcePerQueuePercent(getQueuePath());
     int maxActiveApplications = CSQueueUtils
         .computeMaxActiveApplications(resourceCalculator,
-                    cs.getClusterResources(), this.minimumAllocation,
+                    cs.getClusterResource(), this.minimumAllocation,
                     maxAMResourcePerQueuePercent, absoluteMaxCapacity);
     this.maxActiveAppsUsingAbsCap = CSQueueUtils
         .computeMaxActiveApplications(resourceCalculator,
-                    cs.getClusterResources(), this.minimumAllocation,
+                    cs.getClusterResource(), this.minimumAllocation,
                     maxAMResourcePerQueuePercent, absoluteCapacity);
     int maxActiveApplicationsPerUser = CSQueueUtils
         .computeMaxActiveApplicationsPerUser(maxActiveAppsUsingAbsCap,
@@ -234,11 +233,11 @@ public class LeafQueue implements CSQueue {
     Map<QueueACL, AccessControlList> acls =
         cs.getConfiguration().getAcls(getQueuePath());
 
-    setupQueueConfigs(cs.getClusterResources(), capacity, absoluteCapacity,
+    setupQueueConfigs(cs.getClusterResource(), capacity, absoluteCapacity,
         maximumCapacity, absoluteMaxCapacity, userLimit, userLimitFactor,
         maxApplications, maxAMResourcePerQueuePercent, maxApplicationsPerUser,
         maxActiveApplications, maxActiveApplicationsPerUser, state, acls,
-        cs.getConfiguration().getNodeLocalityDelay(), transactionState);
+        cs.getConfiguration().getNodeLocalityDelay());
 
     if (LOG.isDebugEnabled()) {
       LOG.debug(
@@ -259,8 +258,7 @@ public class LeafQueue implements CSQueue {
           int maxApplications, float maxAMResourcePerQueuePercent,
           int maxApplicationsPerUser, int maxActiveApplications,
           int maxActiveApplicationsPerUser, QueueState state,
-          Map<QueueACL, AccessControlList> acls, int nodeLocalityDelay, 
-          TransactionState transactionState) {
+          Map<QueueACL, AccessControlList> acls, int nodeLocalityDelay) {
     // Sanity check
     CSQueueUtils.checkMaxCapacity(getQueueName(), capacity, maximumCapacity);
     float absCapacity = getParent().getAbsoluteCapacity() * capacity;
@@ -301,11 +299,6 @@ public class LeafQueue implements CSQueue {
     // Update metrics
     CSQueueUtils.updateQueueStatistics(resourceCalculator, this, getParent(),
         clusterResource, minimumAllocation, null);
-
-    if (transactionState != null) {
-      ((TransactionStateImpl) transactionState).getCSQueueInfo().addCSQueue(
-              this.getQueuePath(), this);
-    }
     
     LOG.info("Initializing " + queueName + "\n" +
         "capacity = " + capacity +
@@ -697,7 +690,7 @@ public class LeafQueue implements CSQueue {
             newlyParsedLeafQueue.getMaximumActiveApplications(),
             newlyParsedLeafQueue.getMaximumActiveApplicationsPerUser(),
             newlyParsedLeafQueue.state, newlyParsedLeafQueue.acls,
-            newlyParsedLeafQueue.getNodeLocalityDelay(), transactionState);
+            newlyParsedLeafQueue.getNodeLocalityDelay());
 
     // queue metrics are updated, more resource may be available
     // activate the pending applications if possible

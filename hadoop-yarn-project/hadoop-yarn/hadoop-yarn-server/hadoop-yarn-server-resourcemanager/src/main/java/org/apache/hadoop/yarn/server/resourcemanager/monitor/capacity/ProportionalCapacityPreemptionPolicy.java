@@ -169,12 +169,16 @@ public class ProportionalCapacityPreemptionPolicy
     observeOnly = config.getBoolean(OBSERVE_ONLY, false);
     rc = scheduler.getResourceCalculator();
   }
-
+  
+  @VisibleForTesting
+  public ResourceCalculator getResourceCalculator() {
+    return rc;
+  }
   @Override
   public void editSchedule(TransactionState transactionState) {
     CSQueue root = scheduler.getRootQueue();
     Resource clusterResources =
-        Resources.clone(scheduler.getClusterResources());
+        Resources.clone(scheduler.getClusterResource());
     containerBasedPreemptOrKill(root, clusterResources, transactionState);
   }
 
@@ -209,9 +213,12 @@ public class ProportionalCapacityPreemptionPolicy
     Map<ApplicationAttemptId, Set<RMContainer>> toPreempt =
         getContainersToPreempt(queues, clusterResources, transactionState);
 
-    logToCSV(queues);
+    if (LOG.isDebugEnabled()) {
+        logToCSV(queues);
+    }
 
-    // if we are in observeOnly mode return before any action is taken
+
+      // if we are in observeOnly mode return before any action is taken
     if (observeOnly) {
       return;
     }
@@ -691,7 +698,7 @@ public class ProportionalCapacityPreemptionPolicy
       sb.append(", ");
       tq.appendLogString(sb);
     }
-    LOG.info(sb.toString());
+    LOG.debug(sb.toString());
   }
 
   /**

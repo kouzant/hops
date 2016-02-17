@@ -24,6 +24,7 @@ import io.hops.ha.common.TransactionStateManager;
 import io.hops.metadata.util.RMStorageFactory;
 import io.hops.metadata.util.RMUtilities;
 import io.hops.metadata.util.YarnAPIStorageFactory;
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.*;
 import org.junit.Assert;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -53,10 +54,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
 import org.apache.hadoop.yarn.server.resourcemanager.Task;
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerAppReport;
-import org.apache.hadoop.yarn.server.resourcemanager.scheduler.TestSchedulerUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptAddedSchedulerEvent;
@@ -155,9 +152,13 @@ public class TestFifoScheduler {
         new RMContextImpl(dispatcher, null, null, null, null, null, null,
             writer, config, tsm);
 
-    FifoScheduler schedular = new FifoScheduler();
-    schedular.reinitialize(new Configuration(), rmContext, null);
-    QueueMetrics metrics = schedular.getRootQueueMetrics();
+    FifoScheduler scheduler = new FifoScheduler();
+    Configuration conf = new Configuration();
+    scheduler.setRMContext(rmContext);
+    scheduler.init(conf);
+    scheduler.start();
+    scheduler.reinitialize(conf, rmContext,null);
+    QueueMetrics metrics = scheduler.getRootQueueMetrics();
     int beforeAppsSubmitted = metrics.getAppsSubmitted();
 
     ApplicationId appId = BuilderUtils.newApplicationId(200, 1);
@@ -166,18 +167,19 @@ public class TestFifoScheduler {
 
     SchedulerEvent appEvent =
         new AppAddedSchedulerEvent(appId, "queue", "user", new TransactionStateImpl( TransactionState.TransactionType.RM));
-    schedular.handle(appEvent);
+    scheduler.handle(appEvent);
     SchedulerEvent attemptEvent =
         new AppAttemptAddedSchedulerEvent(appAttemptId, false, new TransactionStateImpl( TransactionState.TransactionType.RM));
-    schedular.handle(attemptEvent);
+    scheduler.handle(attemptEvent);
 
     appAttemptId = BuilderUtils.newApplicationAttemptId(appId, 2);
     SchedulerEvent attemptEvent2 =
         new AppAttemptAddedSchedulerEvent(appAttemptId, false, new TransactionStateImpl( TransactionState.TransactionType.RM));
-    schedular.handle(attemptEvent2);
+    scheduler.handle(attemptEvent2);
 
     int afterAppsSubmitted = metrics.getAppsSubmitted();
     Assert.assertEquals(1, afterAppsSubmitted - beforeAppsSubmitted);
+    scheduler.stop();
   }
 
   @Test(timeout = 2000)
@@ -197,6 +199,9 @@ public class TestFifoScheduler {
     rmContext.getNMTokenSecretManager().rollMasterKey();
     rmContext.getContainerTokenSecretManager().rollMasterKey();
     FifoScheduler scheduler = new FifoScheduler();
+    scheduler.setRMContext(rmContext);
+    scheduler.init(conf);
+    scheduler.start();
     scheduler.reinitialize(new Configuration(), rmContext, null);
 
     RMNode node0 = MockNodes
@@ -249,6 +254,7 @@ public class TestFifoScheduler {
     //Also check that the containers were scheduled
     SchedulerAppReport info = scheduler.getSchedulerAppInfo(appAttemptId);
     Assert.assertEquals(3, info.getLiveContainers().size());
+    scheduler.stop();    
   }
   
   @Test(timeout = 2000)
@@ -273,6 +279,9 @@ public class TestFifoScheduler {
         return nodes;
       }
     };
+    scheduler.setRMContext(rmContext);
+    scheduler.init(conf);
+    scheduler.start();
     scheduler.reinitialize(new Configuration(), rmContext, null);
     RMNode node0 = MockNodes
         .newNodeInfo(1, Resources.createResource(2048, 4), 1, "127.0.0.1");
@@ -635,7 +644,10 @@ public class TestFifoScheduler {
     YarnAPIStorageFactory.setConfiguration(config);
     RMStorageFactory.setConfiguration(config);
     MockRM rm = new MockRM(conf);
-    FifoScheduler fs = (FifoScheduler) rm.getResourceScheduler();
+    @SuppressWarnings("unchecked")
+    AbstractYarnScheduler<SchedulerApplicationAttempt, SchedulerNode> fs =
+            (AbstractYarnScheduler<SchedulerApplicationAttempt, SchedulerNode>) rm
+              .getResourceScheduler();
     TestSchedulerUtils
         .verifyAppAddedAndRemovedFromScheduler(fs.getSchedulerApplications(),
             fs, "queue");

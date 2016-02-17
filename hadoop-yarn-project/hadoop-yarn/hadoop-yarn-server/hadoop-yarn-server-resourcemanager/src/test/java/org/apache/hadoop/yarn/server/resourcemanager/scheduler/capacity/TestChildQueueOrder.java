@@ -91,7 +91,7 @@ public class TestChildQueueOrder {
         .thenReturn(Resources.createResource(GB, 1));
     when(csContext.getMaximumResourceCapability())
         .thenReturn(Resources.createResource(16 * GB, 32));
-    when(csContext.getClusterResources()).
+    when(csContext.getClusterResource()).
         thenReturn(Resources.createResource(100 * 16 * GB, 100 * 32));
     when(csContext.getApplicationComparator()).
         thenReturn(CapacityScheduler.applicationComparator);
@@ -218,8 +218,7 @@ public class TestChildQueueOrder {
     setupSortedQueues(csConf);
     Map<String, CSQueue> queues = new HashMap<String, CSQueue>();
     CSQueue root = CapacityScheduler.parseQueue(csContext, csConf, null,
-        CapacitySchedulerConfiguration.ROOT, queues, queues, TestUtils.spyHook,
-        null);
+        CapacitySchedulerConfiguration.ROOT, queues, queues, TestUtils.spyHook);
 
     // Setup some nodes
     final int memoryPerNode = 10;

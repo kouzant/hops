@@ -69,6 +69,8 @@ public class AllocationFileLoaderService extends AbstractService {
    */
   public static final long ALLOC_RELOAD_WAIT_MS = 5 * 1000;
   
+  public static final long THREAD_JOIN_TIMEOUT_MS = 1000;
+  
   private final Clock clock;
 
   private long lastSuccessfulReload;
@@ -97,61 +99,71 @@ public class AllocationFileLoaderService extends AbstractService {
   }
   
   @Override
-  public void init(Configuration conf) {
+  public void serviceInit(Configuration conf) throws Exception {
     this.allocFile = getAllocationFile(conf);
-    super.init(conf);
-  }
-  
-  @Override
-  public void start() {
-    if (allocFile == null) {
-      return;
-    }
-    running=true;
-    reloadThread = new Thread() {
-      public void run() {
-        while (running) {
-          long time = clock.getTime();
-          long lastModified = allocFile.lastModified();
-          if (lastModified > lastSuccessfulReload &&
-              time > lastModified + ALLOC_RELOAD_WAIT_MS) {
-            try {
-              reloadAllocations();
-            } catch (Exception ex) {
+    if (allocFile != null) {
+      running = true;
+      reloadThread = new Thread() {
+        @Override
+        public void run() {
+          while (running) {
+            long time = clock.getTime();
+            long lastModified = allocFile.lastModified();
+            if (lastModified > lastSuccessfulReload &&
+                    time > lastModified + ALLOC_RELOAD_WAIT_MS) {
+              try {
+                reloadAllocations();
+              } catch (Exception ex) {
+                if (!lastReloadAttemptFailed) {
+                  LOG.error("Failed to reload fair scheduler config file - " +
+                          "will use existing allocations.", ex);
+                }
+                lastReloadAttemptFailed = true;
+              }
+            } else if (lastModified == 0l) {
               if (!lastReloadAttemptFailed) {
-                LOG.error("Failed to reload fair scheduler config file - " +
-                    "will use existing allocations.", ex);
+                LOG.warn("Failed to reload fair scheduler config file because" +
+                        " last modified returned 0. File exists: "
+                        + allocFile.exists());
               }
               lastReloadAttemptFailed = true;
             }
-          } else if (lastModified == 0l) {
-            if (!lastReloadAttemptFailed) {
-              LOG.warn("Failed to reload fair scheduler config file because" +
-                  " last modified returned 0. File exists: " +
-                  allocFile.exists());
+            try {
+              Thread.sleep(reloadIntervalMs);
+            } catch (InterruptedException ex) {
+              LOG.info(
+                      "Interrupted while waiting to reload alloc configuration");
             }
-            lastReloadAttemptFailed = true;
-          }
-          try {
-            Thread.sleep(reloadIntervalMs);
-          } catch (InterruptedException ex) {
-            LOG.info("Interrupted while waiting to reload alloc configuration");
           }
         }
-      }
-    };
-    reloadThread.setName("AllocationFileReloader");
-    reloadThread.setDaemon(true);
-    reloadThread.start();
-    super.start();
+      };
+      reloadThread.setName("AllocationFileReloader");
+      reloadThread.setDaemon(true);
+    }
+    super.serviceInit(conf);
   }
-  
+
   @Override
-  public void stop() {
-    if(running){
+  public void serviceStart() throws Exception {
+    if (reloadThread != null) {
+      reloadThread.start();
+    }
+    super.serviceStart();
+  }
+
+  @Override
+  public void serviceStop() throws Exception {
+    if(running) {
       running = false;
-      reloadThread.interrupt();
-      super.stop();
+      if (reloadThread != null) {
+        reloadThread.interrupt();
+        try {
+          reloadThread.join(THREAD_JOIN_TIMEOUT_MS);
+        } catch (InterruptedException e) {
+          LOG.warn("reloadThread fails to join.");
+        }
+      }
+      super.serviceStop();
     }
   }
   
@@ -210,6 +222,7 @@ public class AllocationFileLoaderService extends AbstractService {
     Map<String, Resource> maxQueueResources = new HashMap<String, Resource>();
     Map<String, Integer> queueMaxApps = new HashMap<String, Integer>();
     Map<String, Integer> userMaxApps = new HashMap<String, Integer>();
+    Map<String, Float> queueMaxAMShares = new HashMap<String, Float>();
     Map<String, ResourceWeights> queueWeights =
         new HashMap<String, ResourceWeights>();
     Map<String, SchedulingPolicy> queuePolicies =
@@ -219,6 +232,7 @@ public class AllocationFileLoaderService extends AbstractService {
         new HashMap<String, Map<QueueACL, AccessControlList>>();
     int userMaxAppsDefault = Integer.MAX_VALUE;
     int queueMaxAppsDefault = Integer.MAX_VALUE;
+    float queueMaxAMShareDefault = 1.0f;
     long fairSharePreemptionTimeout = Long.MAX_VALUE;
     long defaultMinSharePreemptionTimeout = Long.MAX_VALUE;
     SchedulingPolicy defaultSchedPolicy = SchedulingPolicy.DEFAULT_POLICY;
@@ -288,6 +302,11 @@ public class AllocationFileLoaderService extends AbstractService {
           String text = ((Text) element.getFirstChild()).getData().trim();
           int val = Integer.parseInt(text);
           queueMaxAppsDefault = val;
+        } else if ("queueMaxAMShareDefault".equals(element.getTagName())) {
+          String text = ((Text)element.getFirstChild()).getData().trim();
+          float val = Float.parseFloat(text);
+          val = Math.min(val, 1.0f);
+          queueMaxAMShareDefault = val;
         } else if (
             "defaultQueueSchedulingPolicy".equals(element.getTagName()) ||
                 "defaultQueueSchedulingMode".equals(element.getTagName())) {
@@ -314,7 +333,7 @@ public class AllocationFileLoaderService extends AbstractService {
         parent = null;
       }
       loadQueue(parent, element, minQueueResources, maxQueueResources,
-          queueMaxApps, userMaxApps, queueWeights, queuePolicies,
+          queueMaxApps, userMaxApps, queueMaxAMShares, queueWeights, queuePolicies,
           minSharePreemptionTimeouts, queueAcls, configuredQueues);
     }
     
@@ -330,8 +349,9 @@ public class AllocationFileLoaderService extends AbstractService {
     
     AllocationConfiguration info =
         new AllocationConfiguration(minQueueResources, maxQueueResources,
-            queueMaxApps, userMaxApps, queueWeights, userMaxAppsDefault,
-            queueMaxAppsDefault, queuePolicies, defaultSchedPolicy,
+            queueMaxApps, userMaxApps, queueWeights,
+            queueMaxAMShares, userMaxAppsDefault,
+            queueMaxAppsDefault, queueMaxAMShareDefault, queuePolicies, defaultSchedPolicy,
             minSharePreemptionTimeouts, queueAcls, fairSharePreemptionTimeout,
             defaultMinSharePreemptionTimeout, newPlacementPolicy,
             configuredQueues);
@@ -349,6 +369,7 @@ public class AllocationFileLoaderService extends AbstractService {
       Map<String, Resource> minQueueResources,
       Map<String, Resource> maxQueueResources,
       Map<String, Integer> queueMaxApps, Map<String, Integer> userMaxApps,
+      Map<String, Float> queueMaxAMShares,
       Map<String, ResourceWeights> queueWeights,
       Map<String, SchedulingPolicy> queuePolicies,
       Map<String, Long> minSharePreemptionTimeouts,
@@ -384,6 +405,11 @@ public class AllocationFileLoaderService extends AbstractService {
         String text = ((Text) field.getFirstChild()).getData().trim();
         int val = Integer.parseInt(text);
         queueMaxApps.put(queueName, val);
+      } else if ("maxAMShare".equals(field.getTagName())) {
+        String text = ((Text)field.getFirstChild()).getData().trim();
+        float val = Float.parseFloat(text);
+        val = Math.min(val, 1.0f);
+        queueMaxAMShares.put(queueName, val);
       } else if ("weight".equals(field.getTagName())) {
         String text = ((Text) field.getFirstChild()).getData().trim();
         double val = Double.parseDouble(text);
@@ -406,7 +432,7 @@ public class AllocationFileLoaderService extends AbstractService {
       } else if ("queue".endsWith(field.getTagName()) ||
           "pool".equals(field.getTagName())) {
         loadQueue(queueName, field, minQueueResources, maxQueueResources,
-            queueMaxApps, userMaxApps, queueWeights, queuePolicies,
+            queueMaxApps, userMaxApps, queueMaxAMShares, queueWeights, queuePolicies,
             minSharePreemptionTimeouts, queueAcls, configuredQueues);
         configuredQueues.get(FSQueueType.PARENT).add(queueName);
         isLeaf = false;
