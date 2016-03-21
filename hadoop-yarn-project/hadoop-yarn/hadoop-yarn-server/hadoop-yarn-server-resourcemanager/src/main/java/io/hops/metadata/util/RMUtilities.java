@@ -1970,6 +1970,32 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     putTransactionStateInAppQueue(ts, appIds);
     nextRPCLock.unlock();
   }
+
+  private static void printTransactionStateQueues() {
+    LOG.debug("Printing applications queue");
+    for (Map.Entry<ApplicationId, Queue<TransactionState>> appQ :
+            transactionStateForApp.entrySet()) {
+      Queue<TransactionState> tsQ = appQ.getValue();
+      LOG.debug("Queue for app " + appQ.getKey() + " has size " + tsQ.size());
+
+      Iterator<TransactionState> it = tsQ.iterator();
+      while(it.hasNext()) {
+        LOG.debug("APP TransactionState ID: " + it.next().getId());
+      }
+    }
+
+    LOG.debug("Printing nodes queue");
+    for (Map.Entry<NodeId, Queue<TransactionState>> nodeQ :
+            transactionStateForRMNode.entrySet()) {
+      Queue<TransactionState> tsQ = nodeQ.getValue();
+      LOG.debug("Queue for node " + nodeQ.getKey() + " has size: " + tsQ.size());
+
+      Iterator<TransactionState> it = tsQ.iterator();
+      while(it.hasNext()) {
+        LOG.debug("NODE TransactionState ID: " + it.next().getId());
+      }
+    }
+  }
   
   static Lock nextRPCLock = new ReentrantLock(true);
   static Map<TransactionState, Long> startCommit = new ConcurrentHashMap<TransactionState, Long>();
@@ -2045,8 +2071,13 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
   private static boolean canCommitApp(TransactionState ts) {
     nextRPCLock.lock();
+    printTransactionStateQueues();
+
     for (ApplicationId appId : ts.getAppIds()) {
       LOG.debug("peek ts for ap " + appId.toString() + " for ts: " + ts.getId());
+      if (transactionStateForApp.get(appId).peek() == null) {
+        LOG.debug("Application with appId: " + appId + " does not have any element in the queue");
+      }
       if (transactionStateForApp.get(appId).peek() != ts) {
         LOG.debug("cannot commit rpc " + ts.getId() + " head for " + appId
                 + " is " + transactionStateForApp.get(appId).peek().getId());
@@ -2061,6 +2092,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   private static boolean canCommitNode(TransactionStateImpl ts) {
     nextRPCLock.lock();
     for (NodeId nodeId : ts.getNodesIds()) {
+      if (transactionStateForRMNode.get(nodeId).peek() == null) {
+        LOG.debug("Node with nodeId: " + nodeId + " does not have any element in the queue");
+      }
       if (transactionStateForRMNode.get(nodeId).peek() != ts) {
         LOG.debug("cannot commit rpc " + ts.getId() + " head for " + nodeId
                 + " is "
