@@ -23,6 +23,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.NodeId;
 
 public abstract class TransactionState {
@@ -43,6 +44,7 @@ public abstract class TransactionState {
   private AtomicInteger counter = new AtomicInteger(0);
   protected final Set<ApplicationId> appIds = new ConcurrentSkipListSet<ApplicationId>();
   protected final Set<NodeId> nodesIds = new ConcurrentSkipListSet<NodeId>();
+  protected final Set<ContainerId> containerIds = new ConcurrentSkipListSet<ContainerId>();
   private Set<Integer> rpcIds = new ConcurrentSkipListSet<Integer>();
   private AtomicInteger id=new AtomicInteger(-1);
   private final boolean batch;
@@ -58,6 +60,9 @@ public abstract class TransactionState {
   }
     public Set<ApplicationId> getAppIds(){
     return appIds;
+  }
+  public Set<ContainerId> getContainerIds() {
+    return containerIds;
   }
 
   public void incCounter(Enum type) {

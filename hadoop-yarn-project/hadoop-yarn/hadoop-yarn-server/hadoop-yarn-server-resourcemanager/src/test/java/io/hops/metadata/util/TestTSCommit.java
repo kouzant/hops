@@ -60,8 +60,6 @@ public class TestTSCommit {
         TransactionState ts = new TransactionStateImpl(TransactionState.TransactionType.APP);
         ts.addRPCId(60);
 
-        Object lock = new Object();
-
         Thread blah = new Blah(app0, ts);
         blah.start();
 
@@ -84,8 +82,8 @@ public class TestTSCommit {
         blah.join(4000);
 
         ts2.decCounter(TransactionState.TransactionType.APP);
-        ts.decCounter(TransactionState.TransactionType.APP);
         ts1.decCounter(TransactionState.TransactionType.APP);
+        ts.decCounter(TransactionState.TransactionType.APP);
 
         Thread.sleep(2000);
 

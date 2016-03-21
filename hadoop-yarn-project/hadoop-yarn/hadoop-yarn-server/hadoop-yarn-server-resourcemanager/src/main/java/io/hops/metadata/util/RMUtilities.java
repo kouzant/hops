@@ -146,17 +146,7 @@ import org.apache.hadoop.yarn.util.ConverterUtils;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.EnumMap;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
@@ -1971,6 +1961,56 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     nextRPCLock.unlock();
   }
 
+  private static Queue<TransactionState> pendingTs =
+          new ConcurrentLinkedQueue<TransactionState>();
+
+  public static void enqueueTs(TransactionState ts) {
+    nextRPCLock.lock();
+    LOG.debug("Adding to pending Transaction state " + ts.getId());
+    pendingTs.add(ts);
+    nextRPCLock.unlock();
+  }
+
+  private static Map<ApplicationId, CommitLocks<ApplicationId>> appsLocks =
+          new ConcurrentHashMap<ApplicationId, CommitLocks<ApplicationId>>();
+  private static Map<NodeId, CommitLocks<NodeId>> nodesLocks =
+          new ConcurrentHashMap<NodeId, CommitLocks<NodeId>>();
+  private static Map<org.apache.hadoop.yarn.api.records.ContainerId,
+          CommitLocks<org.apache.hadoop.yarn.api.records.ContainerId>> containersLocks =
+          new ConcurrentHashMap<org.apache.hadoop.yarn.api.records.ContainerId,
+                  CommitLocks<org.apache.hadoop.yarn.api.records.ContainerId>>();
+
+  public static CommitLocks<ApplicationId> getCommitLocksForApp(ApplicationId appId) {
+    CommitLocks<ApplicationId> locks = appsLocks.get(appId);
+    if (locks == null) {
+      locks = new CommitLocks<ApplicationId>(appId);
+      appsLocks.put(appId, locks);
+    }
+
+    return locks;
+  }
+
+  public static CommitLocks<NodeId> getCommitLocksForNode(NodeId nodeId) {
+    CommitLocks<NodeId> locks = nodesLocks.get(nodeId);
+    if (locks == null) {
+      locks = new CommitLocks<NodeId>(nodeId);
+      nodesLocks.put(nodeId, locks);
+    }
+
+    return locks;
+  }
+
+  public static CommitLocks<org.apache.hadoop.yarn.api.records.ContainerId>
+    getCommitLocksForContainer(org.apache.hadoop.yarn.api.records.ContainerId containerId) {
+    CommitLocks<org.apache.hadoop.yarn.api.records.ContainerId> locks =
+            containersLocks.get(containerId);
+    if (locks == null) {
+      locks = new CommitLocks<org.apache.hadoop.yarn.api.records.ContainerId>(containerId);
+      containersLocks.put(containerId, locks);
+    }
+
+    return locks;
+  }
   private static void printTransactionStateQueues() {
     LOG.debug("Printing applications queue");
     for (Map.Entry<ApplicationId, Queue<TransactionState>> appQ :
@@ -2003,6 +2043,44 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   public static void logPutInCommitingQueue(TransactionState ts) {
     startCommit.put(ts, System.currentTimeMillis());
   }
+
+  public static void finishRPCs2(TransactionState ts) throws IOException {
+    LOG.debug("Pending Transaction States: ");
+    for (TransactionState trs : pendingTs) {
+      LOG.debug("Transaction state " + trs.getId());
+    }
+    nextRPCLock.lock();
+    if (!((TransactionStateImpl) ts).acquireTransactionLocks(CommitLocks.LockType.READ)) {
+      LOG.debug("Transaction State " + ts.getId() + " could not get lock");
+      LOG.debug(ts);
+      finishedTs.add(ts);
+      nextRPCLock.unlock();
+    } else {
+      nextRPCLock.unlock();
+      finishRPC((TransactionStateImpl) ts);
+      LOG.debug("Just committed Transaction State " + ts.getId());
+      pendingTs.remove(ts);
+      isFinished(ts);
+
+      ((TransactionStateImpl) ts).releaseLocks();
+
+      nextRPCLock.lock();
+      List<TransactionState> toCommit =
+              new ArrayList<TransactionState>();
+      for (TransactionState state: pendingTs) {
+        if (isFinished(state)) {
+          toCommit.add(state);
+        }
+      }
+      nextRPCLock.unlock();
+
+      for (TransactionState trs : toCommit) {
+        LOG.debug("Recommitting Transaction State " + trs.getId());
+        trs.commit(false);
+      }
+    }
+  }
+
 
   public static void finishRPCs(TransactionState ts) throws IOException {
     nextRPCLock.lock();
@@ -2354,4 +2432,30 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     return DA.getAll();
   }
 
+  public static class CommitLocks<T> {
+    public enum LockType {
+      READ, WRITE
+    }
+
+    public final T locksId;
+    public final CustomLock readLock;
+    public final CustomLock writeLock;
+
+    public CommitLocks(T locksId) {
+      this.locksId = locksId;
+      readLock = new CustomLock();
+      writeLock = new CustomLock();
+    }
+  }
+
+  public static class CustomLock extends ReentrantLock {
+    public String owner() {
+      Thread own = super.getOwner();
+      if (own != null) {
+        return own.getName();
+      } else {
+        return "none";
+      }
+    }
+  }
 }

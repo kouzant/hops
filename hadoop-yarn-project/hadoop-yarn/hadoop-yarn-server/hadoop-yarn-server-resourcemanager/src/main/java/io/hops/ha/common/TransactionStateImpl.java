@@ -67,6 +67,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService.AllocateResponseLock;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.impl.pb.ApplicationAttemptStateDataPBImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.impl.pb.ApplicationStateDataPBImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
@@ -86,6 +87,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.locks.ReentrantLock;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
@@ -194,6 +197,7 @@ public class TransactionStateImpl extends TransactionState {
       RMUtilities.putTransactionStateInQueues(this, nodesIds, 
               appIds);
       RMUtilities.logPutInCommitingQueue(this);
+      RMUtilities.enqueueTs(this);
     }
     GlobalThreadPool.getExecutorService().execute(new RPCFinisher(this));
   }
@@ -495,17 +499,123 @@ public class TransactionStateImpl extends TransactionState {
     appIds.add(appAttemptId.getApplicationId());
     nodesIds.add(nid);
   }
-  
+
   private void persistAppAttempt() throws IOException {
     if (!appAttempts.isEmpty()) {
-
       ApplicationAttemptStateDataAccess DA =
           (ApplicationAttemptStateDataAccess) RMStorageFactory.
               getDataAccess(ApplicationAttemptStateDataAccess.class);
       DA.addAll(appAttempts.values());
     }
   }
-  
+
+  private Set<RMUtilities.CustomLock> locksAcquired =
+          new HashSet<RMUtilities.CustomLock>();
+
+  private boolean acquireContainersLocks() {
+    RMUtilities.CustomLock lock;
+    for (ContainerId contId : containerIds) {
+      lock = RMUtilities.getCommitLocksForContainer(contId).readLock;
+      if (!lock.tryLock()) {
+        LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
+                " owned by " + lock.owner());
+        return false;
+      }
+      locksAcquired.add(lock);
+    }
+    return true;
+  }
+
+  private boolean acquireAppsReadLocks() {
+    RMUtilities.CustomLock lock;
+    for (ApplicationId appId : appIds) {
+      lock = RMUtilities.getCommitLocksForApp(appId).readLock;
+      if (!lock.tryLock()) {
+        LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
+                " owned by " + lock.owner());
+        return false;
+      }
+      locksAcquired.add(lock);
+    }
+    return true;
+  }
+
+  private boolean acquireAppsWriteLocks() {
+    RMUtilities.CustomLock lock;
+    for (ApplicationId appId : appIds) {
+      lock = RMUtilities.getCommitLocksForApp(appId).writeLock;
+      if (!lock.tryLock()) {
+        LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
+                " owned by " + lock.owner());
+        return false;
+      }
+      locksAcquired.add(lock);
+    }
+    return true;
+  }
+
+  private boolean acquireNodesReadLocks() {
+    RMUtilities.CustomLock lock;
+    for (NodeId nodeId : nodesIds) {
+      lock = RMUtilities.getCommitLocksForNode(nodeId).readLock;
+      if (!lock.tryLock()) {
+        LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
+                " owned by " + lock.owner());
+        return false;
+      }
+      locksAcquired.add(lock);
+    }
+    return true;
+  }
+
+  private boolean acquireNodesWriteLocks() {
+    RMUtilities.CustomLock lock;
+    for (NodeId nodeId : nodesIds) {
+      lock = RMUtilities.getCommitLocksForNode(nodeId).writeLock;
+      if (!lock.tryLock()) {
+        LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
+                " owned by " + lock.owner());
+        return false;
+      }
+      locksAcquired.add(lock);
+    }
+    return true;
+  }
+
+  public boolean acquireTransactionLocks(RMUtilities.CommitLocks.LockType type) {
+    if (type.equals(RMUtilities.CommitLocks.LockType.READ)) {
+      // Acquire READ locks
+      if (acquireAppsReadLocks() && acquireNodesReadLocks()
+              && acquireContainersLocks()) {
+        return true;
+      } else {
+        locksAcquired.clear();
+        return false;
+      }
+    } else {
+      // Acquire WRITE locks
+      if (acquireAppsWriteLocks() && acquireNodesWriteLocks()
+              && acquireContainersLocks()) {
+        return true;
+      } else {
+        locksAcquired.clear();
+        return false;
+      }
+    }
+  }
+
+  public void releaseLocks() {
+    for (ReentrantLock lock : locksAcquired) {
+      if (lock.isLocked() && lock.isHeldByCurrentThread()) {
+        LOG.debug("Releasing lock " + lock.toString());
+        lock.unlock();
+      } else {
+        LOG.debug("Either lock is not locked or lock is not held by me!!!");
+      }
+    }
+    locksAcquired.clear();
+  }
+
   private void persistRandNode() throws IOException {
     if(!ranNodeToAdd.isEmpty()){
         RanNodeDataAccess rDA= (RanNodeDataAccess) RMStorageFactory.
@@ -956,7 +1066,7 @@ public class TransactionStateImpl extends TransactionState {
     public void run() {
       try{
         Thread.currentThread().setPriority(Thread.MAX_PRIORITY-1);
-        RMUtilities.finishRPCs(ts);
+        RMUtilities.finishRPCs2(ts);
       }catch(IOException ex){
         LOG.error("did not commit state properly", ex);
     }
