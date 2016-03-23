@@ -100,30 +100,30 @@ public class TransactionStateImpl extends TransactionState {
   //In future implementation this will be removed as a single finishRPC will exist
   private final TransactionType type;
   //NODE
-  private Map<String, RMNode>
+  protected Map<String, RMNode>
       rmNodesToUpdate = new ConcurrentHashMap<String, RMNode>();
-  private final Map<NodeId, RMNodeInfo> rmNodeInfos =
+  protected final Map<NodeId, RMNodeInfo> rmNodeInfos =
       new ConcurrentSkipListMap<NodeId, RMNodeInfo>();
-  private final Map<String, FiCaSchedulerNodeInfoToUpdate>
+  protected final Map<String, FiCaSchedulerNodeInfoToUpdate>
       ficaSchedulerNodeInfoToUpdate =
       new ConcurrentHashMap<String, FiCaSchedulerNodeInfoToUpdate>();
-  private final Map<String, FiCaSchedulerNodeInfos>
+  protected final Map<String, FiCaSchedulerNodeInfos>
       ficaSchedulerNodeInfoToAdd =
       new ConcurrentHashMap<String, FiCaSchedulerNodeInfos>();
-  private final Map<String, FiCaSchedulerNodeInfos>
+  protected final Map<String, FiCaSchedulerNodeInfos>
       ficaSchedulerNodeInfoToRemove =
       new ConcurrentHashMap<String, FiCaSchedulerNodeInfos>();
-  private final FairSchedulerNodeInfo fairschedulerNodeInfo =
+  protected final FairSchedulerNodeInfo fairschedulerNodeInfo =
       new FairSchedulerNodeInfo();
   private final Map<String, RMContainer> rmContainersToUpdate =
       new ConcurrentHashMap<String, RMContainer>();
   private final Map<String, RMContainer> rmContainersToRemove =
       new ConcurrentHashMap<String, RMContainer>();
-  private final Map<String, Container> toAddContainers =
+  protected final Map<String, Container> toAddContainers =
           new HashMap<String, Container>();
-  private final Map<String, Container> toUpdateContainers =
+  protected final Map<String, Container> toUpdateContainers =
           new HashMap<String, Container>();
-  private final Map<String, Container> toRemoveContainers =
+  protected final Map<String, Container> toRemoveContainers =
           new HashMap<String, Container>();
   private final CSQueueInfo csQueueInfo = new CSQueueInfo();
   
@@ -701,7 +701,8 @@ public class TransactionStateImpl extends TransactionState {
       cDA.addAll(toUpdateContainers.values());
     }
   }
-  
+
+
   public void addContainerToUpdate(
           org.apache.hadoop.yarn.api.records.Container container,
           ApplicationId appId){
