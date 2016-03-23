@@ -151,6 +151,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.hadoop.net.NetUtils;
@@ -2044,14 +2045,17 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     startCommit.put(ts, System.currentTimeMillis());
   }
 
-  public static void finishRPCs2(TransactionState ts) throws IOException {
+  public static AtomicInteger missedCounter = new AtomicInteger(0);
+
+  public static void finishRPCsWithLocks(TransactionState ts) throws IOException {
     LOG.debug("Pending Transaction States: ");
     for (TransactionState trs : pendingTs) {
       LOG.debug("Transaction state " + trs.getId());
     }
     nextRPCLock.lock();
-    if (!((TransactionStateImpl) ts).acquireTransactionLocks(CommitLocks.LockType.READ)) {
+    if (!((TransactionStateImpl) ts).acquireTransactionLocks()) {
       LOG.debug("Transaction State " + ts.getId() + " could not get lock");
+      missedCounter.incrementAndGet();
       LOG.debug(ts);
       finishedTs.add(ts);
       nextRPCLock.unlock();
@@ -2060,7 +2064,6 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       finishRPC((TransactionStateImpl) ts);
       LOG.debug("Just committed Transaction State " + ts.getId());
       pendingTs.remove(ts);
-      isFinished(ts);
 
       ((TransactionStateImpl) ts).releaseLocks();
 
@@ -2086,6 +2089,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     nextRPCLock.lock();
     if (!canCommitApp(ts) || !canCommitNode((TransactionStateImpl) ts)) {
       LOG.debug(ts);
+      missedCounter.incrementAndGet();
       finishedTs.add(ts);
       nextRPCLock.unlock();
     } else {
@@ -2433,18 +2437,13 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   }
 
   public static class CommitLocks<T> {
-    public enum LockType {
-      READ, WRITE
-    }
 
     public final T locksId;
-    public final CustomLock readLock;
-    public final CustomLock writeLock;
+    public final CustomLock lock;
 
     public CommitLocks(T locksId) {
       this.locksId = locksId;
-      readLock = new CustomLock();
-      writeLock = new CustomLock();
+      lock = new CustomLock();
     }
   }
 

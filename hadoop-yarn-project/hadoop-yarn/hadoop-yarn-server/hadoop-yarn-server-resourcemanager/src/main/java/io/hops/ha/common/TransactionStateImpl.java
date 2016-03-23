@@ -67,7 +67,6 @@ import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService.AllocateResponseLock;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.impl.pb.ApplicationAttemptStateDataPBImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.impl.pb.ApplicationStateDataPBImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
@@ -441,7 +440,8 @@ public class TransactionStateImpl extends TransactionState {
             new JustFinishedContainer(status.getContainerId().toString(),
                     appAttemptId.toString(), ((ContainerStatusPBImpl) status).
                     getProto().toByteArray()));
-    appIds.add(appAttemptId.getApplicationId());
+    //appIds.add(appAttemptId.getApplicationId());
+    containerIds.add(status.getContainerId());
   }
   
   private void persistJustFinishedContainersToAdd() throws StorageException{
@@ -462,7 +462,8 @@ public class TransactionStateImpl extends TransactionState {
                         appAttemptId.toString(),
                         ((ContainerStatusPBImpl) container).getProto().
                         toByteArray()));
-        appIds.add(appAttemptId.getApplicationId());
+        //appIds.add(appAttemptId.getApplicationId());
+        containerIds.add(container.getContainerId());
       }
     }
   }
@@ -483,11 +484,12 @@ public class TransactionStateImpl extends TransactionState {
       RanNode node = new RanNode(appAttempt.getAppAttemptId().toString(),
                       nid.toString());
       ranNodeToPersist.put(node.hashCode(),node);
+      nodesIds.add(nid);
     }
 
     this.ranNodeToAdd.put(appAttempt.getAppAttemptId(),
             ranNodeToPersist);
-    appIds.add(appAttempt.getAppAttemptId().getApplicationId());
+    //appIds.add(appAttempt.getAppAttemptId().getApplicationId());
   }
 
   public void addRanNode(NodeId nid, ApplicationAttemptId appAttemptId) {
@@ -496,7 +498,8 @@ public class TransactionStateImpl extends TransactionState {
     }
     RanNode node = new RanNode(appAttemptId.toString(), nid.toString());
     this.ranNodeToAdd.get(appAttemptId).put(node.hashCode(),node);
-    appIds.add(appAttemptId.getApplicationId());
+
+    //appIds.add(appAttemptId.getApplicationId());
     nodesIds.add(nid);
   }
 
@@ -515,7 +518,7 @@ public class TransactionStateImpl extends TransactionState {
   private boolean acquireContainersLocks() {
     RMUtilities.CustomLock lock;
     for (ContainerId contId : containerIds) {
-      lock = RMUtilities.getCommitLocksForContainer(contId).readLock;
+      lock = RMUtilities.getCommitLocksForContainer(contId).lock;
       if (!lock.tryLock()) {
         LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
                 " owned by " + lock.owner());
@@ -526,10 +529,10 @@ public class TransactionStateImpl extends TransactionState {
     return true;
   }
 
-  private boolean acquireAppsReadLocks() {
+  private boolean acquireAppsLocks() {
     RMUtilities.CustomLock lock;
     for (ApplicationId appId : appIds) {
-      lock = RMUtilities.getCommitLocksForApp(appId).readLock;
+      lock = RMUtilities.getCommitLocksForApp(appId).lock;
       if (!lock.tryLock()) {
         LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
                 " owned by " + lock.owner());
@@ -540,24 +543,10 @@ public class TransactionStateImpl extends TransactionState {
     return true;
   }
 
-  private boolean acquireAppsWriteLocks() {
-    RMUtilities.CustomLock lock;
-    for (ApplicationId appId : appIds) {
-      lock = RMUtilities.getCommitLocksForApp(appId).writeLock;
-      if (!lock.tryLock()) {
-        LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
-                " owned by " + lock.owner());
-        return false;
-      }
-      locksAcquired.add(lock);
-    }
-    return true;
-  }
-
-  private boolean acquireNodesReadLocks() {
+  private boolean acquireNodesLocks() {
     RMUtilities.CustomLock lock;
     for (NodeId nodeId : nodesIds) {
-      lock = RMUtilities.getCommitLocksForNode(nodeId).readLock;
+      lock = RMUtilities.getCommitLocksForNode(nodeId).lock;
       if (!lock.tryLock()) {
         LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
                 " owned by " + lock.owner());
@@ -568,39 +557,13 @@ public class TransactionStateImpl extends TransactionState {
     return true;
   }
 
-  private boolean acquireNodesWriteLocks() {
-    RMUtilities.CustomLock lock;
-    for (NodeId nodeId : nodesIds) {
-      lock = RMUtilities.getCommitLocksForNode(nodeId).writeLock;
-      if (!lock.tryLock()) {
-        LOG.debug("Thread " + Thread.currentThread().toString() + " tried to get lock" +
-                " owned by " + lock.owner());
-        return false;
-      }
-      locksAcquired.add(lock);
-    }
-    return true;
-  }
-
-  public boolean acquireTransactionLocks(RMUtilities.CommitLocks.LockType type) {
-    if (type.equals(RMUtilities.CommitLocks.LockType.READ)) {
-      // Acquire READ locks
-      if (acquireAppsReadLocks() && acquireNodesReadLocks()
-              && acquireContainersLocks()) {
-        return true;
-      } else {
-        locksAcquired.clear();
-        return false;
-      }
+  public boolean acquireTransactionLocks() {
+    if (acquireAppsLocks() && acquireNodesLocks()
+            && acquireContainersLocks()) {
+      return true;
     } else {
-      // Acquire WRITE locks
-      if (acquireAppsWriteLocks() && acquireNodesWriteLocks()
-              && acquireContainersLocks()) {
-        return true;
-      } else {
-        locksAcquired.clear();
-        return false;
-      }
+      locksAcquired.clear();
+      return false;
     }
   }
 
@@ -691,6 +654,7 @@ public class TransactionStateImpl extends TransactionState {
       for(org.apache.hadoop.yarn.api.records.Container container:
               lastResponse.getAllocatedContainers()){
         allocatedContainers.add(container.getId().toString());
+        containerIds.add(container.getId());
       }
       
       Map<String, byte[]> completedContainersStatuses = new HashMap<String, byte[]>();
@@ -702,6 +666,7 @@ public class TransactionStateImpl extends TransactionState {
         }
         completedContainersStatuses.put(status.getContainerId().toString(), 
                 ((ContainerStatusPBImpl)toPersist).getProto().toByteArray());
+        containerIds.add(status.getContainerId());
       }
       
       AllocateResponsePBImpl toPersist = new AllocateResponsePBImpl();
@@ -795,8 +760,9 @@ public class TransactionStateImpl extends TransactionState {
                     getContainerId().toString(),
                     getRMContainerBytes(rmContainer.getContainer()));
     toAddContainers.put(hopContainer.getContainerId(),hopContainer);
-    appIds.add(rmContainer.getApplicationAttemptId().getApplicationId());
+    //appIds.add(rmContainer.getApplicationAttemptId().getApplicationId());
     nodesIds.add(rmContainer.getNodeId());
+    containerIds.add(rmContainer.getContainerId());
   }
   
   protected void persistContainersToAdd() throws StorageException {
@@ -819,8 +785,9 @@ public class TransactionStateImpl extends TransactionState {
             = new Container(container.getId().toString(),
                     getRMContainerBytes(container));
     toUpdateContainers.put(hopContainer.getContainerId(),hopContainer);
-    appIds.add(appId);
+    //appIds.add(appId);
     nodesIds.add(container.getNodeId());
+    containerIds.add(container.getId());
   }
   
   
@@ -835,8 +802,9 @@ public class TransactionStateImpl extends TransactionState {
       toRemoveContainers.put(rmContainer.getContainerId().toString(),
               new Container(rmContainer.
                   getContainerId().toString()));
-      appIds.add(rmContainer.getApplicationAttemptId().getApplicationId());
+      //appIds.add(rmContainer.getApplicationAttemptId().getApplicationId());
       nodesIds.add(rmContainer.getNodeId());
+      containerIds.add(rmContainer.getContainerId());
     }
   }
   
@@ -890,8 +858,9 @@ public class TransactionStateImpl extends TransactionState {
                             rmContainer.getState().toString(),
                             rmContainer.getContainerState().toString(),
                             rmContainer.getContainerExitStatus()));
-    appIds.add(rmContainer.getApplicationAttemptId().getApplicationId());
+    //appIds.add(rmContainer.getApplicationAttemptId().getApplicationId());
     nodesIds.add(rmContainer.getNodeId());
+    containerIds.add(rmContainer.getContainerId());
   }
 
   private void persistRMContainerToUpdate() throws StorageException {
@@ -1066,7 +1035,7 @@ public class TransactionStateImpl extends TransactionState {
     public void run() {
       try{
         Thread.currentThread().setPriority(Thread.MAX_PRIORITY-1);
-        RMUtilities.finishRPCs2(ts);
+        RMUtilities.finishRPCsWithLocks(ts);
       }catch(IOException ex){
         LOG.error("did not commit state properly", ex);
     }
