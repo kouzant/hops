@@ -115,9 +115,9 @@ public class TransactionStateImpl extends TransactionState {
       new ConcurrentHashMap<String, FiCaSchedulerNodeInfos>();
   protected final FairSchedulerNodeInfo fairschedulerNodeInfo =
       new FairSchedulerNodeInfo();
-  private final Map<String, RMContainer> rmContainersToUpdate =
+  protected final Map<String, RMContainer> rmContainersToUpdate =
       new ConcurrentHashMap<String, RMContainer>();
-  private final Map<String, RMContainer> rmContainersToRemove =
+  protected final Map<String, RMContainer> rmContainersToRemove =
       new ConcurrentHashMap<String, RMContainer>();
   protected final Map<String, Container> toAddContainers =
           new HashMap<String, Container>();
@@ -125,36 +125,36 @@ public class TransactionStateImpl extends TransactionState {
           new HashMap<String, Container>();
   protected final Map<String, Container> toRemoveContainers =
           new HashMap<String, Container>();
-  private final CSQueueInfo csQueueInfo = new CSQueueInfo();
+  protected final CSQueueInfo csQueueInfo = new CSQueueInfo();
   
   //APP
-  private final SchedulerApplicationInfo schedulerApplicationInfo;
-  private final Map<ApplicationId, ApplicationState> applicationsToAdd = 
+  protected final SchedulerApplicationInfo schedulerApplicationInfo;
+  protected final Map<ApplicationId, ApplicationState> applicationsToAdd =
           new ConcurrentHashMap<ApplicationId, ApplicationState>();
-  private final Map<ApplicationId, Set<String>> updatedNodeIdToAdd = 
+  protected final Map<ApplicationId, Set<String>> updatedNodeIdToAdd =
           new ConcurrentHashMap<ApplicationId, Set<String>>();
-  private final Map<ApplicationId, Set<String>> updatedNodeIdToRemove = 
+  protected final Map<ApplicationId, Set<String>> updatedNodeIdToRemove =
           new ConcurrentHashMap<ApplicationId, Set<String>>();
-  private final Queue<ApplicationId> applicationsStateToRemove =
+  protected final Queue<ApplicationId> applicationsStateToRemove =
       new ConcurrentLinkedQueue<ApplicationId>();
-  private final Map<String, ApplicationAttemptState> appAttempts =
+  protected final Map<String, ApplicationAttemptState> appAttempts =
       new ConcurrentHashMap<String, ApplicationAttemptState>();
-  private final Map<ApplicationAttemptId, Map<Integer, RanNode>>ranNodeToAdd =
+  protected final Map<ApplicationAttemptId, Map<Integer, RanNode>> ranNodeToAdd =
           new ConcurrentHashMap<ApplicationAttemptId, Map<Integer, RanNode>>();
-  private final Map<ApplicationAttemptId, AllocateResponse>
+  protected final Map<ApplicationAttemptId, AllocateResponse>
       allocateResponsesToAdd =
       new ConcurrentHashMap<ApplicationAttemptId, AllocateResponse>();
-  private final Map<ApplicationAttemptId, AllocateResponse> allocateResponsesToRemove =
+  protected final Map<ApplicationAttemptId, AllocateResponse> allocateResponsesToRemove =
       new ConcurrentHashMap<ApplicationAttemptId, AllocateResponse>();
   
-  private final Map<ContainerId, JustFinishedContainer> justFinishedContainerToAdd = 
+  protected final Map<ContainerId, JustFinishedContainer> justFinishedContainerToAdd =
           new ConcurrentHashMap<ContainerId, JustFinishedContainer>();
-  private final Map<ContainerId, JustFinishedContainer> justFinishedContainerToRemove = 
+  protected final Map<ContainerId, JustFinishedContainer> justFinishedContainerToRemove =
           new ConcurrentHashMap<ContainerId, JustFinishedContainer>();
   
   
   //COMTEXT
-  private final RMContextInfo rmcontextInfo = new RMContextInfo();
+  protected final RMContextInfo rmcontextInfo = new RMContextInfo();
   
   
   
@@ -162,7 +162,7 @@ public class TransactionStateImpl extends TransactionState {
   //PersistedEvent to persist for distributed RT
   private final Queue<PendingEvent> pendingEventsToAdd =
       new ConcurrentLinkedQueue<PendingEvent>();
-  private final Queue<PendingEvent> persistedEventsToRemove =
+  protected final Queue<PendingEvent> persistedEventsToRemove =
       new ConcurrentLinkedQueue<PendingEvent>();
 
   //for debug and evaluation
@@ -957,7 +957,7 @@ public class TransactionStateImpl extends TransactionState {
     public void run() {
       try{
         Thread.currentThread().setPriority(Thread.MAX_PRIORITY-1);
-        RMUtilities.finishRPCs(ts);
+        RMUtilities.finishRPCsAggr(ts);
       }catch(IOException ex){
         LOG.error("did not commit state properly", ex);
     }

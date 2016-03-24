@@ -58,6 +58,30 @@ public class RMContextInfo {
   private int load = -1;
   private String rmHostName;
 
+  public Map<NodeId, RMNodeToAdd> getActiveNodesToAdd() {
+    return activeNodesToAdd;
+  }
+
+  public Set<NodeId> getActiveNodesToRemove() {
+    return activeNodesToRemove;
+  }
+
+  public Set<NodeId> getInactiveNodesToAdd() {
+    return inactiveNodeToAdd;
+  }
+
+  public Set<NodeId> getInactiveNodesToRemove() {
+    return inactiveNodesToRemove;
+  }
+
+  public int getLoad() {
+    return load;
+  }
+
+  public String getRMHostname() {
+    return rmHostName;
+  }
+
   public void persist(RMNodeDataAccess rmnodeDA, ResourceDataAccess resourceDA,
       NodeDataAccess nodeDA,
       RMContextInactiveNodesDataAccess rmctxinactvenodesDA)

@@ -1,8 +1,11 @@
 package io.hops.ha.common;
 
 import io.hops.metadata.yarn.entity.Container;
+import io.hops.metadata.yarn.entity.SchedulerApplication;
+import io.hops.metadata.yarn.entity.SchedulerApplicationInfoToAdd;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -17,7 +20,6 @@ public class TestAggregateTxState {
 
     @Test
     public void testContainersAggregation() throws Exception {
-        LOG.info("Blahhhhh");
         TxWrapper ts0 = new TxWrapper(TransactionState.TransactionType.APP);
         TxWrapper ts1 = new TxWrapper(TransactionState.TransactionType.APP);
         TxWrapper ts2 = new TxWrapper(TransactionState.TransactionType.APP);
@@ -61,6 +63,42 @@ public class TestAggregateTxState {
             agrTx.aggregate(tx);
             agrTx.decCounter(TransactionState.TransactionType.APP);
         }
+    }
+
+    @Test
+    public void testSchedulerApplicationInfo() throws Exception {
+        TxWrapper ts0 = new TxWrapper(TransactionState.TransactionType.APP);
+        TxWrapper ts1 = new TxWrapper(TransactionState.TransactionType.APP);
+        TxWrapper ts2 = new TxWrapper(TransactionState.TransactionType.APP);
+
+        List<TxWrapper> tStates = new ArrayList<TxWrapper>();
+        tStates.add(ts0);
+        tStates.add(ts1);
+        tStates.add(ts2);
+
+        // SchedulerApplications to add
+        ApplicationId appId0_0 = ApplicationId.newInstance(10L, 0);
+        SchedulerApplicationInfoToAdd app0_0a = new SchedulerApplicationInfoToAdd(
+                new SchedulerApplication(appId0_0.toString(), "antonis", "default"));
+        ApplicationId appId0_1 = ApplicationId.newInstance(10L, 1);
+        SchedulerApplicationInfoToAdd app0_1a = new SchedulerApplicationInfoToAdd(
+                new SchedulerApplication(appId0_1.toString(), "antonis", "default"));
+        ts0.schedulerApplicationInfo.setSchedulerApplicationsToAdd(appId0_0, app0_0a);
+        ts0.schedulerApplicationInfo.setSchedulerApplicationsToAdd(appId0_1, app0_1a);
+
+        ApplicationId appId1_0 = ApplicationId.newInstance(10L, 2);
+        SchedulerApplicationInfoToAdd app1_0a = new SchedulerApplicationInfoToAdd(
+                new SchedulerApplication(appId1_0.toString(), "antonis", "default"));
+        ts1.schedulerApplicationInfo.setSchedulerApplicationsToAdd(appId1_0, app1_0a);
+
+        AggregatedTransactionState argTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
+                tStates.size());
+
+        for (TxWrapper ts : tStates) {
+            argTx.aggregate(ts);
+            argTx.decCounter(TransactionState.TransactionType.APP);
+        }
+
     }
 
     private class TxWrapper extends TransactionStateImpl {

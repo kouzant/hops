@@ -116,6 +116,22 @@ public class CSQueueInfo {
     return userInfo;
   }
 
+  public Map<String, CSLeafQueueUserInfo> getCSLeafQueueUserInfoToAdd() {
+    return csLeafQueueUserInfoToAdd;
+  }
+
+  public Set<String> getUsersToRemove() {
+    return usersToRemove;
+  }
+
+  public Map<String, LeafQueuePendingApp> getCSLeafQueuePendingAppToAdd() {
+    return csLeafQueuePendingAppToAdd;
+  }
+
+  public Map<String, LeafQueuePendingApp> getCSLeafQueuePendingAppToRemove() {
+    return csLeafQueuePendingAppToRemove;
+  }
+
   public void addCSLeafPendingApp(FiCaSchedulerApp application, String queuePath) {
     csLeafQueuePendingAppToAdd.put(application.getApplicationAttemptId().
             toString(),

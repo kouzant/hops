@@ -58,7 +58,28 @@ public class SchedulerApplicationInfo {
   public SchedulerApplicationInfo(TransactionStateImpl transactionState){
     this.transactionState = transactionState;
   }
-  
+
+  public Map<ApplicationId, SchedulerApplicationInfoToAdd> getSchedulerApplicationsToAdd() {
+    return schedulerApplicationsToAdd;
+  }
+
+  // FOR TESTING
+  public void setSchedulerApplicationsToAdd(ApplicationId appId, SchedulerApplicationInfoToAdd app) {
+    schedulerApplicationsToAdd.put(appId, app);
+  }
+
+  public Set<ApplicationId> getApplicationsIdToRemove() {
+    return applicationsIdToRemove;
+  }
+
+  public Map<String, Map<String, FiCaSchedulerAppInfo>> getFiCaSchedulerAppInfo() {
+    return fiCaSchedulerAppInfo;
+  }
+
+  public void setFiCaSchedulerAppInfo() {
+
+  }
+
   public void persist(QueueMetricsDataAccess QMDA, StorageConnector connector) throws StorageException {
     //TODO: The same QueueMetrics (DEFAULT_QUEUE) is persisted with every app. Its extra overhead. We can persist it just once
     persistApplicationIdToAdd(QMDA);

@@ -17,6 +17,7 @@ package io.hops.metadata.util;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.hops.exception.StorageException;
+import io.hops.ha.common.AggregatedTransactionState;
 import io.hops.ha.common.TransactionState;
 import io.hops.ha.common.TransactionStateImpl;
 import io.hops.metadata.yarn.TablesDef;
@@ -1976,6 +1977,69 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
   public static void logPutInCommitingQueue(TransactionState ts) {
     startCommit.put(ts, System.currentTimeMillis());
+  }
+
+  public static void finishRPCsAggr(TransactionState ts) throws IOException {
+    nextRPCLock.lock();
+    if (!canCommitApp(ts) || !canCommitNode((TransactionStateImpl) ts)) {
+      finishedTs.add(ts);
+      nextRPCLock.unlock();
+    } else {
+      nextRPCLock.unlock();
+      LOG.debug("Finishing RPC: " + ts.getId());
+      finishRPC((TransactionStateImpl) ts);
+      LOG.debug("Finished RPC: " + ts.getId());
+      nextRPCLock.lock();
+      // Remove committed transaction from queues
+      for (ApplicationId appId : ts.getAppIds()) {
+        transactionStateForApp.get(appId).poll();
+      }
+      for (NodeId nodeId : ((TransactionStateImpl) ts).getNodesIds()) {
+        transactionStateForRMNode.get(nodeId).poll();
+      }
+
+      // TODO: Set does not guarantee any order, I should use a queue
+      Set<TransactionState> toCommit =
+              new HashSet<TransactionState>();
+      // Drain application and node queue
+      drainQueue(transactionStateForApp, ts, toCommit, ApplicationId.class);
+      drainQueue(transactionStateForRMNode, ts, toCommit, NodeId.class);
+
+      AggregatedTransactionState aggrTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
+              1, false, ((TransactionStateImpl) ts).getManager(), toCommit.size());
+
+      nextRPCLock.unlock();
+      for (TransactionState tss : toCommit) {
+        aggrTx.aggregate(tss);
+        aggrTx.decCounter(TransactionState.TransactionType.APP);
+      }
+    }
+  }
+
+  private static <T extends Object> void drainQueue(Map<T, Queue<TransactionState>> map,
+          TransactionState ts, Set<TransactionState> target, Class<T> type) {
+    Set<T> ids = null;
+    if (ApplicationId.class.equals(type)) {
+      ids = (Set<T>) ts.getAppIds();
+    } else if (NodeId.class.equals(type)) {
+      ids = (Set<T>) ((TransactionStateImpl) ts).getNodesIds();
+    } else {
+      LOG.error("Class type is not applicable when draining the queues");
+    }
+
+    if (ids == null) {
+      return;
+    }
+    for (T id : ids) {
+      Queue<TransactionState> txQueue = map.get(id);
+      TransactionState tsTmp;
+      while ((tsTmp = txQueue.poll()) != null) {
+        if (isFinished(tsTmp)) {
+          LOG.debug("Adding TS " + tsTmp.getId() + " to re-commit set");
+          target.add(tsTmp);
+        }
+      }
+    }
   }
 
   public static void finishRPCs(TransactionState ts) throws IOException {
