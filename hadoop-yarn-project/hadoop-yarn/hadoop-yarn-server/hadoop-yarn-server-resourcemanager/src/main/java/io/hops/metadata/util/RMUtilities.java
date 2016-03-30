@@ -1979,67 +1979,162 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     startCommit.put(ts, System.currentTimeMillis());
   }
 
+  private static final Queue<TransactionState> txToAggregate =
+          new ConcurrentLinkedQueue<TransactionState>();
+
+  // Try to persist RPCs or aggregate them
   public static void finishRPCsAggr(TransactionState ts) throws IOException {
     nextRPCLock.lock();
-    if (!canCommitApp(ts) || !canCommitNode((TransactionStateImpl) ts)) {
-      finishedTs.add(ts);
+    if (!canCommitApp(ts) || !canCommitNode(ts)) {
+      LOG.debug("Adding TS: " + ts.getId() + " to be aggregated");
+      txToAggregate.add(ts);
       nextRPCLock.unlock();
     } else {
       nextRPCLock.unlock();
+
       LOG.debug("Finishing RPC: " + ts.getId());
       finishRPC((TransactionStateImpl) ts);
       LOG.debug("Finished RPC: " + ts.getId());
+
       nextRPCLock.lock();
       // Remove committed transaction from queues
       for (ApplicationId appId : ts.getAppIds()) {
         transactionStateForApp.get(appId).poll();
       }
-      for (NodeId nodeId : ((TransactionStateImpl) ts).getNodesIds()) {
+      for (NodeId nodeId : ts.getNodesIds()) {
         transactionStateForRMNode.get(nodeId).poll();
       }
 
-      // TODO: Set does not guarantee any order, I should use a queue
-      Set<TransactionState> toCommit =
-              new HashSet<TransactionState>();
-      // Drain application and node queue
-      drainQueue(transactionStateForApp, ts, toCommit, ApplicationId.class);
-      drainQueue(transactionStateForRMNode, ts, toCommit, NodeId.class);
+      while (!txToAggregate.isEmpty()) {
+        AggregatedTransactionState aggrTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
+                1, false, ((TransactionStateImpl) ts).getManager());
 
-      AggregatedTransactionState aggrTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
-              1, false, ((TransactionStateImpl) ts).getManager(), toCommit.size());
+        LOG.debug("txToAggregate before aggregate");
+        for (TransactionState blah : txToAggregate) {
+          LOG.debug("ToAggregate: " + blah.getId());
+        }
+        aggregate(aggrTx);
 
+        if (aggrTx.hasAggregated()) {
+          nextRPCLock.unlock();
+          aggrTx.commit(false);
+          // Remove committed Transaction States from the queues
+          nextRPCLock.lock();
+          clearQueuesFromAggregatedTS(aggrTx.getAggregatedTs());
+        } else {
+          break;
+        }
+      }
       nextRPCLock.unlock();
-      for (TransactionState tss : toCommit) {
-        aggrTx.aggregate(tss);
-        aggrTx.decCounter(TransactionState.TransactionType.APP);
+    }
+  }
+
+  private static void aggregate(AggregatedTransactionState aggrTx) {
+
+    for (TransactionState tx : txToAggregate) {
+      if (canAggregate(tx, aggrTx)) {
+        txToAggregate.remove(tx);
+        LOG.debug("We can aggregate ID: " + tx.getId());
+        aggrTx.aggregate(tx);
       }
     }
   }
 
-  private static <T extends Object> void drainQueue(Map<T, Queue<TransactionState>> map,
-          TransactionState ts, Set<TransactionState> target, Class<T> type) {
+  // Check if we can aggregate a Transaction State
+  // We can aggregate it iff:
+  // (a) By now this TS is at the head of the queue
+  // (b) This TS is not at the head of the queue but the head is already aggregated
+  private static boolean canAggregate(TransactionState ts, AggregatedTransactionState aggrTx) {
+   if (canCommitApp(ts) && canCommitNode(ts)) {
+     // There are no more conflicting Transactions for this TS
+      LOG.debug("TS ID: " + ts.getId() + " can be committed");
+      return true;
+    }
+    if (isHeadInAggregatedSet(getPreviousTransactionStates(transactionStateForApp, ts, ApplicationId.class),
+            getPreviousTransactionStates(transactionStateForRMNode, ts, NodeId.class), aggrTx)) {
+      // The conflicting head is already aggregated return true
+      LOG.debug("TS ID: " + ts.getId() + " can be committed because conflicting TS are aggregated");
+      return true;
+    }
+
+    LOG.debug("TS ID: " + ts.getId() + " cannot be aggregated");
+    // Sorry, we cannot aggregate this TS
+    return false;
+  }
+
+  private static boolean isHeadInAggregatedSet(Set<TransactionState> previousAppTs,
+          Set<TransactionState> previousNodeTs, AggregatedTransactionState aggrTx) {
+
+    for (TransactionState prAppTs : previousAppTs) {
+      if (!aggrTx.getAggregatedTs().contains(prAppTs)) {
+        LOG.debug("Conflicting Transaction State for Application is NOT in aggregated set");
+        return false;
+      }
+    }
+    for (TransactionState prNodeTs : previousNodeTs) {
+      if (!aggrTx.getAggregatedTs().contains(prNodeTs)) {
+        LOG.debug("Conflicting Transaction State for Node is NOT in aggregated set");
+        return false;
+      }
+    }
+    LOG.debug("Conflicting Transaction State is in aggregated set");
+    return true;
+  }
+
+  // Get all previous Transaction States for a given TS is its respective queue
+  private static <T> Set<TransactionState> getPreviousTransactionStates(Map<T, Queue<TransactionState>> mapQueue,
+          TransactionState ts, Class<T> type) {
+    Set<TransactionState> previousTs =
+            new HashSet<TransactionState>();
     Set<T> ids = null;
+
     if (ApplicationId.class.equals(type)) {
       ids = (Set<T>) ts.getAppIds();
     } else if (NodeId.class.equals(type)) {
-      ids = (Set<T>) ((TransactionStateImpl) ts).getNodesIds();
+      ids = (Set<T>) ts.getNodesIds();
     } else {
-      LOG.error("Class type is not applicable when draining the queues");
+      LOG.error("Class type not applicable");
     }
 
-    if (ids == null) {
-      return;
+    if (ids != null) {
+      for (T id : ids) {
+        Queue<TransactionState> queue = mapQueue.get(id);
+        for (TransactionState queueTs : queue) {
+          if (queueTs == ts) {
+            break;
+          }
+          previousTs.add(queueTs);
+        }
+      }
+
+      if (ApplicationId.class.equals(type)) {
+        LOG.debug("Previous Application TS for id: " + ts.getId());
+      } else if (NodeId.class.equals(type)) {
+        LOG.debug("Previous Node TS for id: " + ts.getId());
+      }
+      for (TransactionState blah : previousTs) {
+        LOG.debug("TS: " + blah.getId());
+      }
     }
-    for (T id : ids) {
-      Queue<TransactionState> txQueue = map.get(id);
-      TransactionState tsTmp;
-      while ((tsTmp = txQueue.poll()) != null) {
-        if (isFinished(tsTmp)) {
-          LOG.debug("Adding TS " + tsTmp.getId() + " to re-commit set");
-          target.add(tsTmp);
+    return previousTs;
+  }
+
+  // After commit of aggregated TS, remove them from their respective queue
+  private static void clearQueuesFromAggregatedTS(Set<TransactionState> aggregatedTs) {
+    nextRPCLock.lock();
+    for (TransactionState ts : aggregatedTs) {
+      for (ApplicationId appId : ts.getAppIds()) {
+        if (transactionStateForApp.get(appId).remove(ts)) {
+          LOG.debug("Removed aggregated TS id: " + ts.getId() + " from App: " + appId);
+        }
+      }
+      for (NodeId nodeId : ts.getNodesIds()) {
+        if (transactionStateForRMNode.get(nodeId).remove(ts)) {
+          LOG.debug("Removed aggregated TS id: " + ts.getId() + " from Node: " + nodeId);
         }
       }
     }
+    nextRPCLock.unlock();
   }
 
   public static void finishRPCs(TransactionState ts) throws IOException {
@@ -2122,7 +2217,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     return true;
   }
 
-  private static boolean canCommitNode(TransactionStateImpl ts) {
+  private static boolean canCommitNode(TransactionState ts) {
     nextRPCLock.lock();
     for (NodeId nodeId : ts.getNodesIds()) {
       if (transactionStateForRMNode.get(nodeId).peek() != ts) {

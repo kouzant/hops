@@ -56,8 +56,12 @@ public abstract class TransactionState {
   public int getId(){
     return id.get();
   }
-    public Set<ApplicationId> getAppIds(){
+  public Set<ApplicationId> getAppIds(){
     return appIds;
+  }
+
+  public Set<NodeId> getNodesIds(){
+    return nodesIds;
   }
 
   public void incCounter(Enum type) {

@@ -24,49 +24,35 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSSchedulerN
 
 import java.io.IOException;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
+import java.util.Set;
 
 public class AggregatedTransactionState extends TransactionStateImpl {
 
     private static final Log LOG = LogFactory.getLog(AggregatedTransactionState.class);
+    private final Set<TransactionState> aggregatedTs =
+            new HashSet<TransactionState>();
 
-    private AtomicInteger pendingTransactionStates;
-
-    public AggregatedTransactionState(TransactionType type,
-            int pendingTransactionStates) {
+    public AggregatedTransactionState(TransactionType type) {
         super(type);
-        this.pendingTransactionStates = new AtomicInteger(pendingTransactionStates);
     }
 
     public AggregatedTransactionState(TransactionType type, int initialCounter,
-            boolean batch, TransactionStateManager manager, int pendingTransactionStates) {
+            boolean batch, TransactionStateManager manager) {
         super(type, initialCounter, batch, manager);
-        this.pendingTransactionStates = new AtomicInteger(pendingTransactionStates);
     }
 
     @Override
-    public void decCounter(Enum type) throws IOException {
-        int counter = pendingTransactionStates.decrementAndGet();
-        LOG.info("Counter is: " + counter);
-        if (counter == 0) {
-            LOG.info("Counter reached zero, commit!");
-            // Commit the aggregated transaction state
-            RMUtilities.logPutInCommitingQueue(this);
-            RMUtilities.finishRPC(this);
-            LOG.info("Printing toAddContainers");
-            printMap(toAddContainers);
-            LOG.info("Printing toUpdateContainers");
-            printMap(toUpdateContainers);
-            LOG.info("Printing toRemoveContainers");
-            printMap(toRemoveContainers);
-            LOG.info("Printing schedulerApplicationsToAdd");
-            printMap(schedulerApplicationInfo.getSchedulerApplicationsToAdd());
-        }
+    public void commit(boolean flag) throws IOException {
+        LOG.info("Commit aggregated transaction state");
+        RMUtilities.logPutInCommitingQueue(this);
+        RMUtilities.finishRPC(this);
     }
 
     public void aggregate(TransactionState ts) {
         if (ts instanceof TransactionStateImpl) {
+            aggregatedTs.add(ts);
             TransactionStateImpl tsImpl = (TransactionStateImpl) ts;
             LOG.info("Aggregating TS: " + ts.getId());
 
@@ -100,10 +86,20 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             aggregatePersistedEventsToRemove(tsImpl);
 
             aggregateRPCIds(tsImpl);
+            aggregateAppIds(tsImpl);
+            aggregateNodeIds(tsImpl);
         } else {
             LOG.info("Transaction state " + ts.getId() + " is not of TransactionStateImpl" +
                     "and cannot aggregate!");
         }
+    }
+
+    public boolean hasAggregated() {
+        return !appIds.isEmpty() || !nodesIds.isEmpty();
+    }
+
+    public Set<TransactionState> getAggregatedTs() {
+        return aggregatedTs;
     }
 
     private void aggregateContainersToAdd(TransactionStateImpl ts) {
@@ -246,6 +242,14 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         for (Integer rpcId : ts.getRPCIds()) {
             addRPCId(rpcId);
         }
+    }
+
+    private void aggregateAppIds(TransactionStateImpl ts) {
+        genericCollectionAggregate(ts.appIds, appIds);
+    }
+
+    private void aggregateNodeIds(TransactionStateImpl ts) {
+        genericCollectionAggregate(ts.nodesIds, nodesIds);
     }
 
     private <T> void genericCollectionAggregate(Collection<T> source, Collection<T> target) {

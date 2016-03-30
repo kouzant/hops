@@ -5,9 +5,7 @@ import io.hops.metadata.util.RMUtilities;
 import io.hops.metadata.util.YarnAPIStorageFactory;
 import junit.framework.Assert;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.yarn.api.records.Container;
-import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.api.records.ResourceRequest;
+import org.apache.hadoop.yarn.api.records.*;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.MockAM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
@@ -16,6 +14,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.recovery.NDBRMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.*;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNodeReport;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fifo.FifoScheduler;
@@ -24,6 +24,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
 public class TestTSCommit {
@@ -164,6 +165,201 @@ public class TestTSCommit {
     }
 
     @Test
+    public void testTxOrdering2() throws Exception {
+        MockRM rm = new MockRM(conf);
+
+        ApplicationId appId0 = ApplicationId.newInstance(1L, 0);
+        ApplicationAttemptId appAttId0 = ApplicationAttemptId.newInstance(appId0, 0);
+
+        ApplicationId appId1 = ApplicationId.newInstance(2L, 1);
+        ApplicationAttemptId appAttId1 = ApplicationAttemptId.newInstance(appId1, 1);
+
+        // Add container for App0
+        TransactionStateImpl ts0 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        ts0.addRPCId(0);
+        Container cont0_0 = Container.newInstance(
+                ContainerId.newInstance(appAttId0, 100),
+                NodeId.newInstance("host0", 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 6, 6),
+                Priority.newInstance(1),
+                null);
+
+        RMContainer rmCont0_0 = new RMContainerImpl(cont0_0,
+                appAttId0, NodeId.newInstance("host0", 1234),
+                "antonis", rm.getRMContext(), ts0);
+
+        ts0.addRMContainerToAdd((RMContainerImpl) rmCont0_0);
+        ts0.decCounter(TransactionState.TransactionType.APP);
+
+        // Add another container for App0
+        TransactionStateImpl ts1 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        ts1.addRPCId(1);
+        Container cont0_1 = Container.newInstance(
+                ContainerId.newInstance(appAttId0, 101),
+                NodeId.newInstance("host0", 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 6, 6),
+                Priority.newInstance(1),
+                null);
+
+        RMContainer rmCont0_1 = new RMContainerImpl(cont0_1,
+                appAttId0, NodeId.newInstance("host0", 1234),
+                "antonis", rm.getRMContext(), ts1);
+
+        ts1.addRMContainerToAdd((RMContainerImpl) rmCont0_1);
+        ts1.decCounter(TransactionState.TransactionType.APP);
+
+        // Remove container cont0_0 for App0
+        TransactionStateImpl ts2 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        ts2.addRPCId(2);
+
+        ts2.addRMContainerToRemove(rmCont0_0);
+        ts2.decCounter(TransactionState.TransactionType.APP);
+
+        // Add container for App1
+        TransactionStateImpl ts3 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        ts3.addRPCId(3);
+        Container cont1_0 = Container.newInstance(
+                ContainerId.newInstance(appAttId1, 200),
+                NodeId.newInstance("host1", 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 6, 6),
+                Priority.newInstance(1),
+                null);
+
+        RMContainer rmCont1_0 = new RMContainerImpl(cont1_0,
+                appAttId1, NodeId.newInstance("host1", 1234),
+                "antonis", rm.getRMContext(), ts3);
+
+        ts3.addRMContainerToAdd((RMContainerImpl) rmCont1_0);
+        ts3.decCounter(TransactionState.TransactionType.APP);
+
+        // Remove containers for both App0 and App1
+        TransactionStateImpl ts4 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        ts4.addRPCId(4);
+        ts4.addRMContainerToRemove(rmCont0_1);
+        ts4.addRMContainerToRemove(rmCont1_0);
+        ts4.decCounter(TransactionState.TransactionType.APP);
+
+        // Add container for App0
+        TransactionStateImpl ts5 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        ts5.addRPCId(5);
+        Container cont0_2 = Container.newInstance(
+                ContainerId.newInstance(appAttId0, 102),
+                NodeId.newInstance("host0", 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 6, 6),
+                Priority.newInstance(1),
+                null);
+
+        RMContainer rmCont0_2 = new RMContainerImpl(cont0_2,
+                appAttId0, NodeId.newInstance("host0", 1234),
+                "antonis", rm.getRMContext(), ts5);
+
+        ts5.addRMContainerToAdd((RMContainerImpl) rmCont0_2);
+        ts5.decCounter(TransactionState.TransactionType.APP);
+
+        Thread.sleep(3000);
+
+        Map<String, io.hops.metadata.yarn.entity.RMContainer> result =
+                RMUtilities.getAllRMContainers();
+
+        Assert.assertEquals("There should be only one container persisted", 1,
+                result.size());
+        Assert.assertTrue("Container " + cont0_2.getId() + " should be there",
+                result.containsKey(cont0_2.getId().toString()));
+
+        rm.stop();
+    }
+
+    @Test
+    public void testTxOrdering() throws Exception {
+        MockRM rm = new MockRM(conf);
+
+        ApplicationId appId0 = ApplicationId.newInstance(1L, 0);
+        ApplicationAttemptId appAttId0 = ApplicationAttemptId.newInstance(appId0, 0);
+
+        ApplicationId appId1 = ApplicationId.newInstance(2L, 1);
+        ApplicationAttemptId appAttId1 = ApplicationAttemptId.newInstance(appId1, 1);
+
+        TransactionStateImpl ts0 = new TsWrapper(TransactionState.TransactionType.APP);
+
+        Container cont0 = Container.newInstance(
+                ContainerId.newInstance(appAttId0, 100),
+                NodeId.newInstance("host0", 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 6, 6),
+                Priority.newInstance(1),
+                null);
+
+        RMContainer rmCont0 = new RMContainerImpl(cont0,
+                appAttId0, NodeId.newInstance("host0", 1234),
+                "antonis", rm.getRMContext(), ts0);
+
+        Container cont1 = Container.newInstance(
+                ContainerId.newInstance(appAttId0, 101),
+                NodeId.newInstance("host0", 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 6, 6),
+                Priority.newInstance(1),
+                null);
+
+        RMContainer rmCont1 = new RMContainerImpl(cont1,
+                appAttId0, NodeId.newInstance("host0", 1234),
+                "antonis", rm.getRMContext(), ts0);
+
+        ts0.addRPCId(0);
+        ts0.addRMContainerToAdd((RMContainerImpl) rmCont0);
+        ts0.addRMContainerToAdd((RMContainerImpl) rmCont1);
+        ts0.decCounter(TransactionState.TransactionType.APP);
+
+        // Add container for another app
+        TransactionStateImpl ts3 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        ts3.addRPCId(3);
+        Container cont1_0 = Container.newInstance(
+                ContainerId.newInstance(appAttId1, 200),
+                NodeId.newInstance("host1", 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 2, 2),
+                Priority.newInstance(1),
+                null);
+
+        RMContainer rmCont1_0 = new RMContainerImpl(cont1_0,
+                appAttId1, NodeId.newInstance("host1", 1234),
+                "antonis", rm.getRMContext(), ts3);
+        ts3.addRMContainerToAdd((RMContainerImpl) rmCont1_0);
+        ts3.decCounter(TransactionState.TransactionType.APP);
+
+        // Remove RMContainer
+        TransactionStateImpl ts1 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        ts1.addRPCId(1);
+        ts1.addRMContainerToRemove(rmCont0);
+        ts1.decCounter(TransactionState.TransactionType.APP);
+
+        // Add a new container
+        TransactionStateImpl ts2 = new TransactionStateImpl(TransactionState.TransactionType.APP);
+        Container cont2 = Container.newInstance(
+                ContainerId.newInstance(appAttId0, 102),
+                NodeId.newInstance("host0", 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 6, 6),
+                Priority.newInstance(1),
+                null);
+
+        RMContainer rmCont2 = new RMContainerImpl(cont2,
+                appAttId0, NodeId.newInstance("host0", 1234),
+                "antonis", rm.getRMContext(), ts2);
+
+        ts2.addRPCId(2);
+        ts2.addRMContainerToAdd((RMContainerImpl) rmCont2);
+        ts2.decCounter(TransactionState.TransactionType.APP);
+
+        Thread.sleep(10000);
+        rm.stop();
+    }
+
+    @Test
     public void testQueueState() throws Exception {
         conf.setClass(YarnConfiguration.RM_SCHEDULER,
                 FifoScheduler.class, ResourceScheduler.class);
@@ -247,6 +443,13 @@ public class TestTSCommit {
             } catch (InterruptedException ex) {
                 ex.printStackTrace();
             }
+        }
+    }
+
+    private class TsWrapper extends TransactionStateImpl {
+
+        public TsWrapper(TransactionType type) {
+            super(type);
         }
     }
 }

@@ -197,10 +197,6 @@ public class TransactionStateImpl extends TransactionState {
     }
     GlobalThreadPool.getExecutorService().execute(new RPCFinisher(this));
   }
-  
-  public Set<NodeId> getNodesIds(){
-    return nodesIds;
-  }
 
   public FairSchedulerNodeInfo getFairschedulerNodeInfo() {
     return fairschedulerNodeInfo;
