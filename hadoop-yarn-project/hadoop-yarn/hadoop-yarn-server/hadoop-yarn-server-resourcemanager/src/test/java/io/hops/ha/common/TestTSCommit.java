@@ -226,6 +226,10 @@ public class TestTSCommit {
             ex.printStackTrace();
         }
 
+        System.out.println("Number of commits in the DB: " + RMUtilities.getNumOfCommits());
+        System.out.println("Total just-commit time (ms): " + RMUtilities.getTotalCommitTime());
+        System.out.println("Total prepare and commit time (ms): " + RMUtilities.getTotalPrepareNcommitTime());
+
         // Verify everything is persisted correctly
         Map<String, io.hops.metadata.yarn.entity.RMContainer> result =
                 RMUtilities.getAllRMContainers();
@@ -234,6 +238,7 @@ public class TestTSCommit {
                 result.size());
 
         verifyContainers(appContainerMapping, result);
+
 
         rm.stop();
     }
