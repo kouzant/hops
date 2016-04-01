@@ -57,7 +57,7 @@ public class TestAggregateTxState {
         ts2.toRemoveContainers.put(cont2_1r.getContainerId(), cont2_1r);
 
         AggregatedTransactionState agrTx = new AggregatedTransactionState(
-                TransactionState.TransactionType.APP, txStates.size());
+                TransactionState.TransactionType.APP);
 
         for (TransactionStateImpl tx : txStates) {
             agrTx.aggregate(tx);
@@ -91,8 +91,7 @@ public class TestAggregateTxState {
                 new SchedulerApplication(appId1_0.toString(), "antonis", "default"));
         ts1.schedulerApplicationInfo.setSchedulerApplicationsToAdd(appId1_0, app1_0a);
 
-        AggregatedTransactionState argTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
-                tStates.size());
+        AggregatedTransactionState argTx = new AggregatedTransactionState(TransactionState.TransactionType.APP);
 
         for (TxWrapper ts : tStates) {
             argTx.aggregate(ts);

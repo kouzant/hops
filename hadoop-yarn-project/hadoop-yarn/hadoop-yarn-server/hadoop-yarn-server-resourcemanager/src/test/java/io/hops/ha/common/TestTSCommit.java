@@ -4,12 +4,15 @@ import io.hops.metadata.util.RMStorageFactory;
 import io.hops.metadata.util.RMUtilities;
 import io.hops.metadata.util.YarnAPIStorageFactory;
 import junit.framework.Assert;
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.*;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.MockAM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
+import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.NDBRMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.*;
@@ -22,13 +25,16 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fifo.FifoSchedule
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.Map;
+import java.io.FileWriter;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class TestTSCommit {
+    private static final Log LOG = LogFactory.getLog(TestTSCommit.class);
+
     private Configuration conf;
+
+    private Random rand;
 
     @Before
     public void setup() throws Exception {
@@ -36,6 +42,7 @@ public class TestTSCommit {
         YarnAPIStorageFactory.setConfiguration(conf);
         RMStorageFactory.setConfiguration(conf);
         RMUtilities.InitializeDB();
+        rand = new Random(1234L);
     }
 
     @Test
@@ -165,6 +172,164 @@ public class TestTSCommit {
     }
 
     @Test
+    public void testTxOrdering3() throws Exception {
+        MockRM rm = new MockRM(conf);
+
+        int numOfAppAttIds = 100, numOfContainers = 200,
+                numOfHosts = 30;
+
+        List<ApplicationAttemptId> applicationAttempts =
+                new ArrayList<ApplicationAttemptId>(numOfAppAttIds);
+        Map<ApplicationAttemptId, List<RMContainer>> appContainerMapping =
+                new HashMap<ApplicationAttemptId, List<RMContainer>>(numOfAppAttIds);
+        List<String> hosts = new ArrayList<String>(numOfHosts);
+        List<TransactionStateImpl> transactionStates =
+                new ArrayList<TransactionStateImpl>();
+
+        for (int i = 0; i < numOfHosts; ++i) {
+            hosts.add("host" + i);
+        }
+
+        // Create applications
+        for (int i = 0; i < numOfAppAttIds; ++i) {
+            ApplicationAttemptId appAtt = createApplicationAttemptIds(i, i);
+            applicationAttempts.add(appAtt);
+            appContainerMapping.put(appAtt, new ArrayList<RMContainer>());
+        }
+
+        // Create containers
+        for (int i = 0; i < numOfContainers; ++i) {
+            ApplicationAttemptId appAtt = applicationAttempts.get(
+                    rand.nextInt(applicationAttempts.size()));
+            List<RMContainer> appCont = appContainerMapping.get(appAtt);
+            String host = hosts.get(rand.nextInt(hosts.size()));
+            appCont.add(createRMContainer(appAtt, i, host, rm.getRMContext(), null));
+        }
+
+        // Add created containers to Transaction States
+        for (List<RMContainer> toAddSet : appContainerMapping.values()) {
+            for (RMContainer contToAdd : toAddSet) {
+                getTransactionState(transactionStates).addRMContainerToAdd((RMContainerImpl) contToAdd);
+            }
+        }
+
+        // Persist in DB
+        for (TransactionStateImpl ts : transactionStates) {
+            ts.decCounter(TransactionState.TransactionType.APP);
+        }
+
+        //printAppContainerMapping(appContainerMapping);
+
+        try {
+            TimeUnit.SECONDS.sleep(8);
+        } catch (InterruptedException ex) {
+            ex.printStackTrace();
+        }
+
+        // Verify everything is persisted correctly
+        Map<String, io.hops.metadata.yarn.entity.RMContainer> result =
+                RMUtilities.getAllRMContainers();
+
+        Assert.assertEquals("There should be " + numOfContainers + " persisted", numOfContainers,
+                result.size());
+
+        verifyContainers(appContainerMapping, result);
+
+        rm.stop();
+    }
+
+    private void verifyContainers(Map<ApplicationAttemptId, List<RMContainer>> appContainerMapping,
+            Map<String, io.hops.metadata.yarn.entity.RMContainer> result) {
+        for (Map.Entry<ApplicationAttemptId, List<RMContainer>> entry : appContainerMapping.entrySet()) {
+            ApplicationAttemptId tmpAppAttId = entry.getKey();
+            List<RMContainer> tmpContainers = entry.getValue();
+
+            List<io.hops.metadata.yarn.entity.RMContainer> persistedContainers =
+                    getRMContainersForAppAttId(tmpAppAttId, result.values());
+            Assert.assertEquals("Application attempt " + tmpAppAttId.toString()
+                            + " should have persisted " + tmpContainers.size() + " in DB", tmpContainers.size(),
+                    persistedContainers.size());
+
+            for (RMContainer memCont : tmpContainers) {
+                LOG.debug("Inspecting memCont: " + memCont.getContainerId().toString());
+                boolean equal = true;
+                int index = 1;
+                for (io.hops.metadata.yarn.entity.RMContainer dbCont : persistedContainers) {
+                    LOG.debug("Inspecting dbCont: " + dbCont.getContainerId());
+                    if (memCont.getContainerId().toString().equals(dbCont.getContainerId())) {
+                        break;
+                    } else if ((!memCont.getContainerId().toString().equals(dbCont.getContainerId()))
+                            && (index == persistedContainers.size())) {
+                        equal = false;
+                        break;
+                    }
+                    index++;
+                }
+
+                Assert.assertTrue(memCont.toString() + " is not persisted for app attempt " + tmpAppAttId.toString(),
+                        equal);
+            }
+        }
+
+    }
+    private List<io.hops.metadata.yarn.entity.RMContainer> getRMContainersForAppAttId(
+            ApplicationAttemptId appAttId,
+            Collection<io.hops.metadata.yarn.entity.RMContainer> containerSet) {
+
+        List<io.hops.metadata.yarn.entity.RMContainer> containers =
+                new ArrayList<io.hops.metadata.yarn.entity.RMContainer>();
+
+        for (io.hops.metadata.yarn.entity.RMContainer cont : containerSet) {
+            if (appAttId.toString().equals(cont.getApplicationAttemptId())) {
+                containers.add(cont);
+            }
+        }
+        return containers;
+    }
+
+    private TransactionStateImpl getTransactionState(List<TransactionStateImpl> createdTS) {
+        int createNew = rand.nextInt(101);
+        if ((createNew > 40) || (createdTS.isEmpty())) {
+            TransactionStateImpl newTs = new TransactionStateImpl(TransactionState.TransactionType.APP);
+            newTs.addRPCId(createdTS.size());
+            createdTS.add(newTs);
+            return newTs;
+        } else {
+            return createdTS.get(rand.nextInt(createdTS.size()));
+        }
+    }
+
+    private void printAppContainerMapping(Map<ApplicationAttemptId, List<RMContainer>> map) {
+        for (Map.Entry<ApplicationAttemptId, List<RMContainer>> entry : map.entrySet()) {
+            LOG.debug("Application attempt: " + entry.getKey().toString());
+            for (RMContainer cont : entry.getValue()) {
+                LOG.debug("Containers assigned: " + cont.toString());
+            }
+        }
+    }
+
+    private ApplicationAttemptId createApplicationAttemptIds(int appId, int appAttId) {
+        return ApplicationAttemptId.newInstance(ApplicationId.newInstance(0L, appId),
+                appAttId);
+    }
+
+    private RMContainer createRMContainer(ApplicationAttemptId appAttId, int containerId,
+            String host, RMContext rmContext, TransactionState ts) {
+        Container cont = Container.newInstance(
+                ContainerId.newInstance(appAttId, containerId),
+                NodeId.newInstance(host, 1234),
+                "127.0.0.1",
+                Resource.newInstance(1024 * 6, 6),
+                Priority.newInstance(1),
+                null);
+
+        return new RMContainerImpl(cont,
+                appAttId, NodeId.newInstance(host, 1234),
+                "antonis", rmContext, ts);
+
+    }
+
+    @Test
     public void testTxOrdering2() throws Exception {
         MockRM rm = new MockRM(conf);
 
@@ -269,6 +434,15 @@ public class TestTSCommit {
                 result.size());
         Assert.assertTrue("Container " + cont0_2.getId() + " should be there",
                 result.containsKey(cont0_2.getId().toString()));
+
+        /*System.out.println("Number of commits in the DB: " + RMUtilities.getNumOfCommits());
+        System.out.println("Total just-commit time (ms): " + RMUtilities.getTotalCommitTime());
+        System.out.println("Total prepare and commit time (ms): " + RMUtilities.getTotalPrepareNcommitTime());*/
+        FileWriter writer = new FileWriter("output", true);
+        writer.write(RMUtilities.getNumOfCommits() + "," + RMUtilities.getTotalCommitTime() +
+                "," + RMUtilities.getTotalPrepareNcommitTime() + "\n");
+        writer.flush();
+        writer.close();
 
         rm.stop();
     }

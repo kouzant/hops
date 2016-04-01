@@ -110,6 +110,7 @@ import io.hops.metadata.yarn.entity.rmstatestore.RanNode;
 import io.hops.metadata.yarn.entity.rmstatestore.SecretMamagerKey;
 import io.hops.metadata.yarn.entity.rmstatestore.SequenceNumber;
 import io.hops.transaction.handler.LightWeightRequestHandler;
+import org.apache.commons.collections.map.HashedMap;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -162,6 +163,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReentrantLock;
 import org.apache.hadoop.net.NetUtils;
@@ -1982,14 +1984,39 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   private static final Queue<TransactionState> txToAggregate =
           new ConcurrentLinkedQueue<TransactionState>();
 
+  // For evaluation only
+  private static final Map<TransactionState, Long> prepareNcommitTime =
+          new ConcurrentHashMap<TransactionState, Long>();
+
+  private static void updatePrepareNcommit(TransactionState ts) {
+    if (prepareNcommitTime.containsKey(ts)) {
+      Long startTime = prepareNcommitTime.get(ts);
+      prepareNcommitTime.put(ts, System.currentTimeMillis() - startTime);
+    } else {
+      prepareNcommitTime.put(ts, System.currentTimeMillis());
+    }
+  }
+
+  public static Long getTotalPrepareNcommitTime() {
+    Long duration = 0L;
+    for (Map.Entry<TransactionState, Long> entry : prepareNcommitTime.entrySet()) {
+      //LOG.debug("Transaction state: " + entry.getKey().getId());
+      //LOG.debug("Duration: " + entry.getValue());
+      duration += entry.getValue();
+    }
+    prepareNcommitTime.clear();
+    return duration;
+  }
+
   // Try to persist RPCs or aggregate them
   public static void finishRPCsAggr(TransactionState ts) throws IOException {
     nextRPCLock.lock();
     if (!canCommitApp(ts) || !canCommitNode(ts)) {
-      LOG.debug("Adding TS: " + ts.getId() + " to be aggregated");
+      //LOG.debug("Adding TS: " + ts.getId() + " to be aggregated");
       txToAggregate.add(ts);
       nextRPCLock.unlock();
     } else {
+      updatePrepareNcommit(ts);
       nextRPCLock.unlock();
 
       LOG.debug("Finishing RPC: " + ts.getId());
@@ -2004,15 +2031,20 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       for (NodeId nodeId : ts.getNodesIds()) {
         transactionStateForRMNode.get(nodeId).poll();
       }
+      updatePrepareNcommit(ts);
 
+      int counter = 0;
       while (!txToAggregate.isEmpty()) {
         AggregatedTransactionState aggrTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
                 1, false, ((TransactionStateImpl) ts).getManager());
+        aggrTx.addRPCId(100 + counter);
+        counter++;
+        updatePrepareNcommit(aggrTx);
 
-        LOG.debug("txToAggregate before aggregate");
+        /*LOG.debug("txToAggregate before aggregate");
         for (TransactionState blah : txToAggregate) {
           LOG.debug("ToAggregate: " + blah.getId());
-        }
+        }*/
         aggregate(aggrTx);
 
         if (aggrTx.hasAggregated()) {
@@ -2021,7 +2053,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
           // Remove committed Transaction States from the queues
           nextRPCLock.lock();
           clearQueuesFromAggregatedTS(aggrTx.getAggregatedTs());
+          updatePrepareNcommit(aggrTx);
         } else {
+          prepareNcommitTime.remove(aggrTx);
           break;
         }
       }
@@ -2034,7 +2068,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     for (TransactionState tx : txToAggregate) {
       if (canAggregate(tx, aggrTx)) {
         txToAggregate.remove(tx);
-        LOG.debug("We can aggregate ID: " + tx.getId());
+        //LOG.debug("We can aggregate ID: " + tx.getId());
         aggrTx.aggregate(tx);
       }
     }
@@ -2047,17 +2081,17 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   private static boolean canAggregate(TransactionState ts, AggregatedTransactionState aggrTx) {
    if (canCommitApp(ts) && canCommitNode(ts)) {
      // There are no more conflicting Transactions for this TS
-      LOG.debug("TS ID: " + ts.getId() + " can be committed");
+      //LOG.debug("TS ID: " + ts.getId() + " can be committed");
       return true;
     }
     if (isHeadInAggregatedSet(getPreviousTransactionStates(transactionStateForApp, ts, ApplicationId.class),
             getPreviousTransactionStates(transactionStateForRMNode, ts, NodeId.class), aggrTx)) {
       // The conflicting head is already aggregated return true
-      LOG.debug("TS ID: " + ts.getId() + " can be committed because conflicting TS are aggregated");
+      //LOG.debug("TS ID: " + ts.getId() + " can be committed because conflicting TS are aggregated");
       return true;
     }
 
-    LOG.debug("TS ID: " + ts.getId() + " cannot be aggregated");
+    //LOG.debug("TS ID: " + ts.getId() + " cannot be aggregated");
     // Sorry, we cannot aggregate this TS
     return false;
   }
@@ -2067,17 +2101,17 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
     for (TransactionState prAppTs : previousAppTs) {
       if (!aggrTx.getAggregatedTs().contains(prAppTs)) {
-        LOG.debug("Conflicting Transaction State for Application is NOT in aggregated set");
+        //LOG.debug("Conflicting Transaction State for Application is NOT in aggregated set");
         return false;
       }
     }
     for (TransactionState prNodeTs : previousNodeTs) {
       if (!aggrTx.getAggregatedTs().contains(prNodeTs)) {
-        LOG.debug("Conflicting Transaction State for Node is NOT in aggregated set");
+        //LOG.debug("Conflicting Transaction State for Node is NOT in aggregated set");
         return false;
       }
     }
-    LOG.debug("Conflicting Transaction State is in aggregated set");
+    //LOG.debug("Conflicting Transaction State is in aggregated set");
     return true;
   }
 
@@ -2107,14 +2141,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         }
       }
 
-      if (ApplicationId.class.equals(type)) {
+      /*if (ApplicationId.class.equals(type)) {
         LOG.debug("Previous Application TS for id: " + ts.getId());
       } else if (NodeId.class.equals(type)) {
         LOG.debug("Previous Node TS for id: " + ts.getId());
       }
       for (TransactionState blah : previousTs) {
         LOG.debug("TS: " + blah.getId());
-      }
+      }*/
     }
     return previousTs;
   }
@@ -2125,12 +2159,12 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     for (TransactionState ts : aggregatedTs) {
       for (ApplicationId appId : ts.getAppIds()) {
         if (transactionStateForApp.get(appId).remove(ts)) {
-          LOG.debug("Removed aggregated TS id: " + ts.getId() + " from App: " + appId);
+          //LOG.debug("Removed aggregated TS id: " + ts.getId() + " from App: " + appId);
         }
       }
       for (NodeId nodeId : ts.getNodesIds()) {
         if (transactionStateForRMNode.get(nodeId).remove(ts)) {
-          LOG.debug("Removed aggregated TS id: " + ts.getId() + " from Node: " + nodeId);
+          //LOG.debug("Removed aggregated TS id: " + ts.getId() + " from Node: " + nodeId);
         }
       }
     }
@@ -2144,6 +2178,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       finishedTs.add(ts);
       nextRPCLock.unlock();
     } else {
+      updatePrepareNcommit(ts);
       nextRPCLock.unlock();
       if(ts.getId()> 0){
         LOG.debug("finishing rpc: " + ts.getId());
@@ -2184,6 +2219,8 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
           toCommit.add(transactionState);
         }
       }
+      updatePrepareNcommit(ts);
+
       nextRPCLock.unlock();
       for (TransactionState state : toCommit) {
         LOG.debug("recommiting " + state.getId() + " after " + oldid);
@@ -2243,6 +2280,18 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     commitQueueMaxLength = conf.
             getInt(YarnConfiguration.COMMIT_QUEUE_MAX_LENGTH,
                     YarnConfiguration.DEFAULT_COMMIT_QUEUE_MAX_LENGTH);
+  }
+
+  // For evaluation
+  private static final AtomicInteger numOfCommits = new AtomicInteger(0);
+  private static volatile long totalCommitTime = 0;
+
+  public static int getNumOfCommits() {
+    return numOfCommits.get();
+  }
+
+  public static long getTotalCommitTime() {
+    return totalCommitTime;
   }
 
   public static void finishRPC(final TransactionStateImpl ts) {
@@ -2341,7 +2390,10 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
           }
         };
     try {
+      long start = System.currentTimeMillis();
       setfinishRPCHandler.handle();
+      totalCommitTime += System.currentTimeMillis() - start;
+      numOfCommits.incrementAndGet();
     } catch (Exception ex) {
       //TODO properly handle different kind of exceptions
       LOG.error("HOP :: Error commiting finishRPC ", ex);
