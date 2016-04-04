@@ -175,7 +175,7 @@ public class TestTSCommit {
     public void testTxOrdering3() throws Exception {
         MockRM rm = new MockRM(conf);
 
-        int numOfAppAttIds = 100, numOfContainers = 200,
+        int numOfAppAttIds = 100, numOfContainers = 1000,
                 numOfHosts = 30;
 
         List<ApplicationAttemptId> applicationAttempts =
@@ -183,8 +183,9 @@ public class TestTSCommit {
         Map<ApplicationAttemptId, List<RMContainer>> appContainerMapping =
                 new HashMap<ApplicationAttemptId, List<RMContainer>>(numOfAppAttIds);
         List<String> hosts = new ArrayList<String>(numOfHosts);
-        List<TransactionStateImpl> transactionStates =
-                new ArrayList<TransactionStateImpl>();
+
+        ArrayDeque<TransactionStateImpl> transactionStates =
+                new ArrayDeque<TransactionStateImpl>();
 
         for (int i = 0; i < numOfHosts; ++i) {
             hosts.add("host" + i);
@@ -197,38 +198,49 @@ public class TestTSCommit {
             appContainerMapping.put(appAtt, new ArrayList<RMContainer>());
         }
 
-        // Create containers
-        for (int i = 0; i < numOfContainers; ++i) {
+        // Either request new containers or remove existing ones
+        int containerId = 0;
+        int containerCounter = numOfContainers;
+        while (containerCounter > 0) {
             ApplicationAttemptId appAtt = applicationAttempts.get(
                     rand.nextInt(applicationAttempts.size()));
             List<RMContainer> appCont = appContainerMapping.get(appAtt);
-            String host = hosts.get(rand.nextInt(hosts.size()));
-            appCont.add(createRMContainer(appAtt, i, host, rm.getRMContext(), null));
-        }
 
-        // Add created containers to Transaction States
-        for (List<RMContainer> toAddSet : appContainerMapping.values()) {
-            for (RMContainer contToAdd : toAddSet) {
-                getTransactionState(transactionStates).addRMContainerToAdd((RMContainerImpl) contToAdd);
+            if (rand.nextBoolean()) {
+                // Request containers
+                String host = hosts.get(rand.nextInt(hosts.size()));
+                RMContainer toAdd = createRMContainer(appAtt, containerId,
+                        host, rm.getRMContext(), null);
+                appCont.add(toAdd);
+                getTransactionState(transactionStates).addRMContainerToAdd((RMContainerImpl) toAdd);
+                containerId++;
+                containerCounter--;
+            } else {
+                // Remove containers
+                if (appCont.isEmpty()) {
+                    //System.out.println("Selected App" + appAtt.toString() + " has no container");
+                    continue;
+                }
+                RMContainer toRemove = appCont.remove(rand.nextInt(appCont.size()));
+                //System.out.println("Removing container " + toRemove.toString() + " for App " + appAtt.toString());
+                getTransactionState(transactionStates).addRMContainerToRemove(toRemove);
+                containerCounter++;
             }
         }
 
         // Persist in DB
-        for (TransactionStateImpl ts : transactionStates) {
-            ts.decCounter(TransactionState.TransactionType.APP);
+        TransactionStateImpl toCommit;
+        while ((toCommit = transactionStates.pollLast()) != null) {
+            toCommit.decCounter(TransactionState.TransactionType.APP);
         }
 
         //printAppContainerMapping(appContainerMapping);
 
         try {
-            TimeUnit.SECONDS.sleep(8);
+            TimeUnit.SECONDS.sleep(20);
         } catch (InterruptedException ex) {
             ex.printStackTrace();
         }
-
-        System.out.println("Number of commits in the DB: " + RMUtilities.getNumOfCommits());
-        System.out.println("Total just-commit time (ms): " + RMUtilities.getTotalCommitTime());
-        System.out.println("Total prepare and commit time (ms): " + RMUtilities.getTotalPrepareNcommitTime());
 
         // Verify everything is persisted correctly
         Map<String, io.hops.metadata.yarn.entity.RMContainer> result =
@@ -239,6 +251,25 @@ public class TestTSCommit {
 
         verifyContainers(appContainerMapping, result);
 
+        System.out.println("Number of commits in the DB: " + RMUtilities.getNumOfCommits());
+        System.out.println("Total just-commit time (ms): " + RMUtilities.getTotalCommitTime());
+        System.out.println("AVG time per commit (ms): " + RMUtilities.getAverageTimePerCommit());
+        System.out.println("Total prepare and commit time (ms): " + RMUtilities.getTotalPrepareNcommitTime());
+        System.out.println("Total time in getHeadTransactionStates (ms): " + RMUtilities.getHeadTime);
+        System.out.println("Total time spent in clearing Queues (ms): " + RMUtilities.clearQueuesTime);
+        System.out.println("Total time spent in checking if is HEAD in aggregated (ms): " + RMUtilities.isHeadTime);
+        System.out.println("Total time spent in canAggregate (ms): " + RMUtilities.canAggregateTime);
+        System.out.println("Total time spent in canCommitApp (ms): " + RMUtilities.canCommitAppTime);
+        System.out.println("Total time spent in canCommitNode (ms): " + RMUtilities.canCommitNodeTime);
+        System.out.println("Total time spent in aggregation (ms): " + RMUtilities.aggregationTime);
+        System.out.println("Total aggregation time (ms): " + RMUtilities.totalAggregationTime);
+        System.out.println("Total time to persist transactions (ms): " + RMUtilities.getFinishTime());
+
+        FileWriter writer = new FileWriter("TxOrdering3-output", true);
+        writer.write(RMUtilities.getNumOfCommits() + "," + RMUtilities.getAverageTimePerCommit() +
+                "," + RMUtilities.getFinishTime() + "\n");
+        writer.flush();
+        writer.close();
 
         rm.stop();
     }
@@ -256,11 +287,9 @@ public class TestTSCommit {
                     persistedContainers.size());
 
             for (RMContainer memCont : tmpContainers) {
-                LOG.debug("Inspecting memCont: " + memCont.getContainerId().toString());
                 boolean equal = true;
                 int index = 1;
                 for (io.hops.metadata.yarn.entity.RMContainer dbCont : persistedContainers) {
-                    LOG.debug("Inspecting dbCont: " + dbCont.getContainerId());
                     if (memCont.getContainerId().toString().equals(dbCont.getContainerId())) {
                         break;
                     } else if ((!memCont.getContainerId().toString().equals(dbCont.getContainerId()))
@@ -292,15 +321,15 @@ public class TestTSCommit {
         return containers;
     }
 
-    private TransactionStateImpl getTransactionState(List<TransactionStateImpl> createdTS) {
+    private TransactionStateImpl getTransactionState(ArrayDeque<TransactionStateImpl> createdTS) {
         int createNew = rand.nextInt(101);
         if ((createNew > 40) || (createdTS.isEmpty())) {
             TransactionStateImpl newTs = new TransactionStateImpl(TransactionState.TransactionType.APP);
             newTs.addRPCId(createdTS.size());
-            createdTS.add(newTs);
+            createdTS.addFirst(newTs);
             return newTs;
         } else {
-            return createdTS.get(rand.nextInt(createdTS.size()));
+            return createdTS.getFirst();
         }
     }
 
@@ -440,14 +469,23 @@ public class TestTSCommit {
         Assert.assertTrue("Container " + cont0_2.getId() + " should be there",
                 result.containsKey(cont0_2.getId().toString()));
 
-        /*System.out.println("Number of commits in the DB: " + RMUtilities.getNumOfCommits());
-        System.out.println("Total just-commit time (ms): " + RMUtilities.getTotalCommitTime());
-        System.out.println("Total prepare and commit time (ms): " + RMUtilities.getTotalPrepareNcommitTime());*/
-        FileWriter writer = new FileWriter("output", true);
+        /*FileWriter writer = new FileWriter("output", true);
         writer.write(RMUtilities.getNumOfCommits() + "," + RMUtilities.getTotalCommitTime() +
                 "," + RMUtilities.getTotalPrepareNcommitTime() + "\n");
         writer.flush();
-        writer.close();
+        writer.close();*/
+
+        System.out.println("Number of commits in the DB: " + RMUtilities.getNumOfCommits());
+        System.out.println("Total just-commit time (ms): " + RMUtilities.getTotalCommitTime());
+        System.out.println("Total prepare and commit time (ms): " + RMUtilities.getTotalPrepareNcommitTime());
+        System.out.println("Total time in getHeadTransactionStates (ms): " + RMUtilities.getHeadTime);
+        System.out.println("Total time spent in clearing Queues (ms): " + RMUtilities.clearQueuesTime);
+        System.out.println("Total time spent in checking if is HEAD in aggregated (ms): " + RMUtilities.isHeadTime);
+        System.out.println("Total time spent in canAggregate (ms): " + RMUtilities.canAggregateTime);
+        System.out.println("Total time spent in canCommitApp (ms): " + RMUtilities.canCommitAppTime);
+        System.out.println("Total time spent in canCommitNode (ms): " + RMUtilities.canCommitNodeTime);
+        System.out.println("Total time spent in aggregation (ms): " + RMUtilities.aggregationTime);
+        System.out.println("Total aggregation time (ms): " + RMUtilities.totalAggregationTime);
 
         rm.stop();
     }
