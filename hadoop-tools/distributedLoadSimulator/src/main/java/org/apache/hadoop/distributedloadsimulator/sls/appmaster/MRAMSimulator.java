@@ -161,8 +161,7 @@ public class MRAMSimulator extends AMSimulator {
   }
 
   @Override
-  public void firstStep()
-          throws YarnException, IOException, InterruptedException {
+  public void firstStep() {
     int containerVCores = conf.getInt(SLSConfiguration.CONTAINER_VCORES,
             SLSConfiguration.CONTAINER_VCORES_DEFAULT);
     int containerMemoryMB = conf.getInt(SLSConfiguration.CONTAINER_MEMORY_MB,
@@ -202,10 +201,15 @@ public class MRAMSimulator extends AMSimulator {
     mapTotal = pendingMaps.size();
     reduceTotal = pendingReduces.size();
     totalContainers = mapTotal + reduceTotal;
-
-    super.firstStep();
-    if (submited) {
-      requestAMContainer();
+    
+    try {
+      super.firstStep();
+      if (submited) {
+        requestAMContainer();
+      }
+    } catch (Exception e) {
+      LOG.error(e);
+      se.finishSimulation(false);
     }
   }
 

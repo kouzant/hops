@@ -80,6 +80,8 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
+import java.util.Collection;
 import java.util.Map;
 import java.util.Queue;
 import java.util.Set;
@@ -129,18 +131,18 @@ public class TransactionStateImpl extends TransactionState {
   
   //APP
   private final SchedulerApplicationInfo schedulerApplicationInfo;
-  private final Map<ApplicationId, ApplicationState> applicationsToAdd = 
-          new ConcurrentHashMap<ApplicationId, ApplicationState>();
-  private final Map<ApplicationId, Set<String>> updatedNodeIdToAdd = 
-          new ConcurrentHashMap<ApplicationId, Set<String>>();
-  private final Map<ApplicationId, Set<String>> updatedNodeIdToRemove = 
-          new ConcurrentHashMap<ApplicationId, Set<String>>();
-  private final Queue<ApplicationId> applicationsStateToRemove =
-      new ConcurrentLinkedQueue<ApplicationId>();
-  private final Map<String, ApplicationAttemptState> appAttempts =
-      new ConcurrentHashMap<String, ApplicationAttemptState>();
-  private final Map<ApplicationAttemptId, Map<Integer, RanNode>>ranNodeToAdd =
-          new ConcurrentHashMap<ApplicationAttemptId, Map<Integer, RanNode>>();
+  private final Map<ApplicationId, ApplicationState> applicationsToAdd
+          = new ConcurrentHashMap<ApplicationId, ApplicationState>();
+  private final Map<ApplicationId, Set<String>> updatedNodeIdToAdd
+          = new ConcurrentHashMap<ApplicationId, Set<String>>();
+  private final Map<ApplicationId, Set<String>> updatedNodeIdToRemove
+          = new ConcurrentHashMap<ApplicationId, Set<String>>();
+  private final Map<ApplicationId, Set<ApplicationAttemptId>> applicationsStateToRemove
+          = new ConcurrentHashMap<ApplicationId, Set<ApplicationAttemptId>>();
+  private final Map<String, ApplicationAttemptState> appAttempts
+          = new ConcurrentHashMap<String, ApplicationAttemptState>();
+  private final Map<ApplicationAttemptId, Map<Integer, RanNode>> ranNodeToAdd
+          = new ConcurrentHashMap<ApplicationAttemptId, Map<Integer, RanNode>>();
   private final Map<ApplicationAttemptId, AllocateResponse>
       allocateResponsesToAdd =
       new ConcurrentHashMap<ApplicationAttemptId, AllocateResponse>();
@@ -314,6 +316,16 @@ public class TransactionStateImpl extends TransactionState {
           org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerNode node) {
     if (ficaSchedulerNodeInfoToAdd.remove(nodeId) == null) {
       FiCaSchedulerNodeInfos nodeInfo = new FiCaSchedulerNodeInfos();
+
+      List<org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer> running =
+              node.getRunningContainers();
+      for (org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainer cont :
+              running) {
+        nodeInfo.addLaunchedContainer(
+                new LaunchedContainers(nodeId,
+                        cont.getContainerId().toString(),
+                        cont.getContainerId().toString()));
+      }
       ficaSchedulerNodeInfoToRemove.put(nodeId, nodeInfo);
     }
     ficaSchedulerNodeInfoToUpdate.remove(nodeId);
@@ -354,9 +366,12 @@ public class TransactionStateImpl extends TransactionState {
   }
   
   public static int callsAddApplicationStateToRemove = 0;
-  public void addApplicationToRemove(ApplicationId appId) {
-    if(applicationsToAdd.remove(appId)==null){
-      applicationsStateToRemove.add(appId);
+
+  public void addApplicationStateToRemove(ApplicationId appId,
+          Set<ApplicationAttemptId> appAttempts) {
+    if (applicationsToAdd.remove(appId) == null) {
+      updatedNodeIdToAdd.remove(appId);
+      applicationsStateToRemove.put(appId, appAttempts);
     }
     callsAddApplicationStateToRemove++;
     appIds.add(appId);
@@ -368,12 +383,26 @@ public class TransactionStateImpl extends TransactionState {
       ApplicationStateDataAccess DA =
           (ApplicationStateDataAccess) RMStorageFactory
               .getDataAccess(ApplicationStateDataAccess.class);
+      ApplicationAttemptStateDataAccess appAttDAO =
+              (ApplicationAttemptStateDataAccess) RMStorageFactory
+              .getDataAccess(ApplicationAttemptStateDataAccess.class);
+
       Queue<ApplicationState> appToRemove = new ConcurrentLinkedQueue<ApplicationState>();
-      for (ApplicationId appId : applicationsStateToRemove) {
-        appToRemove.add(new ApplicationState(appId.toString()));
+      Queue<ApplicationAttemptState> appAttToRemove =
+              new ConcurrentLinkedQueue<ApplicationAttemptState>();
+
+      for (Map.Entry<ApplicationId, Set<ApplicationAttemptId>> entry :
+              applicationsStateToRemove.entrySet()) {
+        appToRemove.add(new ApplicationState(entry.getKey().toString()));
+
+        Set<ApplicationAttemptId> appAttempts = entry.getValue();
+        for (ApplicationAttemptId appAttId : appAttempts) {
+          appAttToRemove.add(new ApplicationAttemptState(entry.getKey().toString(),
+                  appAttId.toString()));
+        }
       }
       DA.removeAll(appToRemove);
-      //TODO remove appattempts
+      appAttDAO.removeAll(appAttToRemove);
     }
   }
   
@@ -590,7 +619,7 @@ public class TransactionStateImpl extends TransactionState {
           toPersist = new ContainerStatusPBImpl(((ContainerStatusPBImpl)status).getProto());
           toPersist.setDiagnostics(StringUtils.abbreviate(status.getDiagnostics(), 1000));
         }
-        completedContainersStatuses.put(status.getContainerId().toString(), 
+        completedContainersStatuses.put(status.getContainerId().toString(),
                 ((ContainerStatusPBImpl)toPersist).getProto().toByteArray());
       }
       
@@ -651,9 +680,18 @@ public class TransactionStateImpl extends TransactionState {
     }
   }
   
-  public void removeAllocateResponse(ApplicationAttemptId id, int responseId) {
+  public void removeAllocateResponse(ApplicationAttemptId id, int responseId,
+                                     List<String> allocatedContainers,
+                                     List<String> completedContainers) {
     if(allocateResponsesToAdd.remove(id)==null){
-    this.allocateResponsesToRemove.put(id,new AllocateResponse(id.toString(), responseId));
+      Map<String, byte[]> complContainers = new HashMap<String, byte[]>();
+      for (String contId : completedContainers) {
+        complContainers.put(contId, null);
+      }
+
+      this.allocateResponsesToRemove.put(id,
+              new AllocateResponse(id.toString(), null,
+                      allocatedContainers, responseId, complContainers));
     }
     appIds.add(id.getApplicationId());
   }
@@ -663,8 +701,18 @@ public class TransactionStateImpl extends TransactionState {
       AllocateResponseDataAccess da =
           (AllocateResponseDataAccess) RMStorageFactory
               .getDataAccess(AllocateResponseDataAccess.class);
+      AllocatedContainersDataAccess allocContDAO =
+              (AllocatedContainersDataAccess) RMStorageFactory
+              .getDataAccess(AllocatedContainersDataAccess.class);
+      CompletedContainersStatusDataAccess complContStDAO =
+              (CompletedContainersStatusDataAccess) RMStorageFactory
+              .getDataAccess(CompletedContainersStatusDataAccess.class);
 
-      da.removeAll(allocateResponsesToRemove.values());
+      Collection<AllocateResponse> toRemove = allocateResponsesToRemove.values();
+
+      da.removeAll(toRemove);
+      allocContDAO.removeAll(toRemove);
+      complContStDAO.removeAll(toRemove);
     }
   }
   
@@ -885,10 +933,15 @@ public class TransactionStateImpl extends TransactionState {
     if (!ficaSchedulerNodeInfoToRemove.isEmpty()) {
       Queue<FiCaSchedulerNode> toRemoveFiCaSchedulerNodes =
           new ConcurrentLinkedQueue<FiCaSchedulerNode>();
+      List<LaunchedContainers> launched =
+              new ArrayList<LaunchedContainers>();
       for (String nodeId : ficaSchedulerNodeInfoToRemove.keySet()) {
         toRemoveFiCaSchedulerNodes.add(new FiCaSchedulerNode(nodeId));
+        launched = ficaSchedulerNodeInfoToRemove.get(nodeId)
+                .getLaunchedContainers();
       }
       ficaNodeDA.removeAll(toRemoveFiCaSchedulerNodes);
+      launchedContainersDA.removeAll(launched);
     }
   }
 
