@@ -175,7 +175,7 @@ public class TestTSCommit {
     public void testTxOrdering3() throws Exception {
         MockRM rm = new MockRM(conf);
 
-        int numOfAppAttIds = 100, numOfContainers = 1000,
+        int numOfAppAttIds = 200, numOfContainers = 1000,
                 numOfHosts = 30;
 
         List<ApplicationAttemptId> applicationAttempts =
@@ -237,7 +237,7 @@ public class TestTSCommit {
         //printAppContainerMapping(appContainerMapping);
 
         try {
-            TimeUnit.SECONDS.sleep(20);
+            TimeUnit.SECONDS.sleep(25);
         } catch (InterruptedException ex) {
             ex.printStackTrace();
         }

@@ -16,7 +16,6 @@
 
 package io.hops.ha.common;
 
-import io.hops.metadata.util.RMUtilities;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -29,6 +28,8 @@ import java.util.Map;
 import java.util.Set;
 
 public class AggregatedTransactionState extends TransactionStateImpl {
+
+
 
     private static final Log LOG = LogFactory.getLog(AggregatedTransactionState.class);
     private final Set<TransactionState> aggregatedTs =
@@ -45,16 +46,16 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
     @Override
     public void commit(boolean flag) throws IOException {
-        LOG.info("Commit aggregated transaction state");
-        RMUtilities.logPutInCommitingQueue(this);
-        RMUtilities.finishRPC(this);
+        //LOG.info("Commit aggregated transaction state");
+        //RMUtilities.logPutInCommitingQueue(this);
+        //RMUtilities.finishRPC(this);
     }
 
     public void aggregate(TransactionState ts) {
         if (ts instanceof TransactionStateImpl) {
             aggregatedTs.add(ts);
             TransactionStateImpl tsImpl = (TransactionStateImpl) ts;
-            LOG.info("Aggregating TS: " + ts.getId());
+            //LOG.info("Aggregating TS: " + ts.getId());
 
             aggregateContainersToAdd(tsImpl);
             aggregateContainersToUpdate(tsImpl);
@@ -173,10 +174,13 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     private void aggregateSchedulerApplicationInfo(TransactionStateImpl ts) {
         genericMapAggregate(ts.schedulerApplicationInfo.getSchedulerApplicationsToAdd(),
                 schedulerApplicationInfo.getSchedulerApplicationsToAdd());
+
+        //printMap(schedulerApplicationInfo.getSchedulerApplicationsToAdd());
+        
         genericMapAggregate(ts.schedulerApplicationInfo.getFiCaSchedulerAppInfo(),
                 schedulerApplicationInfo.getFiCaSchedulerAppInfo());
         genericCollectionAggregate(ts.schedulerApplicationInfo.getApplicationsIdToRemove(),
-                ts.schedulerApplicationInfo.getApplicationsIdToRemove());
+                schedulerApplicationInfo.getApplicationsIdToRemove());
     }
 
     private void aggregateApplicationsToAdd(TransactionStateImpl ts) {

@@ -212,12 +212,12 @@ public class TransactionStateImpl extends TransactionState {
     return schedulerApplicationInfo;
   }
     
-  public void persist() throws IOException {
+  public void persist(StorageConnector connector) throws IOException {
     persitApplicationToAdd();
     persistApplicationStateToRemove();
     persistAppAttempt();
     persistRandNode();
-    persistAllocateResponsesToAdd();
+    persistAllocateResponsesToAdd(connector);
     persistAllocateResponsesToRemove();
     persistRMContainerToUpdate();
     persistRMContainersToRemove();
@@ -631,7 +631,7 @@ public class TransactionStateImpl extends TransactionState {
     return s;
   }
 
-  private void persistAllocateResponsesToAdd() throws IOException {
+  private void persistAllocateResponsesToAdd(StorageConnector connector) throws IOException {
     if (!allocateResponsesToAdd.isEmpty()) {
       AllocateResponseDataAccess da =
           (AllocateResponseDataAccess) RMStorageFactory
@@ -639,11 +639,16 @@ public class TransactionStateImpl extends TransactionState {
       AllocatedContainersDataAccess containersDA = (AllocatedContainersDataAccess)
               RMStorageFactory.getDataAccess(AllocatedContainersDataAccess.class);
       da.update(allocateResponsesToAdd.values());
+      connector.flush();
+
       containersDA.update(allocateResponsesToAdd.values());
+      connector.flush();
+
       CompletedContainersStatusDataAccess completedContainersDA =
               (CompletedContainersStatusDataAccess) 
               RMStorageFactory.getDataAccess(CompletedContainersStatusDataAccess.class);
       completedContainersDA.update(allocateResponsesToAdd.values());
+      connector.flush();
     }
   }
   

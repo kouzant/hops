@@ -15,6 +15,7 @@
  */
 package io.hops.ha.common;
 
+import io.hops.StorageConnector;
 import io.hops.exception.StorageException;
 import io.hops.metadata.util.RMStorageFactory;
 import io.hops.metadata.yarn.dal.AppSchedulingInfoBlacklistDataAccess;
@@ -124,7 +125,7 @@ public class AgregatedAppInfo {
     toRemoveblackListed.addAll(toRemove);
   }
 
-  public void persist() throws StorageException {
+  public void persist(StorageConnector connector) throws StorageException {
     persistApplicationToAdd();
     persistReservedContainersToAdd();
     persistReservedContainersToRemove();
@@ -137,6 +138,8 @@ public class AgregatedAppInfo {
     persistBlackListsToAdd();
     persistBlackListsToRemove();
     persistToUpdateResources();
+    // Flush Resources before removal
+    connector.flush();
     persistRemoval();
   }
 

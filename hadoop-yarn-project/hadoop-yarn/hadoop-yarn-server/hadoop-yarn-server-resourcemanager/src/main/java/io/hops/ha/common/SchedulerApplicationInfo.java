@@ -84,6 +84,7 @@ public class SchedulerApplicationInfo {
     //TODO: The same QueueMetrics (DEFAULT_QUEUE) is persisted with every app. Its extra overhead. We can persist it just once
     persistApplicationIdToAdd(QMDA);
     persistFiCaSchedulerAppInfo(connector);
+    connector.flush();
     persistApplicationIdToRemove();
   }
 
@@ -96,14 +97,9 @@ public class SchedulerApplicationInfo {
       List<SchedulerApplication> toAddSchedulerApp =
           new ArrayList<SchedulerApplication>();
       for (SchedulerApplicationInfoToAdd appInfo : schedulerApplicationsToAdd.values()) {
-        
-
-          LOG.debug("adding scheduler app " + appInfo.getSchedulerApplication().getAppid());
-
-
           toAddSchedulerApp.add(appInfo.getSchedulerApplication());
-        
       }
+
       sappDA.addAll(toAddSchedulerApp);
     }
   }
@@ -138,11 +134,15 @@ public class SchedulerApplicationInfo {
 
     this.schedulerApplicationsToAdd
             .put(applicationIdToAdd, appInfo);
+
+    transactionState.appIds.add(applicationIdToAdd);
+
     applicationsIdToRemove.remove(applicationIdToAdd);
   }
 
   public void setApplicationIdtoRemove(ApplicationId applicationIdToRemove) {
     if(schedulerApplicationsToAdd.remove(applicationIdToRemove)==null){
+      transactionState.appIds.add(applicationIdToRemove);
       this.applicationsIdToRemove.add(applicationIdToRemove);
     }
   }
@@ -163,6 +163,9 @@ public class SchedulerApplicationInfo {
     }
     Map<String, FiCaSchedulerAppInfo> map = fiCaSchedulerAppInfo.get(appId.toString());
     String appAttemptIdString = appAttemptId.toString();
+
+      transactionState.appIds.add(appId);
+
     return map.get(appAttemptIdString);
     }finally{
       fiCaSchedulerAppInfoLock.unlock();
@@ -177,7 +180,7 @@ public class SchedulerApplicationInfo {
         appInfo.agregate(agregatedAppInfo);
       }
     }
-    agregatedAppInfo.persist();
+    agregatedAppInfo.persist(connector);
     }
   }
   

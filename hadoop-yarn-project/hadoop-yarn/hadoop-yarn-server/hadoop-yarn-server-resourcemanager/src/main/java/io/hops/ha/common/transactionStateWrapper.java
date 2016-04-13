@@ -192,8 +192,8 @@ public class transactionStateWrapper extends TransactionStateImpl {
   }
 
   @Override
-  public void persist() throws IOException {
-    ts.persist();
+  public void persist(StorageConnector connector) throws IOException {
+    ts.persist(connector);
   }
 
   @Override
