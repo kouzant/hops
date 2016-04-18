@@ -19,11 +19,9 @@ package io.hops.ha.common;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-public class SimpleAggregationPolicy implements AggregationPolicy {
+public class SimpleAggregationPolicy extends AggregationPolicyAbstr {
 
     private static final Log LOG = LogFactory.getLog(SimpleAggregationPolicy.class);
-
-    private int aggregationLimit;
 
     public SimpleAggregationPolicy() {
         aggregationLimit = Integer.MAX_VALUE;
@@ -36,14 +34,9 @@ public class SimpleAggregationPolicy implements AggregationPolicy {
             if (aggregationLimit < 2) {
                 return;
             }
-            //LOG.info("Aggregation limit was " + aggregationLimit);
+            LOG.info("Aggregation limit was " + aggregationLimit);
             aggregationLimit = (int) Math.ceil(((AggregatedTransactionState) ts).getAggregatedTs().size() * 0.7);
-            //LOG.info("Reducing aggregationLimit to " + aggregationLimit);
+            LOG.info("Reducing aggregationLimit to " + aggregationLimit);
         }
-    }
-
-    @Override
-    public int getAggregationLimit() {
-        return aggregationLimit;
     }
 }
