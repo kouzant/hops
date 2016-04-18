@@ -2097,7 +2097,11 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   }
 
   private static final AggregationPolicy aggregationPolicy =
-          new SimpleAggregationPolicy();
+          new AdaptiveAggregationPolicy();
+
+  public static void exportLimits() {
+    ((AdaptiveAggregationPolicy) aggregationPolicy).exportLimits();
+  }
 
   // Try to persist RPCs or aggregate them
   public static void finishRPCsAggr(TransactionState ts) throws IOException {
@@ -2160,12 +2164,17 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       finishRPC(aggrTx);
 
       nextRPCLock.lock();
+      aggregationPolicy.toggleSuccessfulCommitStatus();
+      if (aggregationPolicy.getLastCommitStatus()) {
+        aggregationPolicy.enforce(aggrTx);
+      }
       clearQueuesFromAggregatedTS(aggrTx.getAggregatedTs());
     } catch (StorageException ex) {
       if (ex instanceof InconsistentTCBlockException) {
-        //LOG.info("Tried to commit too big aggregated TS");
+        LOG.debug("Tried to commit too big aggregated TS");
         nextRPCLock.lock();
         // Update aggregation limit
+        aggregationPolicy.toggleFailedCommitStatus();
         aggregationPolicy.enforce(aggrTx);
 
         // Change status back to NOT_AGGREGATED
@@ -2309,7 +2318,6 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     //long start = System.currentTimeMillis();
     nextRPCLock.lock();
     for (TransactionState ts : aggregatedTs) {
-
       startCommit.remove(ts);
 
       for (ToBeAggregatedTS tba : txToAggregate) {
@@ -2566,12 +2574,12 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         };
     try {
       // FOR TESTING
-      /*if (ts instanceof AggregatedTransactionState) {
+      if (ts instanceof AggregatedTransactionState) {
         AggregatedTransactionState tsAggr = (AggregatedTransactionState) ts;
-        if (tsAggr.getAggregatedTs().size() >= 20) {
+        if (tsAggr.getAggregatedTs().size() >= 70) {
           throw new InconsistentTCBlockException("Testing_Exception");
         }
-      }*/
+      }
       Long delta = (Long) setfinishRPCHandler.handle();
       totalCommitTime.addAndGet(delta);
       numOfCommits.incrementAndGet();

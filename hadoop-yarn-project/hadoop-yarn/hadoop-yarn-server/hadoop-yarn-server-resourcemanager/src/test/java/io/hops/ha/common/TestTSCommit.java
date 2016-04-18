@@ -252,24 +252,16 @@ public class TestTSCommit {
         verifyContainers(appContainerMapping, result);
 
         System.out.println("Number of commits in the DB: " + RMUtilities.getNumOfCommits());
-        System.out.println("Total just-commit time (ms): " + RMUtilities.getTotalCommitTime());
         System.out.println("AVG time per commit (ms): " + RMUtilities.getAverageTimePerCommit());
-        System.out.println("Total prepare and commit time (ms): " + RMUtilities.getTotalPrepareNcommitTime());
-        System.out.println("Total time in getHeadTransactionStates (ms): " + RMUtilities.getHeadTime);
-        System.out.println("Total time spent in clearing Queues (ms): " + RMUtilities.clearQueuesTime);
-        System.out.println("Total time spent in checking if is HEAD in aggregated (ms): " + RMUtilities.isHeadTime);
-        System.out.println("Total time spent in canAggregate (ms): " + RMUtilities.canAggregateTime);
-        System.out.println("Total time spent in canCommitApp (ms): " + RMUtilities.canCommitAppTime);
-        System.out.println("Total time spent in canCommitNode (ms): " + RMUtilities.canCommitNodeTime);
-        System.out.println("Total time spent in aggregation (ms): " + RMUtilities.aggregationTime);
-        System.out.println("Total aggregation time (ms): " + RMUtilities.totalAggregationTime);
         System.out.println("Total time to persist transactions (ms): " + RMUtilities.getFinishTime());
 
-        FileWriter writer = new FileWriter("TxOrdering3-output", true);
+        /*FileWriter writer = new FileWriter("TxOrdering3-output-simple", true);
         writer.write(RMUtilities.getNumOfCommits() + "," + RMUtilities.getAverageTimePerCommit() +
                 "," + RMUtilities.getFinishTime() + "\n");
         writer.flush();
         writer.close();
+
+        RMUtilities.exportLimits();*/
 
         rm.stop();
     }

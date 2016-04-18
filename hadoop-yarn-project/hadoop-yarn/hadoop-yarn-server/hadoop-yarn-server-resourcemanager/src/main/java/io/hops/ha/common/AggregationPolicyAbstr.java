@@ -17,6 +17,16 @@ package io.hops.ha.common;
 
 public abstract class AggregationPolicyAbstr implements AggregationPolicy {
     protected int aggregationLimit;
+    protected boolean lastCommitStatus;
+
+    public AggregationPolicyAbstr() {
+        this(Integer.MAX_VALUE);
+    }
+
+    public AggregationPolicyAbstr(int initialLimit) {
+        this.aggregationLimit = initialLimit;
+        lastCommitStatus = false;
+    }
 
     @Override
     public int getAggregationLimit() {
@@ -24,5 +34,16 @@ public abstract class AggregationPolicyAbstr implements AggregationPolicy {
     }
 
     @Override
+    public boolean getLastCommitStatus() {
+        return lastCommitStatus;
+    }
+
+    @Override
     public abstract void enforce(TransactionState ts);
+
+    @Override
+    public abstract void toggleSuccessfulCommitStatus();
+
+    @Override
+    public abstract void toggleFailedCommitStatus();
 }

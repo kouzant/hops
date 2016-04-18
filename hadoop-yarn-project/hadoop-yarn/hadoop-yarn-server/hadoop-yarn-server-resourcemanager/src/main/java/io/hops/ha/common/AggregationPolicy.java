@@ -19,4 +19,7 @@ package io.hops.ha.common;
 public interface AggregationPolicy {
     void enforce(TransactionState ts);
     int getAggregationLimit();
+    boolean getLastCommitStatus();
+    void toggleSuccessfulCommitStatus();
+    void toggleFailedCommitStatus();
 }

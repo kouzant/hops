@@ -24,7 +24,7 @@ public class SimpleAggregationPolicy extends AggregationPolicyAbstr {
     private static final Log LOG = LogFactory.getLog(SimpleAggregationPolicy.class);
 
     public SimpleAggregationPolicy() {
-        aggregationLimit = Integer.MAX_VALUE;
+        super();
     }
 
     @Override
@@ -38,5 +38,15 @@ public class SimpleAggregationPolicy extends AggregationPolicyAbstr {
             aggregationLimit = (int) Math.ceil(((AggregatedTransactionState) ts).getAggregatedTs().size() * 0.7);
             LOG.info("Reducing aggregationLimit to " + aggregationLimit);
         }
+    }
+
+    @Override
+    public void toggleSuccessfulCommitStatus() {
+        LOG.debug("SimpleAggregationPolicy does not support commit status");
+    }
+
+    @Override
+    public void toggleFailedCommitStatus() {
+        LOG.debug("SimpleAggregationPolicy does not support commit status");
     }
 }
