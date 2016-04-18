@@ -16,6 +16,7 @@
 
 package io.hops.ha.common;
 
+import io.hops.metadata.util.RMUtilities;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -32,8 +33,8 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
 
     private static final Log LOG = LogFactory.getLog(AggregatedTransactionState.class);
-    private final Set<TransactionState> aggregatedTs =
-            new HashSet<TransactionState>();
+    private final Set<RMUtilities.ToBeAggregatedTS> aggregatedTs =
+            new HashSet<RMUtilities.ToBeAggregatedTS>();
 
     public AggregatedTransactionState(TransactionType type) {
         super(type);
@@ -51,10 +52,10 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         //RMUtilities.finishRPC(this);
     }
 
-    public void aggregate(TransactionState ts) {
-        if (ts instanceof TransactionStateImpl) {
-            aggregatedTs.add(ts);
-            TransactionStateImpl tsImpl = (TransactionStateImpl) ts;
+    public void aggregate(RMUtilities.ToBeAggregatedTS aggrTs) {
+        if (aggrTs.getTs() instanceof TransactionStateImpl) {
+            aggregatedTs.add(aggrTs);
+            TransactionStateImpl tsImpl = (TransactionStateImpl) aggrTs.getTs();
             //LOG.info("Aggregating TS: " + ts.getId());
 
             aggregateContainersToAdd(tsImpl);
@@ -90,7 +91,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             aggregateAppIds(tsImpl);
             aggregateNodeIds(tsImpl);
         } else {
-            LOG.info("Transaction state " + ts.getId() + " is not of TransactionStateImpl" +
+            LOG.info("Transaction state " + aggrTs.getTs().getId() + " is not of TransactionStateImpl" +
                     "and cannot aggregate!");
         }
     }
@@ -99,7 +100,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         return !appIds.isEmpty() || !nodesIds.isEmpty();
     }
 
-    public Set<TransactionState> getAggregatedTs() {
+    public Set<RMUtilities.ToBeAggregatedTS> getAggregatedTs() {
         return aggregatedTs;
     }
 

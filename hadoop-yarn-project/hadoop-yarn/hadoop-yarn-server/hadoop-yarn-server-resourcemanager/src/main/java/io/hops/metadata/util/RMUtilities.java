@@ -2038,7 +2038,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     return finishTime;
   }
 
-  private static class ToBeAggregatedTS {
+  public static class ToBeAggregatedTS {
     private enum Status {
       AGGREGATED,
       NOT_AGGREGATED
@@ -2087,9 +2087,13 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         return this.ts.equals(other);
       }
 
-      if (other instanceof ToBeAggregatedTS) {
+      /*if (other instanceof ToBeAggregatedTS) {
         return (this.status.equals(((ToBeAggregatedTS) other).getStatus()))
                 && (this.ts.equals(((ToBeAggregatedTS) other).getTs()));
+      }*/
+
+      if (other instanceof ToBeAggregatedTS) {
+        return this.ts.equals(((ToBeAggregatedTS) other).getTs());
       }
 
       return false;
@@ -2097,7 +2101,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   }
 
   private static final AggregationPolicy aggregationPolicy =
-          new AdaptiveAggregationPolicy();
+          new SimpleAggregationPolicy();
 
   public static void exportLimits() {
     ((AdaptiveAggregationPolicy) aggregationPolicy).exportLimits();
@@ -2171,19 +2175,15 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       clearQueuesFromAggregatedTS(aggrTx.getAggregatedTs());
     } catch (StorageException ex) {
       if (ex instanceof InconsistentTCBlockException) {
-        LOG.debug("Tried to commit too big aggregated TS");
+        //LOG.debug("Tried to commit too big aggregated TS");
         nextRPCLock.lock();
         // Update aggregation limit
         aggregationPolicy.toggleFailedCommitStatus();
         aggregationPolicy.enforce(aggrTx);
 
         // Change status back to NOT_AGGREGATED
-        for (ToBeAggregatedTS tba : txToAggregate) {
-          for (TransactionState tx : aggrTx.getAggregatedTs()) {
-            if (tba.equals(tx)) {
-              tba.changeStatusToNotAggregated();
-            }
-          }
+        for (ToBeAggregatedTS tbaTs : aggrTx.getAggregatedTs()) {
+          tbaTs.changeStatusToNotAggregated();
         }
 
         // Aggregate again with updated aggregation policy
@@ -2208,10 +2208,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       }
       TransactionState tx = tba.getTs();
       if (canAggregate(tx, aggrTx) && (counter < limit)) {
-        //txToAggregate.remove(tx);
         //LOG.debug("We can aggregate ID: " + tx.getId());
         //long start = System.currentTimeMillis();
-        aggrTx.aggregate(tx);
+        aggrTx.aggregate(tba);
         tba.changeStatusToAggregated();
         counter++;
         //aggregationTime += System.currentTimeMillis() - start;
@@ -2253,14 +2252,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     //long start = System.currentTimeMillis();
 
     for (TransactionState prAppTs : previousAppTs) {
-      if (!aggrTx.getAggregatedTs().contains(prAppTs)) {
+      if (!aggrTx.getAggregatedTs().contains(new ToBeAggregatedTS(prAppTs))) {
         //LOG.debug("Conflicting Transaction State for Application is NOT in aggregated set");
         //isHeadTime += System.currentTimeMillis() - start;
         return false;
       }
     }
     for (TransactionState prNodeTs : previousNodeTs) {
-      if (!aggrTx.getAggregatedTs().contains(prNodeTs)) {
+      if (!aggrTx.getAggregatedTs().contains(new ToBeAggregatedTS(prNodeTs))) {
         //LOG.debug("Conflicting Transaction State for Node is NOT in aggregated set");
         //isHeadTime += System.currentTimeMillis() - start;
         return false;
@@ -2314,17 +2313,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   }
 
   // After commit of aggregated TS, remove them from their respective queue
-  private static void clearQueuesFromAggregatedTS(Set<TransactionState> aggregatedTs) {
+  private static void clearQueuesFromAggregatedTS(Set<ToBeAggregatedTS> aggregatedTs) {
     //long start = System.currentTimeMillis();
     nextRPCLock.lock();
-    for (TransactionState ts : aggregatedTs) {
+    for (ToBeAggregatedTS tbaTs : aggregatedTs) {
+      TransactionState ts = tbaTs.getTs();
       startCommit.remove(ts);
 
-      for (ToBeAggregatedTS tba : txToAggregate) {
-        if (tba.getTs().equals(ts)) {
-          txToAggregate.remove(tba);
-        }
-      }
+      txToAggregate.remove(tbaTs);
 
       for (ApplicationId appId : ts.getAppIds()) {
         if (transactionStateForApp.get(appId).remove(ts)) {
@@ -2574,12 +2570,12 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         };
     try {
       // FOR TESTING
-      if (ts instanceof AggregatedTransactionState) {
+      /*if (ts instanceof AggregatedTransactionState) {
         AggregatedTransactionState tsAggr = (AggregatedTransactionState) ts;
         if (tsAggr.getAggregatedTs().size() >= 70) {
           throw new InconsistentTCBlockException("Testing_Exception");
         }
-      }
+      }*/
       Long delta = (Long) setfinishRPCHandler.handle();
       totalCommitTime.addAndGet(delta);
       numOfCommits.incrementAndGet();
