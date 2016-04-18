@@ -59,10 +59,10 @@ public class TestAggregateTxState {
         AggregatedTransactionState agrTx = new AggregatedTransactionState(
                 TransactionState.TransactionType.APP);
 
-        for (TransactionStateImpl tx : txStates) {
+        /*for (TransactionStateImpl tx : txStates) {
             agrTx.aggregate(tx);
             agrTx.decCounter(TransactionState.TransactionType.APP);
-        }
+        }*/
     }
 
     @Test
@@ -93,10 +93,10 @@ public class TestAggregateTxState {
 
         AggregatedTransactionState argTx = new AggregatedTransactionState(TransactionState.TransactionType.APP);
 
-        for (TxWrapper ts : tStates) {
+        /*for (TxWrapper ts : tStates) {
             argTx.aggregate(ts);
             argTx.decCounter(TransactionState.TransactionType.APP);
-        }
+        }*/
 
     }
 
