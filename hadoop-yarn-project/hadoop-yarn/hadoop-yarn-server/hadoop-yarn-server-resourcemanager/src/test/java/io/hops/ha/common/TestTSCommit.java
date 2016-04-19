@@ -3,6 +3,14 @@ package io.hops.ha.common;
 import io.hops.metadata.util.RMStorageFactory;
 import io.hops.metadata.util.RMUtilities;
 import io.hops.metadata.util.YarnAPIStorageFactory;
+import io.hops.metadata.yarn.dal.NextHeartbeatDataAccess;
+import io.hops.metadata.yarn.dal.NodeHBResponseDataAccess;
+import io.hops.metadata.yarn.dal.RMNodeDataAccess;
+import io.hops.metadata.yarn.dal.util.YARNOperationType;
+import io.hops.metadata.yarn.entity.NextHeartbeat;
+import io.hops.metadata.yarn.entity.NodeHBResponse;
+import io.hops.metadata.yarn.entity.RMNode;
+import io.hops.transaction.handler.LightWeightRequestHandler;
 import junit.framework.Assert;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -26,6 +34,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -172,6 +181,180 @@ public class TestTSCommit {
     }
 
     @Test
+    public void testNodeHBResponseCommit() throws Exception {
+        final int MIN_HB = 400;
+        final int MAX_HB = 4000;
+        final int STEP_HB = 50;
+        final int MIN_SIZE = 32;
+        final int MAX_SIZE = 13344; //13344
+        final int STEP_SIZE = 512;
+
+
+        final List<RMNode> rmNodes =
+                new ArrayList<RMNode>(MAX_HB);
+        final List<NodeHBResponse> toCommitSet =
+                new ArrayList<NodeHBResponse>(MAX_HB);
+        final Map<Integer, byte[]> payloads = new HashMap<Integer, byte[]>(
+                (int) Math.ceil(MAX_SIZE / STEP_SIZE));
+
+        for (int i = MIN_SIZE; i <= MAX_SIZE; i += STEP_SIZE) {
+            byte[] payload = new byte[i];
+            rand.nextBytes(payload);
+            payloads.put(i, payload);
+        }
+
+        RMNodeAdder rmNodeAdder = new RMNodeAdder();
+        NodeHBResponseAdder nodeHBAdder = new NodeHBResponseAdder();
+
+        FileWriter writer = new FileWriter("/home/antonis/KTH/thesis/hops/nodeHBResp", true);
+        writer.write("Num of HB,payload (bytes),Commit time (ms)\n");
+
+        for (int j = MIN_SIZE; j <= MAX_SIZE; j += STEP_SIZE) {
+
+            byte[] payload = payloads.get(j);
+
+            for (int i = MIN_HB; i <= MAX_HB; i += STEP_HB) {
+                RMUtilities.InitializeDB();
+
+                for (int x = 0; x < i; ++x) {
+                    rmNodes.add(new RMNode("node_" + x));
+                    toCommitSet.add(new NodeHBResponse("node_" + x, payload));
+                }
+
+                rmNodeAdder.setCommitSet(rmNodes);
+                rmNodeAdder.handle();
+
+                nodeHBAdder.setCommitSet(toCommitSet);
+                Long commitTime = (Long) nodeHBAdder.handle();
+
+                writer.write(i + "," + payload.length + "," + commitTime + "\n");
+                writer.flush();
+
+                toCommitSet.clear();
+                rmNodes.clear();
+            }
+        }
+
+        writer.close();
+    }
+
+
+
+    @Test
+    public void testNextHeartbeatCommit() throws Exception {
+        final int MIN_HB = 400;
+        final int MAX_HB = 4000;
+        final int STEP_HB = 50;
+
+        final List<NextHeartbeat> toCommitSet =
+                new ArrayList<NextHeartbeat>(MAX_HB);
+        final List<RMNode> rmNodes =
+                new ArrayList<RMNode>(MAX_HB);
+        RMNodeAdder rmNodeAdder = new RMNodeAdder();
+        NextHBAdder nxtHBAdder = new NextHBAdder();
+
+        FileWriter writer = new FileWriter("/tmp/nxtHBCommit", true);
+
+        writer.write("Num of NextHB,Commit time(ms)\n");
+        for (int i = MIN_HB; i <= MAX_HB; i += STEP_HB) {
+            RMUtilities.InitializeDB();
+            for (int j = 0; j < i; ++j) {
+                rmNodes.add(new RMNode("node_" + j));
+                toCommitSet.add(new NextHeartbeat("node_" + j, true, 42));
+            }
+
+            rmNodeAdder.setCommitSet(rmNodes);
+            rmNodeAdder.handle();
+
+            nxtHBAdder.setToCommitSet(toCommitSet);
+            Long commitTime = (Long) nxtHBAdder.handle();
+
+            writer.write(i + "," + commitTime + "\n");
+
+            rmNodes.clear();
+            toCommitSet.clear();
+        }
+
+        writer.flush();
+        writer.close();
+    }
+
+    private class NodeHBResponseAdder extends LightWeightRequestHandler {
+
+        private List<NodeHBResponse> toCommit;
+
+        public NodeHBResponseAdder() {
+            super(YARNOperationType.TEST);
+        }
+
+        public void setCommitSet(List<NodeHBResponse> toCommit) {
+            this.toCommit = toCommit;
+        }
+
+        @Override
+        public Object performTask() throws IOException {
+            long startTime = System.currentTimeMillis();
+            connector.beginTransaction();
+            connector.writeLock();
+            NodeHBResponseDataAccess nodeHBDAO = (NodeHBResponseDataAccess) RMStorageFactory
+                    .getDataAccess(NodeHBResponseDataAccess.class);
+            nodeHBDAO.addAll(toCommit);
+            connector.commit();
+
+            return (System.currentTimeMillis() - startTime);
+        }
+    }
+
+    private class RMNodeAdder extends LightWeightRequestHandler {
+
+        private List<RMNode> toCommit;
+
+        public RMNodeAdder() {
+            super(YARNOperationType.TEST);
+        }
+
+        public void setCommitSet(List<RMNode> toCommit) {
+            this.toCommit = toCommit;
+        }
+
+        @Override
+        public Object performTask() throws IOException {
+            connector.beginTransaction();
+            connector.writeLock();
+            RMNodeDataAccess rmnodeDAO = (RMNodeDataAccess) RMStorageFactory
+                    .getDataAccess(RMNodeDataAccess.class);
+            rmnodeDAO.addAll(toCommit);
+            connector.commit();
+            return null;
+        }
+    }
+
+    private class NextHBAdder extends LightWeightRequestHandler {
+
+        private List<NextHeartbeat> toCommit;
+
+        public NextHBAdder() {
+            super(YARNOperationType.TEST);
+        }
+
+        public void setToCommitSet(List<NextHeartbeat> toCommit) {
+            this.toCommit = toCommit;
+        }
+
+        @Override
+        public Object performTask() throws IOException {
+            long startTime = System.currentTimeMillis();
+            connector.beginTransaction();
+            connector.writeLock();
+            NextHeartbeatDataAccess nxtHBDAO = (NextHeartbeatDataAccess) RMStorageFactory
+                    .getDataAccess(NextHeartbeatDataAccess.class);
+            nxtHBDAO.updateAll(toCommit);
+            connector.commit();
+            return (System.currentTimeMillis() - startTime);
+        }
+    }
+
+    @Test
     public void testTxOrdering3() throws Exception {
         MockRM rm = new MockRM(conf);
 
@@ -254,6 +437,8 @@ public class TestTSCommit {
         System.out.println("Number of commits in the DB: " + RMUtilities.getNumOfCommits());
         System.out.println("AVG time per commit (ms): " + RMUtilities.getAverageTimePerCommit());
         System.out.println("Total time to persist transactions (ms): " + RMUtilities.getFinishTime());
+        System.out.println("Total wait time on reaggregate (ms): " + RMUtilities.reaggregateTime);
+        System.out.println("Total wait time on clear queues (ms): " + RMUtilities.clearQueuesWait);
 
         /*FileWriter writer = new FileWriter("TxOrdering3-output-simple", true);
         writer.write(RMUtilities.getNumOfCommits() + "," + RMUtilities.getAverageTimePerCommit() +
@@ -471,7 +656,6 @@ public class TestTSCommit {
         System.out.println("Total just-commit time (ms): " + RMUtilities.getTotalCommitTime());
         System.out.println("Total prepare and commit time (ms): " + RMUtilities.getTotalPrepareNcommitTime());
         System.out.println("Total time in getHeadTransactionStates (ms): " + RMUtilities.getHeadTime);
-        System.out.println("Total time spent in clearing Queues (ms): " + RMUtilities.clearQueuesTime);
         System.out.println("Total time spent in checking if is HEAD in aggregated (ms): " + RMUtilities.isHeadTime);
         System.out.println("Total time spent in canAggregate (ms): " + RMUtilities.canAggregateTime);
         System.out.println("Total time spent in canCommitApp (ms): " + RMUtilities.canCommitAppTime);

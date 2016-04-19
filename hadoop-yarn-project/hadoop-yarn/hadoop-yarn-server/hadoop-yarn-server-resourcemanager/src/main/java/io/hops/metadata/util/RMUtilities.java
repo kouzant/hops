@@ -2007,7 +2007,6 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   // For evaluation only
   private static final Map<TransactionState, Long> prepareNcommitTime =
           new ConcurrentHashMap<TransactionState, Long>();
-  public static volatile Long clearQueuesTime = 0L;
   public static volatile Long getHeadTime = 0L;
   public static volatile Long isHeadTime = 0L;
   public static volatile Long canAggregateTime = 0L;
@@ -2110,10 +2109,10 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   // Try to persist RPCs or aggregate them
   public static void finishRPCsAggr(TransactionState ts) throws IOException {
     nextRPCLock.lock();
-    if (startTime == 0L) {
+    /*if (startTime == 0L) {
       startTime = System.currentTimeMillis();
       LOG.debug("Setting start time");
-    }
+    }*/
 
     if (!canCommitApp(ts) || !canCommitNode(ts)) {
       //LOG.debug("Adding TS: " + ts.getId() + " to be aggregated");
@@ -2128,7 +2127,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       finishRPC((TransactionStateImpl) ts);
       //LOG.debug("Finished RPC: " + ts.getId());
 
+
       nextRPCLock.lock();
+
       // Remove committed transaction from queues
       for (ApplicationId appId : ts.getAppIds()) {
         transactionStateForApp.get(appId).poll();
@@ -2136,30 +2137,60 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       for (NodeId nodeId : ts.getNodesIds()) {
         transactionStateForRMNode.get(nodeId).poll();
       }
+      nextRPCLock.unlock();
       //updatePrepareNcommit(ts);
 
       while (!txToAggregate.isEmpty()) {
+        nextRPCLock.lock();
+
         AggregatedTransactionState aggrTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
                 1, false, null);
 
+        long startAggr = System.currentTimeMillis();
         aggregate(aggrTx, aggregationPolicy);
 
+        LOG.info("Time spent before tryCommit sdf (ms): " + (System.currentTimeMillis() - startAggr));
         if (aggrTx.hasAggregated()) {
+          // Error in NdbJTie: returnCode -1, code 293, mysqlCode -1, status 2, classification 12, message Inconsistent trigger state in TC block
           nextRPCLock.unlock();
 
-          // Error in NdbJTie: returnCode -1, code 293, mysqlCode -1, status 2, classification 12, message Inconsistent trigger state in TC block
           tryCommit(aggrTx);
 
         } else {
           //LOG.debug("I have nothing to aggregate, I break!");
+          nextRPCLock.unlock();
           break;
         }
       }
-      if (txToAggregate.isEmpty()) {
+      /*if (txToAggregate.isEmpty()) {
         finishTime = System.currentTimeMillis() - startTime;
         LOG.debug("Setting finish time");
+      }*/
+      //nextRPCLock.unlock();
+    }
+  }
+
+  public static long reaggregateTime = 0L;
+  public static boolean printFileHeaders = true;
+
+  private static class CountersWriter implements Runnable {
+
+    private final AggregatedTransactionState ts;
+    private final String fileName = "/home/antonis/AggrCounters";
+
+    public CountersWriter(AggregatedTransactionState ts) {
+      this.ts = ts;
+    }
+
+    @Override
+    public void run() {
+      if (ts.TESTING) {
+        if (printFileHeaders) {
+          printFileHeaders = false;
+          ts.printFileHeader(fileName);
+        }
+        ts.printCounters(fileName);
       }
-      nextRPCLock.unlock();
     }
   }
 
@@ -2167,16 +2198,27 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       finishRPC(aggrTx);
 
+      Thread writer = new Thread(new CountersWriter(aggrTx));
+      writer.start();
+
+      LOG.debug("Threads waiting in tryCommit to take the lock: " + ((ReentrantLock) nextRPCLock).getQueueLength());
+      long startLockWait = System.currentTimeMillis();
       nextRPCLock.lock();
+
+      LOG.debug("Waiting to take the lock after finishRPC in tryCommit (ms): " + (System.currentTimeMillis() - startLockWait));
+
       aggregationPolicy.toggleSuccessfulCommitStatus();
       if (aggregationPolicy.getLastCommitStatus()) {
         aggregationPolicy.enforce(aggrTx);
       }
       clearQueuesFromAggregatedTS(aggrTx.getAggregatedTs());
+      writer.join();
+      nextRPCLock.unlock();
     } catch (StorageException ex) {
       if (ex instanceof InconsistentTCBlockException) {
         //LOG.debug("Tried to commit too big aggregated TS");
         nextRPCLock.lock();
+        long startRecommit = System.currentTimeMillis();
         // Update aggregation limit
         aggregationPolicy.toggleFailedCommitStatus();
         aggregationPolicy.enforce(aggrTx);
@@ -2190,18 +2232,31 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         aggrTx = new AggregatedTransactionState(TransactionState.TransactionType.APP, 1,
                 false, null);
         aggregate(aggrTx, aggregationPolicy);
+        reaggregateTime = System.currentTimeMillis() - startRecommit;
+        //LOG.info("Total time spent in reaggregating (ms): " + reaggregateTime);
+
         nextRPCLock.unlock();
 
         tryCommit(aggrTx);
       }
+      // Join the writer thread
+    } catch (InterruptedException ex) {
+      ex.printStackTrace();
     }
   }
 
   private static void aggregate(AggregatedTransactionState aggrTx, AggregationPolicy policy) {
-  //long start1 = System.currentTimeMillis();
+    long start = System.currentTimeMillis();
     int counter = 0;
+    int blah = 0;
     int limit = policy.getAggregationLimit();
+    boolean overloadedAggregation = false;
     for (ToBeAggregatedTS tba : txToAggregate) {
+      blah++;
+      if (overloadedAggregation) {
+        LOG.debug("Break aggregation because it's overloaded");
+        break;
+      }
       if (tba.getStatus().equals(ToBeAggregatedTS.Status.AGGREGATED)) {
         //LOG.debug("TS: " + tba.getTs().getId() + " is already aggregated, skipping");
         continue;
@@ -2210,15 +2265,16 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       if (canAggregate(tx, aggrTx) && (counter < limit)) {
         //LOG.debug("We can aggregate ID: " + tx.getId());
         //long start = System.currentTimeMillis();
-        aggrTx.aggregate(tba);
+        overloadedAggregation = aggrTx.aggregate(tba);
         tba.changeStatusToAggregated();
         counter++;
-        //aggregationTime += System.currentTimeMillis() - start;
       } else if (counter >= limit) {
+        aggregationTime = System.currentTimeMillis() - start;
+        //LOG.info("Total time spent on aggregation (ms): " + aggregationTime);
         break;
       }
     }
-    //totalAggregationTime += System.currentTimeMillis() - start1;
+    LOG.info("Aggregated " + counter + " and I break but I traversed " + blah);
   }
 
   // Check if we can aggregate a Transaction State
@@ -2249,7 +2305,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
   private static boolean isHeadInAggregatedSet(List<TransactionState> previousAppTs,
           List<TransactionState> previousNodeTs, AggregatedTransactionState aggrTx) {
-    //long start = System.currentTimeMillis();
+    long start = System.currentTimeMillis();
 
     for (TransactionState prAppTs : previousAppTs) {
       if (!aggrTx.getAggregatedTs().contains(new ToBeAggregatedTS(prAppTs))) {
@@ -2266,14 +2322,15 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       }
     }
     //LOG.debug("Conflicting Transaction State is in aggregated set");
-    //isHeadTime += System.currentTimeMillis() - start;
+    isHeadTime = System.currentTimeMillis() - start;
+    LOG.debug("Total time spent on checking the head of aggregated set (ms): " + isHeadTime);
     return true;
   }
 
   // Get all previous Transaction States for a given TS is its respective queue
   private static <T> List<TransactionState> getPreviousTransactionStates(Map<T, Queue<TransactionState>> mapQueue,
           TransactionState ts, Class<T> type) {
-    //long start = System.currentTimeMillis();
+    long start = System.currentTimeMillis();
     List<TransactionState> previousTs =
             new ArrayList<TransactionState>();
 
@@ -2308,14 +2365,16 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       }*/
     }
 
-    //getHeadTime += System.currentTimeMillis() - start;
+    getHeadTime = System.currentTimeMillis() - start;
+    //LOG.info("Total time spent on getting previous Transaction states (ms): " + getHeadTime);
     return previousTs;
   }
 
+  public static long clearQueuesWait = 0l;
   // After commit of aggregated TS, remove them from their respective queue
   private static void clearQueuesFromAggregatedTS(Set<ToBeAggregatedTS> aggregatedTs) {
-    //long start = System.currentTimeMillis();
-    nextRPCLock.lock();
+    //nextRPCLock.lock();
+    long startClear = System.currentTimeMillis();
     for (ToBeAggregatedTS tbaTs : aggregatedTs) {
       TransactionState ts = tbaTs.getTs();
       startCommit.remove(ts);
@@ -2333,8 +2392,10 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         }
       }
     }
-    nextRPCLock.unlock();
-    //clearQueuesTime += System.currentTimeMillis() - start;
+    clearQueuesWait = System.currentTimeMillis() - startClear;
+    //LOG.info("Total time spent in clearing queues (ms): " + clearQueuesWait);
+
+    //nextRPCLock.unlock();
   }
 
   public static void finishRPCs(TransactionState ts) throws IOException {
@@ -2543,28 +2604,46 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
                 RPC hop = new RPC(rpcId);
                 rpcToRemove.add(hop);
               }
+            long startTime = System.currentTimeMillis();
              DA.removeAll(rpcToRemove);
              connector.flush();
+            LOG.info("Time spent on RPC-remove (ms): " + (System.currentTimeMillis() - startTime));
 //            //TODO put all of this in ts.persist
+            startTime = System.currentTimeMillis();
              ts.persistRmcontextInfo(rmnodeDA, resourceDA, nodeDA,
                 rmctxInactiveNodesDA);
              connector.flush();
+            LOG.info("Time spent on persistRMContext (ms): " + (System.currentTimeMillis() - startTime));
+            startTime = System.currentTimeMillis();
             ts.persistCSQueueInfo(connector);
             connector.flush();
+            LOG.info("Time spent on persistCSQueueInfo (ms): " + (System.currentTimeMillis() - startTime));
+            startTime = System.currentTimeMillis();
             ts.persistRMNodeToUpdate(rmnodeDA);
             connector.flush();
+            LOG.info("Time spent on persistRMNodeToUpdate (ms): " + (System.currentTimeMillis() - startTime));
+            startTime = System.currentTimeMillis();
             ts.persistRMNodeInfo(hbDA, cidToCleanDA, justLaunchedContainersDA,
                 updatedContainerInfoDA, faDA, csDA,persistedEventDA, connector);
             connector.flush();
+            LOG.info("Time spent on persistRMNodeInfo (ms): " + (System.currentTimeMillis() - startTime));
+            startTime = System.currentTimeMillis();
             ts.persist(connector);
             connector.flush();
+            LOG.info("Time spent on persistTransactionState (ms): " + (System.currentTimeMillis() - startTime));
+            startTime = System.currentTimeMillis();
             ts.persistFicaSchedulerNodeInfo(resourceDA, ficaNodeDA,
                 rmcontainerDA, launchedContainersDA);
             connector.flush();
+            LOG.info("Time spent on persistFiCaSchedulerNodeInfo (ms): " + (System.currentTimeMillis() - startTime));
+            startTime = System.currentTimeMillis();
             ts.persistFairSchedulerNodeInfo(FSSNodeDA);
             connector.flush();
+            LOG.info("Time spent on persistFairSchedulerNodeInfo (ms): " + (System.currentTimeMillis() - startTime));
+            startTime = System.currentTimeMillis();
             ts.persistSchedulerApplicationInfo(QMDA, connector);
             connector.commit();
+            LOG.info("Time spent on persistSchedulerApplicationInfo (ms): " + (System.currentTimeMillis() - startTime));
             return System.currentTimeMillis() - start;
           }
         };
@@ -2577,6 +2656,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         }
       }*/
       Long delta = (Long) setfinishRPCHandler.handle();
+      LOG.info("Time spent on commit skata (ms):" + delta);
       totalCommitTime.addAndGet(delta);
       numOfCommits.incrementAndGet();
     } catch (StorageException ex) {

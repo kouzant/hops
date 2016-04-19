@@ -1,5 +1,6 @@
 package io.hops.ha.common;
 
+import io.hops.metadata.util.RMUtilities;
 import io.hops.metadata.yarn.entity.Container;
 import io.hops.metadata.yarn.entity.SchedulerApplication;
 import io.hops.metadata.yarn.entity.SchedulerApplicationInfoToAdd;
@@ -57,12 +58,12 @@ public class TestAggregateTxState {
         ts2.toRemoveContainers.put(cont2_1r.getContainerId(), cont2_1r);
 
         AggregatedTransactionState agrTx = new AggregatedTransactionState(
-                TransactionState.TransactionType.APP);
+                TransactionState.TransactionType.APP, 1, false, null);
 
-        /*for (TransactionStateImpl tx : txStates) {
-            agrTx.aggregate(tx);
+        for (TransactionStateImpl tx : txStates) {
+            agrTx.aggregate(new RMUtilities.ToBeAggregatedTS(tx));
             agrTx.decCounter(TransactionState.TransactionType.APP);
-        }*/
+        }
     }
 
     @Test
@@ -91,12 +92,13 @@ public class TestAggregateTxState {
                 new SchedulerApplication(appId1_0.toString(), "antonis", "default"));
         ts1.schedulerApplicationInfo.setSchedulerApplicationsToAdd(appId1_0, app1_0a);
 
-        AggregatedTransactionState argTx = new AggregatedTransactionState(TransactionState.TransactionType.APP);
+        AggregatedTransactionState argTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
+                1, false, null);
 
-        /*for (TxWrapper ts : tStates) {
-            argTx.aggregate(ts);
+        for (TxWrapper ts : tStates) {
+            argTx.aggregate(new RMUtilities.ToBeAggregatedTS(ts));
             argTx.decCounter(TransactionState.TransactionType.APP);
-        }*/
+        }
 
     }
 
