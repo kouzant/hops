@@ -128,6 +128,8 @@ public class SLSRunner implements AMNMCommonObject {
 
   private static float hbResponsePercentage;
   private String listOfRMIIpAddress = null;
+  private int rmiPort;
+  
   Map<String, AMNMCommonObject> remoteConnections
           = new HashMap<String, AMNMCommonObject>();
 
@@ -143,7 +145,8 @@ public class SLSRunner implements AMNMCommonObject {
           boolean distributedMode,
           boolean loadSimMode, String resourceTrackerAddress,
           String resourceManagerAddress,
-          String rmiAddress, boolean isLeader, long simulationDuration)
+          String rmiAddress, int rmiPort, boolean isLeader,
+          long simulationDuration)
           throws IOException, ClassNotFoundException {
     this.rm = null;
     this.isLeader = isLeader;
@@ -164,7 +167,8 @@ public class SLSRunner implements AMNMCommonObject {
     this.printSimulation = printsimulation;
     metricsOutputDir = outputDir;
     this.listOfRMIIpAddress = rmiAddress;
-
+    this.rmiPort = rmiPort;
+    
     nmMap = new HashMap<NodeId, NMSimulator>();
     queueAppNumMap = new HashMap<String, Integer>();
     amMap = new HashMap<String, AMSimulator>();
@@ -325,7 +329,7 @@ public class SLSRunner implements AMNMCommonObject {
     for (String rmiIp : listOfIp) {
       while (true) {
         try {
-          remoteRegistry = LocateRegistry.getRegistry(rmiIp);
+          remoteRegistry = LocateRegistry.getRegistry(rmiIp, rmiPort);
           AMNMCommonObject remoteConnection = (AMNMCommonObject) remoteRegistry.
                   lookup("AMNMCommonObject");
           remoteConnections.put(rmiIp, remoteConnection);
@@ -547,6 +551,7 @@ public class SLSRunner implements AMNMCommonObject {
     String rtAddress = cmd.getOptionValue("rtaddress"); // we are expecting the multiple rt, so input should be comma seperated
     String rmAddress = cmd.getOptionValue("rmaddress");
     String rmiAddress = "127.0.0.1";
+    int rmiPort=1099;
     boolean isLeader = cmd.hasOption("isLeader");
     System.out.println(isLeader);
     long simulationDuration = 0;
@@ -591,11 +596,15 @@ public class SLSRunner implements AMNMCommonObject {
     if (cmd.hasOption("parallelsimulator")) {
       //  then we need rmi address
       rmiAddress = cmd.getOptionValue("rmiaddress"); // currently we support only two simulator in parallel
+      if(cmd.hasOption("rmiport)")){
+        rmiPort = new Integer(cmd.getOptionValue("rmiport"));
+      }
     }
     SLSRunner sls = new SLSRunner(inputFiles, nodeFile, output,
             trackedJobSet, cmd.hasOption("printsimulation"), cmd.hasOption(
                     "yarnnode"), cmd.hasOption("distributedmode"), cmd.
             hasOption("loadsimulatormode"), rtAddress, rmAddress, rmiAddress,
+            rmiPort,
             isLeader, simulationDuration
     );
     if (!cmd.hasOption("distributedmode")) {
@@ -603,7 +612,7 @@ public class SLSRunner implements AMNMCommonObject {
         AMNMCommonObject stub = (AMNMCommonObject) UnicastRemoteObject.
                 exportObject(sls, 0);
         // Bind the remote object's stub in the registry
-        Registry registry = LocateRegistry.getRegistry();
+        Registry registry = LocateRegistry.getRegistry(rmiPort);
         registry.bind("AMNMCommonObject", stub);
         LOG.info("HOP ::  SLS RMI Server ready on default RMI port ");
         sls.start();
