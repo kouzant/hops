@@ -17,6 +17,7 @@
 package io.hops.ha.common;
 
 import io.hops.metadata.util.RMUtilities;
+import io.hops.metadata.yarn.entity.appmasterrpc.*;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.yarn.api.records.NodeId;
@@ -36,53 +37,72 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             new HashSet<RMUtilities.ToBeAggregatedTS>();
 
     // FOR EVALUATION
-    private String containersToAdd = "ContainersToAdd";
-    private String containersToUpdate = "ContainersToUpdate";
-    private String containersToRemove = "ContainersToRemove";
-    private String RMNodesToUpdate = "RMNodesToUpdate";
-    private String RMNodeInfos = "RMNodeInfos";
-    private String FicaSchedulerNodeInfoToUpdate = "FicaSchedulerNodeInfoToUpdate";
-    private String FicaSchedulerNodeInfoToAdd = "FicaSchedulerNodeInfoToAdd";
-    private String FicaSchedulerNodeInfoToRemove = "FicaSchedulerNodeInfoToRemove";
-    private String FsSchedulerNodesToAdd = "FsSchedulerNodesToAdd";
-    private String FsSchedulerNodesToRemove = "FsSchedulerNodesToRemove";
-    private String RMContainersToUpdate = "RMContainersToUpdate";
-    private String RMContainersToRemove = "RMContainersToRemove";
-    private String CSLeafQueueUserInfoToAdd = "CSLeafQueueUserInfoToAdd";
-    private String CSQueueInfoUsersToRemove = "CSQueueInfoUsersToRemove";
-    private String CSLeafQueuePendingAppToAdd = "CSLeafQueuePendingAppToAdd";
-    private String CSLeafQueuePendingAppToRemove = "CSLeafQueuePendingAppToRemove";
-    private String SchedulerApplicationsToAdd = "SchedulerApplicationsToAdd";
-    private String FicaSchedulerAppInfo = "FicaSchedulerAppInfo";
-    private String ApplicationsIdToRemove = "ApplicationsIdToRemove";
-    private String ApplicationsToAdd = "ApplicationsToAdd";
-    private String UpdatedNodeIdToAdd = "UpdatedNodeIdToAdd";
-    private String UpdatedNodeIdToRemove = "UpdatedNodeIdToRemove";
-    private String ApplicationsStateToRemove = "ApplicationsStateToRemove";
-    private String AppAttempts = "AppAttempts";
-    private String RanNodeToAdd = "RanNodeToAdd";
-    private String AllocateResponsesToAdd = "AllocateResponsesToAdd";
-    private String AllocateResponsesToRemove = "AllocateResponsesToRemove";
-    private String JustFinishedContainerToAdd = "JustFinishedContainerToAdd";
-    private String JustFinishedContainerToRemove = "JustFinishedContainerToRemove";
-    private String ActiveNodesToAdd = "ActiveNodesToAdd";
-    private String ActiveNodesToRemove = "ActiveNodesToRemove";
-    private String InactiveNodesToAdd = "InactiveNodesToAdd";
-    private String InactiveNodesToRemove = "InactiveNodesToRemove";
-    private String PersistedEventsToRemove = "PersistedEventsToRemove";
-    private String NIJustLaunchedContainersToAdd = "NIJustLaunchedContainersToAdd";
-    private String NIJustLaunchedContainersToRemove = "NIJustLaunchedContainersToRemove";
-    private String NIContainersToCleanToAdd = "NIContainersToCleanToAdd";
-    private String NIContainersToCleanToRemove = "NIContainersToCleanToRemove";
-    private String NIFinishedApplicationToAdd = "NIFinishedApplicationToAdd";
-    private String NIFinishedApplicationToRemove = "NIFinishedApplicationToRemove";
-    private String NINodeUpdateQueueToAdd = "NINodeUpdateQueueToAdd";
-    private String NINodeUpdateQueueToRemove = "NINodeUpdateQueueToRemove";
-    private String NILatestHeartBeatResponseToAdd = "NILatestHeartBeatResponseToAdd";
-    private String NINextHeartBeat = "NINextHeartBeat";
-    private String NIPendingEventsToAdd = "NIPendingEventsToAdd";
-    private String NIPendingEventsToRemove = "NIPendingEventsToRemove";
-    private String RPCids = "RPCids";
+    public long commitRPCRemove = 0L;
+    public long commitRMContextInfo = 0L;
+    public long commitCSQueueInfo = 0L;
+    public long commitRMNodeToUpdate = 0L;
+    public long commitRMNodeInfo = 0L;
+    public long commitTransactionState = 0L;
+    public long commitFiCaSchedulerNodeInfo = 0L;
+    public long commitFairSchedulerNodeInfo = 0L;
+    public long commitSchedulerApplicationInfo = 0L;
+
+    private final String containersToAdd = "ContainersToAdd";
+    private final String containersToUpdate = "ContainersToUpdate";
+    private final String containersToRemove = "ContainersToRemove";
+    private final String RMNodesToUpdate = "RMNodesToUpdate";
+    private final String RMNodeInfos = "RMNodeInfos";
+    private final String FicaSchedulerNodeInfoToUpdate = "FicaSchedulerNodeInfoToUpdate";
+    private final String FicaSchedulerNodeInfoToAdd = "FicaSchedulerNodeInfoToAdd";
+    private final String FicaSchedulerNodeInfoToRemove = "FicaSchedulerNodeInfoToRemove";
+    private final String FsSchedulerNodesToAdd = "FsSchedulerNodesToAdd";
+    private final String FsSchedulerNodesToRemove = "FsSchedulerNodesToRemove";
+    private final String RMContainersToUpdate = "RMContainersToUpdate";
+    private final String RMContainersToRemove = "RMContainersToRemove";
+    private final String CSLeafQueueUserInfoToAdd = "CSLeafQueueUserInfoToAdd";
+    private final String CSQueueInfoUsersToRemove = "CSQueueInfoUsersToRemove";
+    private final String CSLeafQueuePendingAppToAdd = "CSLeafQueuePendingAppToAdd";
+    private final String CSLeafQueuePendingAppToRemove = "CSLeafQueuePendingAppToRemove";
+    private final String SchedulerApplicationsToAdd = "SchedulerApplicationsToAdd";
+    private final String FicaSchedulerAppInfo = "FicaSchedulerAppInfo";
+    private final String ApplicationsIdToRemove = "ApplicationsIdToRemove";
+    private final String ApplicationsToAdd = "ApplicationsToAdd";
+    private final String UpdatedNodeIdToAdd = "UpdatedNodeIdToAdd";
+    private final String UpdatedNodeIdToRemove = "UpdatedNodeIdToRemove";
+    private final String ApplicationsStateToRemove = "ApplicationsStateToRemove";
+    private final String AppAttempts = "AppAttempts";
+    private final String RanNodeToAdd = "RanNodeToAdd";
+    private final String AllocateResponsesToAdd = "AllocateResponsesToAdd";
+    private final String AllocateResponsesToRemove = "AllocateResponsesToRemove";
+    private final String JustFinishedContainerToAdd = "JustFinishedContainerToAdd";
+    private final String JustFinishedContainerToRemove = "JustFinishedContainerToRemove";
+    private final String ActiveNodesToAdd = "ActiveNodesToAdd";
+    private final String ActiveNodesToRemove = "ActiveNodesToRemove";
+    private final String InactiveNodesToAdd = "InactiveNodesToAdd";
+    private final String InactiveNodesToRemove = "InactiveNodesToRemove";
+    private final String PersistedEventsToRemove = "PersistedEventsToRemove";
+    private final String NIJustLaunchedContainersToAdd = "NIJustLaunchedContainersToAdd";
+    private final String NIJustLaunchedContainersToRemove = "NIJustLaunchedContainersToRemove";
+    private final String NIContainersToCleanToAdd = "NIContainersToCleanToAdd";
+    private final String NIContainersToCleanToRemove = "NIContainersToCleanToRemove";
+    private final String NIFinishedApplicationToAdd = "NIFinishedApplicationToAdd";
+    private final String NIFinishedApplicationToRemove = "NIFinishedApplicationToRemove";
+    private final String NINodeUpdateQueueToAdd = "NINodeUpdateQueueToAdd";
+    private final String NINodeUpdateQueueToRemove = "NINodeUpdateQueueToRemove";
+    private final String NILatestHeartBeatResponseToAdd = "NILatestHeartBeatResponseToAdd";
+    private final String NINextHeartBeat = "NINextHeartBeat";
+    private final String NIPendingEventsToAdd = "NIPendingEventsToAdd";
+    private final String NIPendingEventsToRemove = "NIPendingEventsToRemove";
+    private final String RPCids = "RPCids";
+    private final String AllocRPC = "allocRPC";
+    private final String AllocRPCAsk = "allocRPCAsk";
+    private final String AllocBlAdd = "allocBlAdd";
+    private final String AllocBlRemove = "allocBlRemove";
+    private final String AllocRelease = "allocRelease";
+    private final String AllocIncrease = "allocIncrease";
+    private final String HBRPCs = "hbRPCs";
+    private final String HBContStat = "hbContStat";
+    private final String HBKeepAlive = "hbKeepAlive";
 
     private final Map<String, Integer> counters =
             new HashMap<String, Integer>();
@@ -135,6 +155,15 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         counters.put(InactiveNodesToRemove, 0);
         counters.put(PersistedEventsToRemove, 0);
         counters.put(RPCids, 0);
+        counters.put(AllocRPC, 0);
+        counters.put(AllocRPCAsk, 0);
+        counters.put(AllocBlAdd, 0);
+        counters.put(AllocBlRemove, 0);
+        counters.put(AllocRelease, 0);
+        counters.put(AllocIncrease, 0);
+        counters.put(HBRPCs, 0);
+        counters.put(HBContStat, 0);
+        counters.put(HBKeepAlive, 0);
     }
 
     private void updateCounters(String counterName, int size) {
@@ -151,6 +180,8 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             for (String key : counters.keySet()) {
                 writer.write(key + ",");
             }
+            writer.write("commitRPCRemove,commitRMContextInfo,commitCSQueueInfo,commitRMNodeToUpdate,commitRMNodeInfo,"
+                + "commitTransactionState,commitFiCaSchedulerNodeInfo,commitFairSchedulerNodeInfo,commitSchedulerApplicationInfo");
             writer.write("\n");
             writer.flush();
             writer.close();
@@ -166,6 +197,9 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             sb.append(value).append(",");
         }
 
+        sb.append(commitRPCRemove + "," + commitRMContextInfo + "," + commitCSQueueInfo + "," + commitRMNodeToUpdate
+                + "," + commitRMNodeInfo + "," + commitTransactionState + "," + commitFiCaSchedulerNodeInfo
+                + "," + commitFairSchedulerNodeInfo + "," + commitSchedulerApplicationInfo);
         sb.append("\n");
 
         try {
@@ -181,7 +215,9 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     public AggregatedTransactionState(TransactionType type, int initialCounter,
             boolean batch, TransactionStateManager manager) {
         super(type, initialCounter, batch, manager);
-        initCounters();
+        if (TESTING) {
+            initCounters();
+        }
     }
 
     @Override
@@ -230,13 +266,16 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             aggregateAppIds(tsImpl);
             aggregateNodeIds(tsImpl);
 
+            aggregateAllocRPCToRemove(tsImpl);
+            aggregateHeartbeartRPCsToRemove(tsImpl);
+
             // FOR TESTING with TestTSCommit#testTxOrdering3
             /*if (toAddContainers.size() > 3) {
                 LOG.debug("Aggregated more than 3 RMContainersToAdd and I won't aggregate any more");
                 return true;
             }*/
 
-            if (getRPCIds().size() > 100) {
+            if (getRPCIds().size() > 1000) {
                 LOG.debug("Aggregated more than enough, have mercy on my soul!");
                 return true;
             }
@@ -256,57 +295,73 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateContainersToAdd(TransactionStateImpl ts) {
-        updateCounters(containersToAdd, ts.toAddContainers.size());
+        if (TESTING) {
+            updateCounters(containersToAdd, ts.toAddContainers.size());
+        }
         genericMapAggregate(ts.toAddContainers, toAddContainers);
     }
 
     private void aggregateContainersToUpdate(TransactionStateImpl ts) {
-        updateCounters(containersToUpdate, ts.toUpdateContainers.size());
+        if (TESTING) {
+            updateCounters(containersToUpdate, ts.toUpdateContainers.size());
+        }
         genericMapAggregate(ts.toUpdateContainers, toUpdateContainers);
     }
 
     private void aggregateContainersToRemove(TransactionStateImpl ts) {
-        updateCounters(containersToRemove, ts.toRemoveContainers.size());
+        if (TESTING) {
+            updateCounters(containersToRemove, ts.toRemoveContainers.size());
+        }
         genericMapAggregate(ts.toRemoveContainers, toRemoveContainers);
     }
 
     private void aggregateRMNodesToUpdate(TransactionStateImpl ts) {
-        updateCounters(RMNodesToUpdate, ts.rmNodesToUpdate.size());
+        if (TESTING) {
+            updateCounters(RMNodesToUpdate, ts.rmNodesToUpdate.size());
+        }
         genericMapAggregate(ts.rmNodesToUpdate, rmNodesToUpdate);
     }
 
     private void aggregateRMNodeInfos(TransactionStateImpl ts) {
-        updateCounters(RMNodeInfos, ts.rmNodeInfos.size());
+        if (TESTING) {
+            updateCounters(RMNodeInfos, ts.rmNodeInfos.size());
 
-        for (RMNodeInfo info : ts.rmNodeInfos.values()) {
-            updateCounters(NIJustLaunchedContainersToAdd, info.justLaunchedContainersToAdd.size());
-            updateCounters(NIJustLaunchedContainersToRemove, info.justLaunchedContainersToRemove.size());
-            updateCounters(NIContainersToCleanToAdd, info.containerToCleanToAdd.size());
-            updateCounters(NIContainersToCleanToRemove, info.containerToCleanToRemove.size());
-            updateCounters(NIFinishedApplicationToAdd, info.finishedApplicationsToAdd.size());
-            updateCounters(NIFinishedApplicationToRemove, info.finishedApplicationsToRemove.size());
-            updateCounters(NINodeUpdateQueueToAdd, info.nodeUpdateQueueToAdd.size());
-            updateCounters(NINodeUpdateQueueToRemove, info.nodeUpdateQueueToRemove.size());
-            updateCounters(NILatestHeartBeatResponseToAdd, 1);
-            updateCounters(NINextHeartBeat, 1);
-            updateCounters(NIPendingEventsToAdd, info.persistedEventsToAdd.size());
-            updateCounters(NIPendingEventsToRemove, info.PendingEventsToRemove.size());
+            for (RMNodeInfo info : ts.rmNodeInfos.values()) {
+                updateCounters(NIJustLaunchedContainersToAdd, info.justLaunchedContainersToAdd.size());
+                updateCounters(NIJustLaunchedContainersToRemove, info.justLaunchedContainersToRemove.size());
+                updateCounters(NIContainersToCleanToAdd, info.containerToCleanToAdd.size());
+                updateCounters(NIContainersToCleanToRemove, info.containerToCleanToRemove.size());
+                updateCounters(NIFinishedApplicationToAdd, info.finishedApplicationsToAdd.size());
+                updateCounters(NIFinishedApplicationToRemove, info.finishedApplicationsToRemove.size());
+                updateCounters(NINodeUpdateQueueToAdd, info.nodeUpdateQueueToAdd.size());
+                updateCounters(NINodeUpdateQueueToRemove, info.nodeUpdateQueueToRemove.size());
+                updateCounters(NILatestHeartBeatResponseToAdd, 1);
+                updateCounters(NINextHeartBeat, 1);
+                updateCounters(NIPendingEventsToAdd, info.persistedEventsToAdd.size());
+                updateCounters(NIPendingEventsToRemove, info.PendingEventsToRemove.size());
+            }
         }
         genericMapAggregate(ts.rmNodeInfos, rmNodeInfos);
     }
 
     private void aggregateFiCaSchedulerNodeInfoToUpdate(TransactionStateImpl ts) {
-        updateCounters(FicaSchedulerNodeInfoToUpdate, ts.ficaSchedulerNodeInfoToUpdate.size());
+        if (TESTING) {
+            updateCounters(FicaSchedulerNodeInfoToUpdate, ts.ficaSchedulerNodeInfoToUpdate.size());
+        }
         genericMapAggregate(ts.ficaSchedulerNodeInfoToUpdate, ficaSchedulerNodeInfoToUpdate);
     }
 
     private void aggregateFiCaSchedulerNodeInfoToAdd(TransactionStateImpl ts) {
-        updateCounters(FicaSchedulerNodeInfoToAdd, ts.ficaSchedulerNodeInfoToAdd.size());
+        if (TESTING) {
+            updateCounters(FicaSchedulerNodeInfoToAdd, ts.ficaSchedulerNodeInfoToAdd.size());
+        }
         genericMapAggregate(ts.ficaSchedulerNodeInfoToAdd, ficaSchedulerNodeInfoToAdd);
     }
 
     private void aggregateFiCaSchedulerNodeInfoToRemove(TransactionStateImpl ts) {
-        updateCounters(FicaSchedulerNodeInfoToRemove, ts.ficaSchedulerNodeInfoToRemove.size());
+        if (TESTING) {
+            updateCounters(FicaSchedulerNodeInfoToRemove, ts.ficaSchedulerNodeInfoToRemove.size());
+        }
         genericMapAggregate(ts.ficaSchedulerNodeInfoToRemove, ficaSchedulerNodeInfoToRemove);
     }
 
@@ -315,7 +370,9 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         Map<NodeId, FSSchedulerNode> fsSchedulerNodesToAdd =
                 toAggregate.getFsSchedulerNodesToAdd();
         if (fsSchedulerNodesToAdd != null) {
-            updateCounters(FsSchedulerNodesToAdd, fsSchedulerNodesToAdd.size());
+            if (TESTING) {
+                updateCounters(FsSchedulerNodesToAdd, fsSchedulerNodesToAdd.size());
+            }
             genericMapAggregate(fsSchedulerNodesToAdd,
                     fairschedulerNodeInfo.getFsSchedulerNodesToAdd());
         }
@@ -323,121 +380,153 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         Map<NodeId, FSSchedulerNode> fsSchedulerNodesToRemove =
                 toAggregate.getFsSchedulerNodesToRemove();
         if (fsSchedulerNodesToRemove != null) {
-            updateCounters(FsSchedulerNodesToRemove, fsSchedulerNodesToRemove.size());
+            if (TESTING) {
+                updateCounters(FsSchedulerNodesToRemove, fsSchedulerNodesToRemove.size());
+            }
             genericMapAggregate(fsSchedulerNodesToRemove,
                     fairschedulerNodeInfo.getFsSchedulerNodesToRemove());
         }
     }
 
     private void aggregateRMContainersToUpdate(TransactionStateImpl ts) {
-        updateCounters(RMContainersToUpdate, ts.rmContainersToUpdate.size());
+        if (TESTING) {
+            updateCounters(RMContainersToUpdate, ts.rmContainersToUpdate.size());
+        }
         genericMapAggregate(ts.rmContainersToUpdate, rmContainersToUpdate);
     }
 
     private void aggregateRMContainersToRemove(TransactionStateImpl ts) {
-        updateCounters(RMContainersToRemove, ts.rmContainersToRemove.size());
+        if (TESTING) {
+            updateCounters(RMContainersToRemove, ts.rmContainersToRemove.size());
+        }
         genericMapAggregate(ts.rmContainersToRemove, rmContainersToRemove);
     }
 
     private void aggregateCSQueueInfo(TransactionStateImpl ts) {
-
-        updateCounters(CSLeafQueueUserInfoToAdd, ts.csQueueInfo.getCSLeafQueuePendingAppToAdd().size());
+        if (TESTING) {
+            updateCounters(CSLeafQueueUserInfoToAdd, ts.csQueueInfo.getCSLeafQueuePendingAppToAdd().size());
+            updateCounters(CSQueueInfoUsersToRemove, ts.csQueueInfo.getUsersToRemove().size());
+            updateCounters(CSLeafQueuePendingAppToAdd, ts.csQueueInfo.getCSLeafQueuePendingAppToAdd().size());
+            updateCounters(CSLeafQueuePendingAppToRemove, ts.csQueueInfo.getCSLeafQueuePendingAppToRemove().size());
+        }
         genericMapAggregate(ts.csQueueInfo.getCSLeafQueueUserInfoToAdd(),
                 csQueueInfo.getCSLeafQueueUserInfoToAdd());
 
-        updateCounters(CSQueueInfoUsersToRemove, ts.csQueueInfo.getUsersToRemove().size());
         genericCollectionAggregate(ts.csQueueInfo.getUsersToRemove(),
                 csQueueInfo.getUsersToRemove());
 
-        updateCounters(CSLeafQueuePendingAppToAdd, ts.csQueueInfo.getCSLeafQueuePendingAppToAdd().size());
         genericMapAggregate(ts.csQueueInfo.getCSLeafQueuePendingAppToAdd(),
                 csQueueInfo.getCSLeafQueuePendingAppToAdd());
 
-        updateCounters(CSLeafQueuePendingAppToRemove, ts.csQueueInfo.getCSLeafQueuePendingAppToRemove().size());
         genericMapAggregate(ts.csQueueInfo.getCSLeafQueuePendingAppToRemove(),
                 csQueueInfo.getCSLeafQueuePendingAppToRemove());
     }
 
     private void aggregateSchedulerApplicationInfo(TransactionStateImpl ts) {
-        updateCounters(SchedulerApplicationsToAdd, ts.schedulerApplicationInfo.getSchedulerApplicationsToAdd().size());
+        if (TESTING) {
+            updateCounters(SchedulerApplicationsToAdd,
+                    ts.schedulerApplicationInfo.getSchedulerApplicationsToAdd().size());
+            updateCounters(FicaSchedulerAppInfo, ts.schedulerApplicationInfo.getFiCaSchedulerAppInfo().size());
+            updateCounters(ApplicationsIdToRemove, ts.schedulerApplicationInfo.getApplicationsIdToRemove().size());
+        }
         genericMapAggregate(ts.schedulerApplicationInfo.getSchedulerApplicationsToAdd(),
                 schedulerApplicationInfo.getSchedulerApplicationsToAdd());
 
         //printMap(schedulerApplicationInfo.getSchedulerApplicationsToAdd());
-
-        updateCounters(FicaSchedulerAppInfo, ts.schedulerApplicationInfo.getFiCaSchedulerAppInfo().size());
         genericMapAggregate(ts.schedulerApplicationInfo.getFiCaSchedulerAppInfo(),
                 schedulerApplicationInfo.getFiCaSchedulerAppInfo());
 
-        updateCounters(ApplicationsIdToRemove, ts.schedulerApplicationInfo.getApplicationsIdToRemove().size());
         genericCollectionAggregate(ts.schedulerApplicationInfo.getApplicationsIdToRemove(),
                 schedulerApplicationInfo.getApplicationsIdToRemove());
     }
 
     private void aggregateApplicationsToAdd(TransactionStateImpl ts) {
-        updateCounters(ApplicationsToAdd, ts.applicationsToAdd.size());
+        if (TESTING) {
+            updateCounters(ApplicationsToAdd, ts.applicationsToAdd.size());
+        }
         genericMapAggregate(ts.applicationsToAdd, applicationsToAdd);
     }
 
     private void aggregateUpdatedNodeIdToAdd(TransactionStateImpl ts) {
-        updateCounters(UpdatedNodeIdToAdd, ts.updatedNodeIdToAdd.size());
+        if (TESTING) {
+            updateCounters(UpdatedNodeIdToAdd, ts.updatedNodeIdToAdd.size());
+        }
         genericMapAggregate(ts.updatedNodeIdToAdd, updatedNodeIdToAdd);
     }
 
     private void aggregateUpdatedNodeIdToRemove(TransactionStateImpl ts) {
-        updateCounters(UpdatedNodeIdToRemove, ts.updatedNodeIdToRemove.size());
+        if (TESTING) {
+            updateCounters(UpdatedNodeIdToRemove, ts.updatedNodeIdToRemove.size());
+        }
         genericMapAggregate(ts.updatedNodeIdToRemove, updatedNodeIdToRemove);
     }
 
     private void aggregateApplicationsStateToRemove(TransactionStateImpl ts) {
-        updateCounters(ApplicationsStateToRemove, ts.applicationsStateToRemove.size());
+        if (TESTING) {
+            updateCounters(ApplicationsStateToRemove, ts.applicationsStateToRemove.size());
+        }
         genericCollectionAggregate(ts.applicationsStateToRemove, applicationsStateToRemove);
     }
 
     private void aggregateAppAttempts(TransactionStateImpl ts) {
-        updateCounters(AppAttempts, ts.appAttempts.size());
+        if (TESTING) {
+            updateCounters(AppAttempts, ts.appAttempts.size());
+        }
         genericMapAggregate(ts.appAttempts, appAttempts);
     }
 
     private void aggregateRanNodeToAdd(TransactionStateImpl ts) {
-        updateCounters(RanNodeToAdd, ts.ranNodeToAdd.size());
+        if (TESTING) {
+            updateCounters(RanNodeToAdd, ts.ranNodeToAdd.size());
+        }
         genericMapAggregate(ts.ranNodeToAdd, ranNodeToAdd);
     }
 
     private void aggregateAllocateResponsesToAdd(TransactionStateImpl ts) {
-        updateCounters(AllocateResponsesToAdd, ts.allocateResponsesToAdd.size());
+        if (TESTING) {
+            updateCounters(AllocateResponsesToAdd, ts.allocateResponsesToAdd.size());
+        }
         genericMapAggregate(ts.allocateResponsesToAdd, allocateResponsesToAdd);
     }
 
     private void aggregateAllocateResponsesToRemove(TransactionStateImpl ts) {
-        updateCounters(AllocateResponsesToRemove, ts.allocateResponsesToRemove.size());
+        if (TESTING) {
+            updateCounters(AllocateResponsesToRemove, ts.allocateResponsesToRemove.size());
+        }
         genericMapAggregate(ts.allocateResponsesToRemove, allocateResponsesToRemove);
     }
 
     private void aggregateJustFinishedContainerToAdd(TransactionStateImpl ts) {
-        updateCounters(JustFinishedContainerToAdd, ts.justFinishedContainerToAdd.size());
+        if (TESTING) {
+            updateCounters(JustFinishedContainerToAdd, ts.justFinishedContainerToAdd.size());
+        }
         genericMapAggregate(ts.justFinishedContainerToAdd, justFinishedContainerToAdd);
     }
 
     private void aggregateJustFinishedContainerToRemove(TransactionStateImpl ts) {
-        updateCounters(JustFinishedContainerToRemove, ts.justFinishedContainerToRemove.size());
+        if (TESTING) {
+            updateCounters(JustFinishedContainerToRemove, ts.justFinishedContainerToRemove.size());
+        }
         genericMapAggregate(ts.justFinishedContainerToRemove, justFinishedContainerToRemove);
     }
 
     private void aggregateRMContextInfo(TransactionStateImpl ts) {
-        updateCounters(ActiveNodesToAdd, ts.rmcontextInfo.getActiveNodesToAdd().size());
+        if (TESTING) {
+            updateCounters(ActiveNodesToAdd, ts.rmcontextInfo.getActiveNodesToAdd().size());
+            updateCounters(ActiveNodesToRemove, ts.rmcontextInfo.getActiveNodesToRemove().size());
+            updateCounters(InactiveNodesToAdd, ts.rmcontextInfo.getInactiveNodesToAdd().size());
+            updateCounters(InactiveNodesToRemove, ts.rmcontextInfo.getInactiveNodesToRemove().size());
+        }
+
         genericMapAggregate(ts.rmcontextInfo.getActiveNodesToAdd(),
                 rmcontextInfo.getActiveNodesToAdd());
 
-        updateCounters(ActiveNodesToRemove, ts.rmcontextInfo.getActiveNodesToRemove().size());
         genericCollectionAggregate(ts.rmcontextInfo.getActiveNodesToRemove(),
                 rmcontextInfo.getActiveNodesToRemove());
 
-        updateCounters(InactiveNodesToAdd, ts.rmcontextInfo.getInactiveNodesToAdd().size());
         genericCollectionAggregate(ts.rmcontextInfo.getInactiveNodesToAdd(),
                 rmcontextInfo.getInactiveNodesToAdd());
 
-        updateCounters(InactiveNodesToRemove, ts.rmcontextInfo.getInactiveNodesToRemove().size());
         genericCollectionAggregate(ts.rmcontextInfo.getInactiveNodesToRemove(),
                 rmcontextInfo.getInactiveNodesToRemove());
 
@@ -447,13 +536,17 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
     // Never used in TransactionStateImpl
     private void aggregatePersistedEventsToRemove(TransactionStateImpl ts) {
-        updateCounters(PersistedEventsToRemove, ts.persistedEventsToRemove.size());
+        if (TESTING) {
+            updateCounters(PersistedEventsToRemove, ts.persistedEventsToRemove.size());
+        }
         genericCollectionAggregate(ts.persistedEventsToRemove,
                 persistedEventsToRemove);
     }
 
     private void aggregateRPCIds(TransactionStateImpl ts) {
-        updateCounters(RPCids, ts.getRPCIds().size());
+        if (TESTING) {
+            updateCounters(RPCids, ts.getRPCIds().size());
+        }
 
         for (Integer rpcId : ts.getRPCIds()) {
             addRPCId(rpcId);
@@ -466,6 +559,50 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
     private void aggregateNodeIds(TransactionStateImpl ts) {
         genericCollectionAggregate(ts.nodesIds, nodesIds);
+    }
+
+    private void aggregateAllocRPCToRemove(TransactionStateImpl ts) {
+        if (TESTING) {
+            updateCounters(AllocRPC, ts.allocRPCToRemove.size());
+            for (List<ToRemoveAllocAsk> item : ts.allocRPCAsk.values()) {
+                updateCounters(AllocRPCAsk, item.size());
+            }
+            for (List<ToRemoveBlacklist> item : ts.allocBlAdd.values()) {
+                updateCounters(AllocBlAdd, item.size());
+            }
+            for (List<ToRemoveBlacklist> item : ts.allocBlRemove.values()) {
+                updateCounters(AllocBlRemove, item.size());
+            }
+            for (List<ToRemoveResource> item : ts.allocRelease.values()) {
+                updateCounters(AllocRelease, item.size());
+            }
+            for (List<ToRemoveResource> item : ts.allocIncrease.values()) {
+                updateCounters(AllocIncrease, item.size());
+            }
+        }
+
+        genericMapAggregate(ts.allocRPCToRemove, allocRPCToRemove);
+        genericMapAggregate(ts.allocRPCAsk, allocRPCAsk);
+        genericMapAggregate(ts.allocBlAdd, allocBlAdd);
+        genericMapAggregate(ts.allocBlRemove, allocBlRemove);
+        genericMapAggregate(ts.allocRelease, allocRelease);
+        genericMapAggregate(ts.allocIncrease, allocIncrease);
+    }
+
+    private void aggregateHeartbeartRPCsToRemove(TransactionStateImpl ts) {
+        if (TESTING) {
+            updateCounters(HBRPCs, ts.hbRPCToRemove.size());
+            for (List<ToRemoveHBContainerStatus> item : ts.hbContStat.values()) {
+                updateCounters(HBContStat, item.size());
+            }
+            for (List<ToRemoveHBKeepAliveApp> item : ts.hbKeepAlive.values()) {
+                updateCounters(HBKeepAlive, item.size());
+            }
+        }
+
+        genericMapAggregate(ts.hbRPCToRemove, hbRPCToRemove);
+        genericMapAggregate(ts.hbContStat, hbContStat);
+        genericMapAggregate(ts.hbKeepAlive, hbKeepAlive);
     }
 
     private <T> void genericCollectionAggregate(Collection<T> source, Collection<T> target) {

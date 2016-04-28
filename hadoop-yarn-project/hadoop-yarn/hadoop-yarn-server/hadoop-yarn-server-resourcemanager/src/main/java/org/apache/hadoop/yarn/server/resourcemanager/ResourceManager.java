@@ -17,6 +17,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.hops.ha.common.GarbageCollectorService;
 import io.hops.ha.common.TransactionStateManager;
 import io.hops.metadata.util.RMStorageFactory;
 import io.hops.metadata.util.YarnAPIStorageFactory;
@@ -165,6 +166,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
   protected RMContextImpl rmContext;//recovered
   private Dispatcher rmDispatcher;
   private TransactionStateManager transactionStateManager;
+  private GarbageCollectorService garbageCollectorService;
+
   @VisibleForTesting
   protected AdminService adminService;
   protected GroupMembershipService groupMembershipService;
@@ -242,7 +245,11 @@ public class ResourceManager extends CompositeService implements Recoverable {
     transactionStateManager = new TransactionStateManager();
     addIfService(transactionStateManager);
     rmContext.setTransactionStateManager(transactionStateManager);
-    
+
+    // TODO: Probably we have to change the position of this service start
+    garbageCollectorService = new GarbageCollectorService();
+    addIfService(garbageCollectorService);
+
     this.configurationProvider =
         ConfigurationProviderFactory.getConfigurationProvider(conf);
     this.configurationProvider.init(this.conf);

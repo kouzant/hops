@@ -37,6 +37,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import io.hops.metadata.yarn.entity.appmasterrpc.AllocateRPC;
+import io.hops.metadata.yarn.entity.appmasterrpc.HeartBeatRPC;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
@@ -173,6 +176,16 @@ public class transactionStateWrapper extends TransactionStateImpl {
   public void addRPCId(int rpcId){
     this.rpcId = rpcId;
     ts.addRPCId(rpcId);
+  }
+
+  @Override
+  public void addAllocateRPC(AllocateRPC rpc) {
+    ts.addAllocateRPC(rpc);
+  }
+
+  @Override
+  public void addHeartbeatRPC(HeartBeatRPC rpc) {
+    ts.addHeartbeatRPC(rpc);
   }
 
   @Override

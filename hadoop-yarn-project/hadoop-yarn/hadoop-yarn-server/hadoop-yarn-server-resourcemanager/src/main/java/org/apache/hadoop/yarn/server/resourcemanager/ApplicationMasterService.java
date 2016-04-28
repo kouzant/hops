@@ -474,7 +474,7 @@ public class ApplicationMasterService extends AbstractService
       throws YarnException, IOException, InterruptedException {
 
     ApplicationAttemptId appAttemptId = authorizeRequest();
-
+    AllocateRPC rpc = null;
 
     if (rpcID == null) {
       rpcID = HopYarnAPIUtilities.getRPCID();
@@ -513,7 +513,7 @@ public class ApplicationMasterService extends AbstractService
         blackListRemovals.addAll(request.getResourceBlacklistRequest().
                 getBlacklistRemovals());
       }
-      AllocateRPC rpc = new AllocateRPC(rpcID, request.getResponseId(), request.
+      rpc = new AllocateRPC(rpcID, request.getResponseId(), request.
               getProgress(), releaseList, ask, resourceIncreaseRequest,
               blackListAddition, blackListRemovals);
 
@@ -524,6 +524,11 @@ public class ApplicationMasterService extends AbstractService
     TransactionState transactionState = 
            rmContext.getTransactionStateManager().getCurrentTransactionStateNonPriority(rpcID,
                     "allocate");
+    // Add allocateRPC in TS in order to remove it from DB
+    if (rpc != null) {
+      ((TransactionStateImpl) transactionState).addAllocateRPC(rpc);
+    }
+
     this.amLivelinessMonitor.receivedPing(appAttemptId);
 
     /*
