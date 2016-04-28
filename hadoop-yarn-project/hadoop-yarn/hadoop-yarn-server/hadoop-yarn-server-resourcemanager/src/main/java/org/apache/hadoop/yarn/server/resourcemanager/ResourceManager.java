@@ -246,10 +246,6 @@ public class ResourceManager extends CompositeService implements Recoverable {
     addIfService(transactionStateManager);
     rmContext.setTransactionStateManager(transactionStateManager);
 
-    // TODO: Probably we have to change the position of this service start
-    garbageCollectorService = new GarbageCollectorService();
-    addIfService(garbageCollectorService);
-
     this.configurationProvider =
         ConfigurationProviderFactory.getConfigurationProvider(conf);
     this.configurationProvider.init(this.conf);
@@ -574,6 +570,9 @@ public class ResourceManager extends CompositeService implements Recoverable {
 
       priceFixerService = new PriceFixerService(rmContext);
       addService(priceFixerService);
+
+      garbageCollectorService = new GarbageCollectorService();
+      addIfService(garbageCollectorService);
       
       new RMNMInfo(rmContext, scheduler);
 

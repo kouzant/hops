@@ -273,7 +273,7 @@ public class TransactionStateImpl extends TransactionState {
 
     HeartBeatRPCDataAccess hbDAO = (HeartBeatRPCDataAccess) RMStorageFactory
             .getDataAccess(HeartBeatRPCDataAccess.class);
-    hbDAO.removeAll(hbRPCs, contStat, keepAlive);
+    hbDAO.removeAll(hbRPCs);
   }
 
   private void persistAllocateRPCRemoval() throws IOException {
@@ -314,9 +314,7 @@ public class TransactionStateImpl extends TransactionState {
 
     AllocateRPCDataAccess allocDAO = (AllocateRPCDataAccess) RMStorageFactory
             .getDataAccess(AllocateRPCDataAccess.class);
-    allocDAO.removeAll(allocRPCs, allocAsk, blAdd, blRemove, release, increase);
-
-
+    allocDAO.removeAll(allocRPCs);
   }
 
   private void persistGarbageCollectedRPCs() throws IOException {
