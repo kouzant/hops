@@ -141,11 +141,12 @@ public class MRAMSimulator extends AMSimulator {
           List tasks, ResourceManager rm, SLSRunner se,
           long traceStartTime, long traceFinishTime, String user, String queue,
           boolean isTracked, String oldAppId,
-          String[] remoteSimIp, YarnClient rmClient, Configuration conf) throws
+          String[] remoteSimIp, int rmiPort,
+          YarnClient rmClient, Configuration conf) throws
           IOException {
     super.init(id, heartbeatInterval, tasks, rm, se,
             traceStartTime, traceFinishTime, user, queue,
-            isTracked, oldAppId, remoteSimIp,
+            isTracked, oldAppId, remoteSimIp, rmiPort,
             rmClient, conf);
     amtype = "mapreduce";
 
