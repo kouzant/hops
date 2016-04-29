@@ -570,9 +570,6 @@ public class ResourceManager extends CompositeService implements Recoverable {
 
       priceFixerService = new PriceFixerService(rmContext);
       addService(priceFixerService);
-
-      garbageCollectorService = new GarbageCollectorService();
-      addIfService(garbageCollectorService);
       
       new RMNMInfo(rmContext, scheduler);
 
@@ -1094,6 +1091,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   synchronized void transitionToLeadingRT(){
     //create and start containersLogService
     createAndStartQuotaServices();
+    createGarbageCollectorService();
   }
   
   synchronized void transitionToNonLeadingRT(){
@@ -1103,6 +1101,9 @@ public class ResourceManager extends CompositeService implements Recoverable {
     }
     if (quotaService != null) {
       quotaService.stop();
+    }
+    if (garbageCollectorService != null) {
+      garbageCollectorService.stop();
     }
   }
   
@@ -1176,6 +1177,10 @@ public class ResourceManager extends CompositeService implements Recoverable {
       if (quotaService != null) {
         quotaService.stop();
       }
+      if (garbageCollectorService != null) {
+        garbageCollectorService.stop();
+      }
+
       RMStorageFactory.stopTheNdbEventStreamingAPI();
       super.serviceStop();
       LOG.info("transition to standby serviceStop");
@@ -1227,6 +1232,12 @@ public class ResourceManager extends CompositeService implements Recoverable {
       containersLogsService.start();
       quotaService.start();
     }
+  }
+
+  protected void createGarbageCollectorService() {
+    garbageCollectorService = new GarbageCollectorService();
+    garbageCollectorService.init(conf);
+    garbageCollectorService.start();
   }
 
   @Private

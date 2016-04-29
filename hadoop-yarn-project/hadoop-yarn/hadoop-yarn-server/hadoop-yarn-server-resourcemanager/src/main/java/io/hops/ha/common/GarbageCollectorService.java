@@ -8,12 +8,14 @@ import io.hops.metadata.yarn.dal.rmstatestore.GarbageCollectorRPCDataAccess;
 import io.hops.metadata.yarn.dal.rmstatestore.HeartBeatRPCDataAccess;
 import io.hops.metadata.yarn.dal.util.YARNOperationType;
 import io.hops.metadata.yarn.entity.appmasterrpc.GarbageCollectorRPC;
+import io.hops.metadata.yarn.entity.appmasterrpc.RPC;
 import io.hops.metadata.yarn.entity.appmasterrpc.ToRemoveRPC;
 import io.hops.transaction.handler.LightWeightRequestHandler;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -62,6 +64,7 @@ public class GarbageCollectorService extends AbstractService {
             worker.interrupt();
         }
         LOG.info("GarbageCollector service stopped!");
+        super.serviceStop();
     }
 
     private class Worker implements Runnable {
@@ -74,7 +77,6 @@ public class GarbageCollectorService extends AbstractService {
         public void run() {
             try {
                 while (!Thread.currentThread().isInterrupted()) {
-                    LOG.debug("I'm working");
                     TimeUnit.MILLISECONDS.sleep(100);
                     List<GarbageCollectorRPC> rpcIdsToRemove = gcDAO.getSubset(RPCS_LIMIT);
                     if (!rpcIdsToRemove.isEmpty()) {
@@ -95,7 +97,7 @@ public class GarbageCollectorService extends AbstractService {
                                 head += RPCS_PER_THREAD;
                             }
 
-                            if (head < (rpcIdsToRemove.size() - 1)) {
+                            if (head < rpcIdsToRemove.size()) {
                                 List<GarbageCollectorRPC> lastSublist = rpcIdsToRemove
                                         .subList(head, rpcIdsToRemove.size());
                                 collectors.add(new Remover(lastSublist));
@@ -131,18 +133,18 @@ public class GarbageCollectorService extends AbstractService {
         public Boolean call() {
             try {
                 LOG.debug("I will remove " + rpcsToRemove.size() + " RPCs");
-                final List<ToRemoveRPC> hbRPCs =
-                        new ArrayList<ToRemoveRPC>();
-                final List<ToRemoveRPC> allocRPCs =
-                        new ArrayList<ToRemoveRPC>();
+                final List<RPC> hbRPCs =
+                        new ArrayList<RPC>();
+                final List<RPC> allocRPCs =
+                        new ArrayList<RPC>();
 
                 for (GarbageCollectorRPC rpc : rpcsToRemove) {
                     if (rpc.getType().equals(GarbageCollectorRPC.TYPE.HEARTBEAT)) {
                         //LOG.debug("Adding RPC " + rpc.getRpcid() + " to HB garbage");
-                        hbRPCs.add(new ToRemoveRPC(rpc.getRpcid()));
+                        hbRPCs.add(new RPC(rpc.getRpcid()));
                     } else {
                         //LOG.debug("Adding RPC " + rpc.getRpcid() + " to Alloc garbage");
-                        allocRPCs.add(new ToRemoveRPC(rpc.getRpcid()));
+                        allocRPCs.add(new RPC(rpc.getRpcid()));
                     }
                 }
 

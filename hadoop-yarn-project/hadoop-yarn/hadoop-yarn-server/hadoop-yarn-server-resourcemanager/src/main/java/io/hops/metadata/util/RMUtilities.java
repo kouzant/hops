@@ -2100,7 +2100,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   }
 
   private static final AggregationPolicy aggregationPolicy =
-          new SimpleAggregationPolicy();
+          new AdaptiveAggregationPolicy();
 
   public static void exportLimits() {
     ((AdaptiveAggregationPolicy) aggregationPolicy).exportLimits();

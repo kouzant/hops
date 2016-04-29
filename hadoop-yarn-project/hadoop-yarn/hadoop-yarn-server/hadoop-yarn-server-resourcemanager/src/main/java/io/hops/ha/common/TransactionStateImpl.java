@@ -146,8 +146,8 @@ public class TransactionStateImpl extends TransactionState {
   protected final RMContextInfo rmcontextInfo = new RMContextInfo();
   
   // RPCs
-  protected final Map<Integer, ToRemoveRPC> allocRPCToRemove =
-          new ConcurrentHashMap<Integer, ToRemoveRPC>();
+  protected final Map<Integer, RPC> allocRPCToRemove =
+          new ConcurrentHashMap<Integer, RPC>();
   protected final Map<Integer, List<ToRemoveAllocAsk>> allocRPCAsk =
           new ConcurrentHashMap<Integer, List<ToRemoveAllocAsk>>();
   protected final Map<Integer, List<ToRemoveBlacklist>> allocBlAdd =
@@ -159,8 +159,8 @@ public class TransactionStateImpl extends TransactionState {
   protected final Map<Integer, List<ToRemoveResource>> allocIncrease =
           new ConcurrentHashMap<Integer, List<ToRemoveResource>>();
 
-  protected final Map<Integer, ToRemoveRPC> hbRPCToRemove =
-          new ConcurrentHashMap<Integer, ToRemoveRPC>();
+  protected final Map<Integer, RPC> hbRPCToRemove =
+          new ConcurrentHashMap<Integer, RPC>();
   protected final Map<Integer, List<ToRemoveHBContainerStatus>> hbContStat =
           new ConcurrentHashMap<Integer, List<ToRemoveHBContainerStatus>>();
   protected final Map<Integer, List<ToRemoveHBKeepAliveApp>> hbKeepAlive =
@@ -196,7 +196,7 @@ public class TransactionStateImpl extends TransactionState {
 
   public void addHeartbeatRPC(HeartBeatRPC rpc) {
     int rpcId = rpc.getRpcId();
-    hbRPCToRemove.put(rpcId, new ToRemoveRPC(rpcId));
+    hbRPCToRemove.put(rpcId, new RPC(rpcId));
 
     List<ToRemoveHBContainerStatus> contStatList =
             new ArrayList<ToRemoveHBContainerStatus>(rpc.getContainersStatuses().size());
@@ -215,7 +215,7 @@ public class TransactionStateImpl extends TransactionState {
 
   public void addAllocateRPC(AllocateRPC rpc) {
     int rpcId = rpc.getRpcID();
-    allocRPCToRemove.put(rpcId, new ToRemoveRPC(rpcId));
+    allocRPCToRemove.put(rpcId, new RPC(rpcId));
 
     List<ToRemoveAllocAsk> askList =
             new ArrayList<ToRemoveAllocAsk>(rpc.getAsk().size());
@@ -254,8 +254,8 @@ public class TransactionStateImpl extends TransactionState {
   }
 
   private void persistHeartbeatRPCRemoval() throws IOException {
-    List<ToRemoveRPC> hbRPCs =
-            new ArrayList<ToRemoveRPC>(hbRPCToRemove.size());
+    List<RPC> hbRPCs =
+            new ArrayList<RPC>(hbRPCToRemove.size());
     hbRPCs.addAll(hbRPCToRemove.values());
 
     // TODO: I should remove them
@@ -277,8 +277,8 @@ public class TransactionStateImpl extends TransactionState {
   }
 
   private void persistAllocateRPCRemoval() throws IOException {
-    List<ToRemoveRPC> allocRPCs =
-            new ArrayList<ToRemoveRPC>(allocRPCToRemove.size());
+    List<RPC> allocRPCs =
+            new ArrayList<RPC>(allocRPCToRemove.size());
     allocRPCs.addAll(allocRPCToRemove.values());
 
     // TODO: I should remove them
@@ -321,12 +321,12 @@ public class TransactionStateImpl extends TransactionState {
     List<GarbageCollectorRPC> gcRPCs =
             new ArrayList<GarbageCollectorRPC>(
                     allocRPCToRemove.size() + hbRPCToRemove.size());
-    for (ToRemoveRPC allocRPC : allocRPCToRemove.values()) {
-      gcRPCs.add(new GarbageCollectorRPC(allocRPC.getRpcId(), GarbageCollectorRPC.TYPE.ALLOCATE));
+    for (RPC allocRPC : allocRPCToRemove.values()) {
+      gcRPCs.add(new GarbageCollectorRPC(allocRPC.getRPCId(), GarbageCollectorRPC.TYPE.ALLOCATE));
     }
 
-    for (ToRemoveRPC hbRPC : hbRPCToRemove.values()) {
-      gcRPCs.add(new GarbageCollectorRPC(hbRPC.getRpcId(), GarbageCollectorRPC.TYPE.HEARTBEAT));
+    for (RPC hbRPC : hbRPCToRemove.values()) {
+      gcRPCs.add(new GarbageCollectorRPC(hbRPC.getRPCId(), GarbageCollectorRPC.TYPE.HEARTBEAT));
     }
 
     GarbageCollectorRPCDataAccess gcDAO = (GarbageCollectorRPCDataAccess) RMStorageFactory
