@@ -1,3 +1,18 @@
+/*
+ * Copyright 2016 Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package io.hops.ha.common;
 
 import org.apache.commons.logging.Log;
@@ -8,9 +23,6 @@ import java.io.IOException;
 import java.util.LinkedList;
 import java.util.Queue;
 
-/**
- * Created by antonis on 4/18/16.
- */
 public class AdaptiveAggregationPolicy extends AggregationPolicyAbstr {
 
     // FOR TESTING
@@ -36,12 +48,12 @@ public class AdaptiveAggregationPolicy extends AggregationPolicyAbstr {
                 }
                 aggregationLimit = (int) Math.ceil(((AggregatedTransactionState) ts).
                         getAggregatedTs().size() * DECREMENT_FACTOR);
-                LOG.info("Reducing aggregation limit to " + aggregationLimit);
+                LOG.debug("Reducing aggregation limit to " + aggregationLimit);
                 limits.add(aggregationLimit);
             } else {
                 // Last commit succeed, increase aggregation limit
                 aggregationLimit += Math.floor(aggregationLimit * INCREMENT_FACTOR);
-                LOG.info("Incrementing aggregation limit to " + aggregationLimit);
+                LOG.debug("Incrementing aggregation limit to " + aggregationLimit);
                 limits.add(aggregationLimit);
             }
         }

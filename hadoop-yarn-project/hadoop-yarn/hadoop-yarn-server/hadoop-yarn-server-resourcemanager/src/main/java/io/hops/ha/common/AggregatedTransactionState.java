@@ -275,8 +275,20 @@ public class AggregatedTransactionState extends TransactionStateImpl {
                 return true;
             }*/
 
-            if (getRPCIds().size() > 1000) {
+            if (rmContainersToUpdate.size() > 300) {
+                return true;
+            }
+
+            if (allocateResponsesToAdd.size() > 100) {
+                return true;
+            }
+
+            if (rmNodeInfos.size() > 150) {
                 LOG.debug("Aggregated more than enough, have mercy on my soul!");
+                return true;
+            }
+
+            if (schedulerApplicationInfo.getFiCaSchedulerAppInfo().size() > 100) {
                 return true;
             }
         } else {
@@ -341,14 +353,50 @@ public class AggregatedTransactionState extends TransactionStateImpl {
                 updateCounters(NIPendingEventsToRemove, info.PendingEventsToRemove.size());
             }
         }
-        genericMapAggregate(ts.rmNodeInfos, rmNodeInfos);
+        //genericMapAggregate(ts.rmNodeInfos, rmNodeInfos);
+        RMNodeInfo info = null;
+        for (Map.Entry<NodeId, RMNodeInfo> entry : ts.rmNodeInfos.entrySet()) {
+            if ((info = rmNodeInfos.get(entry.getKey())) == null) {
+                rmNodeInfos.put(entry.getKey(), entry.getValue());
+            } else {
+                // Go through each element of entry.value and update the map
+                RMNodeInfo value = entry.getValue();
+                genericMapAggregate(value.persistedEventsToAdd, info.persistedEventsToAdd);
+                genericCollectionAggregate(value.PendingEventsToRemove, info.PendingEventsToRemove);
+                genericCollectionAggregate(value.containerToCleanToAdd, info.containerToCleanToAdd);
+                genericCollectionAggregate(value.containerToCleanToRemove, info.containerToCleanToRemove);
+                genericMapAggregate(value.justLaunchedContainersToAdd, info.justLaunchedContainersToAdd);
+                genericMapAggregate(value.justLaunchedContainersToRemove, info.justLaunchedContainersToRemove);
+                genericMapAggregate(value.nodeUpdateQueueToAdd, info.nodeUpdateQueueToAdd);
+                genericMapAggregate(value.nodeUpdateQueueToRemove, info.nodeUpdateQueueToRemove);
+                genericCollectionAggregate(value.finishedApplicationsToAdd, info.finishedApplicationsToAdd);
+                genericCollectionAggregate(value.finishedApplicationsToRemove, info.finishedApplicationsToRemove);
+                info.latestNodeHeartBeatResponse = value.latestNodeHeartBeatResponse;
+                info.nextHeartbeat = value.nextHeartbeat;
+                info.pendingId = value.pendingId;
+            }
+        }
     }
 
     private void aggregateFiCaSchedulerNodeInfoToUpdate(TransactionStateImpl ts) {
         if (TESTING) {
             updateCounters(FicaSchedulerNodeInfoToUpdate, ts.ficaSchedulerNodeInfoToUpdate.size());
         }
-        genericMapAggregate(ts.ficaSchedulerNodeInfoToUpdate, ficaSchedulerNodeInfoToUpdate);
+        //genericMapAggregate(ts.ficaSchedulerNodeInfoToUpdate, ficaSchedulerNodeInfoToUpdate);
+        FiCaSchedulerNodeInfoToUpdate fica = null;
+        for (Map.Entry<String, FiCaSchedulerNodeInfoToUpdate> entry : ts.ficaSchedulerNodeInfoToUpdate.entrySet()) {
+            if ((fica = ficaSchedulerNodeInfoToUpdate.get(entry.getKey())) == null) {
+                ficaSchedulerNodeInfoToUpdate.put(entry.getKey(), entry.getValue());
+            } else {
+                FiCaSchedulerNodeInfoToUpdate value = entry.getValue();
+                fica.infoToUpdate = value.infoToUpdate;
+                genericMapAggregate(value.launchedContainersToAdd, fica.launchedContainersToAdd);
+                genericCollectionAggregate(value.launchedContainersToRemove, fica.launchedContainersToRemove);
+                genericMapAggregate(value.toUpdateResources, fica.toUpdateResources);
+                fica.id = value.id;
+
+            }
+        }
     }
 
     private void aggregateFiCaSchedulerNodeInfoToAdd(TransactionStateImpl ts) {
@@ -429,6 +477,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             updateCounters(FicaSchedulerAppInfo, ts.schedulerApplicationInfo.getFiCaSchedulerAppInfo().size());
             updateCounters(ApplicationsIdToRemove, ts.schedulerApplicationInfo.getApplicationsIdToRemove().size());
         }
+
         genericMapAggregate(ts.schedulerApplicationInfo.getSchedulerApplicationsToAdd(),
                 schedulerApplicationInfo.getSchedulerApplicationsToAdd());
 

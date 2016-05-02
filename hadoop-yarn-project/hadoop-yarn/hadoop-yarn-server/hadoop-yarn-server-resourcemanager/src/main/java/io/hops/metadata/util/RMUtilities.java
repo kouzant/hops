@@ -2204,14 +2204,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       long delta = finishRPC(aggrTx);
 
-//      Thread writer = new Thread(new CountersWriter(aggrTx));
-//      writer.start();
+      //Thread writer = new Thread(new CountersWriter(aggrTx));
+      //writer.start();
 
-      LOG.debug("Threads waiting in tryCommit to take the lock: " + ((ReentrantLock) nextRPCLock).getQueueLength());
+      //LOG.debug("Threads waiting in tryCommit to take the lock: " + ((ReentrantLock) nextRPCLock).getQueueLength());
       long startLockWait = System.currentTimeMillis();
       nextRPCLock.lock();
 
-      LOG.debug("Waiting to take the lock after finishRPC in tryCommit (ms): " + (System.currentTimeMillis() - startLockWait));
+      //LOG.debug("Waiting to take the lock after finishRPC in tryCommit (ms): " + (System.currentTimeMillis() - startLockWait));
 
       aggregationPolicy.toggleSuccessfulCommitStatus();
       if (aggregationPolicy.getLastCommitStatus()) {
@@ -2240,7 +2240,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
                 false, null);
         aggregate(aggrTx, aggregationPolicy);
         reaggregateTime = System.currentTimeMillis() - startRecommit;
-        //LOG.debug("Total time spent in reaggregating (ms): " + reaggregateTime);
+        //LOG.info("Total time spent in reaggregating (ms): " + reaggregateTime);
 
         nextRPCLock.unlock();
 
@@ -2278,11 +2278,11 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         counter++;
       } else if (counter >= limit) {
         aggregationTime = System.currentTimeMillis() - start;
-        //LOG.debug("Total time spent on aggregation (ms): " + aggregationTime);
+        //LOG.info("Total time spent on aggregation (ms): " + aggregationTime);
         break;
       }
     }
-    LOG.debug("Aggregated " + counter + " and I break but I traversed " + blah);
+    LOG.info("Aggregated " + counter + " and I break but I traversed " + blah);
   }
 
   // Check if we can aggregate a Transaction State
@@ -2331,7 +2331,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     }
     //LOG.debug("Conflicting Transaction State is in aggregated set");
     isHeadTime = System.currentTimeMillis() - start;
-    LOG.debug("Total time spent on checking the head of aggregated set (ms): " + isHeadTime);
+    //LOG.debug("Total time spent on checking the head of aggregated set (ms): " + isHeadTime);
     return true;
   }
 
@@ -2374,7 +2374,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     }
 
     getHeadTime = System.currentTimeMillis() - start;
-    //LOG.debug("Total time spent on getting previous Transaction states (ms): " + getHeadTime);
+    //LOG.info("Total time spent on getting previous Transaction states (ms): " + getHeadTime);
     return previousTs;
   }
 
@@ -2418,7 +2418,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       }
     }
     clearQueuesWait = System.currentTimeMillis() - startClear;
-    //LOG.debug("Total time spent in clearing queues (ms): " + clearQueuesWait);
+    //LOG.info("Total time spent in clearing queues (ms): " + clearQueuesWait);
 
     //nextRPCLock.unlock();
   }
