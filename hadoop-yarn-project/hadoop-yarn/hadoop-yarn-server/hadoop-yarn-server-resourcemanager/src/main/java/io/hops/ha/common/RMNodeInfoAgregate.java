@@ -144,30 +144,20 @@ public class RMNodeInfoAgregate {
           PendingEventDataAccess persistedEventsDA, StorageConnector connector)
           throws StorageException {
     persistContainerStatusToAdd(csDA);
-    connector.flush();
-      persistContainerStatusToRemove(csDA);
     persistJustLaunchedContainersToAdd(justLaunchedContainersDA);
-    connector.flush();
-    persistJustLaunchedContainersToRemove(justLaunchedContainersDA);
-    connector.flush();
     persistContainerToCleanToAdd(cidToCleanDA);
-    connector.flush();
-    persistContainerToCleanToRemove(cidToCleanDA);
-    connector.flush();
     persistFinishedApplicationToAdd(faDA);
-    connector.flush();
-    persistFinishedApplicationToRemove(faDA);
-    connector.flush();
     persistNodeUpdateQueueToAdd(updatedContainerInfoDA);
-    connector.flush();
-    persistNodeUpdateQueueToRemove(updatedContainerInfoDA);
-    connector.flush();
     persistLatestHeartBeatResponseToAdd(hbDA);
-    connector.flush();
     persistNextHeartbeat();
-    connector.flush();
     persistPendingEventsToAdd(persistedEventsDA);
     connector.flush();
+
+    persistContainerStatusToRemove(csDA);
+    persistJustLaunchedContainersToRemove(justLaunchedContainersDA);
+    persistContainerToCleanToRemove(cidToCleanDA);
+    persistFinishedApplicationToRemove(faDA);
+    persistNodeUpdateQueueToRemove(updatedContainerInfoDA);
     persistPendingEventsToRemove(persistedEventsDA);
   }
 

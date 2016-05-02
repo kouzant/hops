@@ -359,23 +359,90 @@ public class TransactionStateImpl extends TransactionState {
   }
     
   public void persist(StorageConnector connector) throws IOException {
+    long startTime = System.currentTimeMillis();
     persitApplicationToAdd();
+    connector.flush();
+    LOG.info("Time spent on persistApplicationToAdd (ms):" + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistApplicationStateToRemove();
+    connector.flush();
+    LOG.info("Time spent on persistApplicationStateToRemove (ms): " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistAppAttempt();
+    connector.flush();
+    LOG.info("Time spent on persistAppAttempt (ms): " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistRandNode();
+    connector.flush();
+    LOG.info("Time spent on persistRanNode (ms): " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistAllocateResponsesToAdd(connector);
+    connector.flush();
+    LOG.info("Time spent on persistAllocateResponsesToAdd: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistAllocateResponsesToRemove();
+    connector.flush();
+    LOG.info("Time spent on persistAllocateResponsesToRemove: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistRMContainerToUpdate();
+    connector.flush();
+    LOG.info("Time spent on persistRMContainerToUpdate: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistRMContainersToRemove();
+    connector.flush();
+    LOG.info("Time spent on persistRMContainerToRemove: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistContainersToAdd();
+    connector.flush();
+    LOG.info("Time spent on persistContainersToAdd: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistContainersToRemove();
+    connector.flush();
+    LOG.info("Time spent on persistContainersToRemove: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistUpdatedNodeToAdd();
+    connector.flush();
+    LOG.info("Time spent on persistUpdatedNodeToAdd: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistUpdatedNodeToRemove();
+    connector.flush();
+    LOG.info("Time spent on persistUpdatedNodeToRemove: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistJustFinishedContainersToAdd();
+    connector.flush();
+    LOG.info("Time spent on persistJustFinishedContainersToAdd: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistJustFinishedContainersToRemove();
+    connector.flush();
+    LOG.info("Time spent on persistJustFinishedContainersToRemove: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistAllocateRPCRemoval();
+    connector.flush();
+    LOG.info("Time spent on persistAllocateRPCRemoval: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistHeartbeatRPCRemoval();
+    connector.flush();
+    LOG.info("Time spent on persistHeartbeatRPCRemoval: " + (System.currentTimeMillis() - startTime));
+
+    startTime = System.currentTimeMillis();
     persistGarbageCollectedRPCs();
+    connector.flush();
+    LOG.info("Time spent on persistGarbageCollectedRPCs: " + (System.currentTimeMillis() - startTime));
   }
 
   public void persistSchedulerApplicationInfo(QueueMetricsDataAccess QMDA, StorageConnector connector)
