@@ -38,13 +38,7 @@ import io.hops.metadata.yarn.dal.RMNodeDataAccess;
 import io.hops.metadata.yarn.dal.ResourceDataAccess;
 import io.hops.metadata.yarn.dal.UpdatedContainerInfoDataAccess;
 import io.hops.metadata.yarn.dal.fair.FSSchedulerNodeDataAccess;
-import io.hops.metadata.yarn.dal.rmstatestore.AllocateResponseDataAccess;
-import io.hops.metadata.yarn.dal.rmstatestore.AllocatedContainersDataAccess;
-import io.hops.metadata.yarn.dal.rmstatestore.ApplicationAttemptStateDataAccess;
-import io.hops.metadata.yarn.dal.rmstatestore.ApplicationStateDataAccess;
-import io.hops.metadata.yarn.dal.rmstatestore.CompletedContainersStatusDataAccess;
-import io.hops.metadata.yarn.dal.rmstatestore.RanNodeDataAccess;
-import io.hops.metadata.yarn.dal.rmstatestore.UpdatedNodeDataAccess;
+import io.hops.metadata.yarn.dal.rmstatestore.*;
 import io.hops.metadata.yarn.entity.Container;
 import io.hops.metadata.yarn.entity.FiCaSchedulerNode;
 import io.hops.metadata.yarn.entity.FiCaSchedulerNodeInfos;
@@ -55,6 +49,7 @@ import io.hops.metadata.yarn.entity.RMContainer;
 import io.hops.metadata.yarn.entity.RMNode;
 import io.hops.metadata.yarn.entity.RMNodeToAdd;
 import io.hops.metadata.yarn.entity.Resource;
+import io.hops.metadata.yarn.entity.appmasterrpc.*;
 import io.hops.metadata.yarn.entity.rmstatestore.AllocateResponse;
 import io.hops.metadata.yarn.entity.rmstatestore.ApplicationAttemptState;
 import io.hops.metadata.yarn.entity.rmstatestore.ApplicationState;
@@ -76,15 +71,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Set;
-import java.util.Collection;
-import java.util.Map;
-import java.util.Queue;
-import java.util.Set;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListMap;
@@ -102,69 +89,87 @@ public class TransactionStateImpl extends TransactionState {
   //In future implementation this will be removed as a single finishRPC will exist
   private final TransactionType type;
   //NODE
-  private Map<String, RMNode>
+  protected Map<String, RMNode>
       rmNodesToUpdate = new ConcurrentHashMap<String, RMNode>();
-  private final Map<NodeId, RMNodeInfo> rmNodeInfos =
+  protected final Map<NodeId, RMNodeInfo> rmNodeInfos =
       new ConcurrentSkipListMap<NodeId, RMNodeInfo>();
-  private final Map<String, FiCaSchedulerNodeInfoToUpdate>
+  protected final Map<String, FiCaSchedulerNodeInfoToUpdate>
       ficaSchedulerNodeInfoToUpdate =
       new ConcurrentHashMap<String, FiCaSchedulerNodeInfoToUpdate>();
-  private final Map<String, FiCaSchedulerNodeInfos>
+  protected final Map<String, FiCaSchedulerNodeInfos>
       ficaSchedulerNodeInfoToAdd =
       new ConcurrentHashMap<String, FiCaSchedulerNodeInfos>();
-  private final Map<String, FiCaSchedulerNodeInfos>
+  protected final Map<String, FiCaSchedulerNodeInfos>
       ficaSchedulerNodeInfoToRemove =
       new ConcurrentHashMap<String, FiCaSchedulerNodeInfos>();
-  private final FairSchedulerNodeInfo fairschedulerNodeInfo =
+  protected final FairSchedulerNodeInfo fairschedulerNodeInfo =
       new FairSchedulerNodeInfo();
-  private final Map<String, RMContainer> rmContainersToUpdate =
+  protected final Map<String, RMContainer> rmContainersToUpdate =
       new ConcurrentHashMap<String, RMContainer>();
-  private final Map<String, RMContainer> rmContainersToRemove =
+  protected final Map<String, RMContainer> rmContainersToRemove =
       new ConcurrentHashMap<String, RMContainer>();
-  private final Map<String, Container> toAddContainers =
+  protected final Map<String, Container> toAddContainers =
           new HashMap<String, Container>();
-  private final Map<String, Container> toUpdateContainers =
+  protected final Map<String, Container> toUpdateContainers =
           new HashMap<String, Container>();
-  private final Map<String, Container> toRemoveContainers =
+  protected final Map<String, Container> toRemoveContainers =
           new HashMap<String, Container>();
-  private final CSQueueInfo csQueueInfo = new CSQueueInfo();
+  protected final CSQueueInfo csQueueInfo = new CSQueueInfo();
   
   //APP
-  private final SchedulerApplicationInfo schedulerApplicationInfo;
-  private final Map<ApplicationId, ApplicationState> applicationsToAdd
-          = new ConcurrentHashMap<ApplicationId, ApplicationState>();
-  private final Map<ApplicationId, Set<String>> updatedNodeIdToAdd
-          = new ConcurrentHashMap<ApplicationId, Set<String>>();
-  private final Map<ApplicationId, Set<String>> updatedNodeIdToRemove
-          = new ConcurrentHashMap<ApplicationId, Set<String>>();
-  private final Map<ApplicationId, Set<ApplicationAttemptId>> applicationsStateToRemove
+  protected final SchedulerApplicationInfo schedulerApplicationInfo;
+  protected final Map<ApplicationId, ApplicationState> applicationsToAdd =
+          new ConcurrentHashMap<ApplicationId, ApplicationState>();
+  protected final Map<ApplicationId, Set<String>> updatedNodeIdToAdd =
+          new ConcurrentHashMap<ApplicationId, Set<String>>();
+  protected final Map<ApplicationId, Set<String>> updatedNodeIdToRemove =
+          new ConcurrentHashMap<ApplicationId, Set<String>>();
+  protected final Map<ApplicationId, Set<ApplicationAttemptId>> applicationsStateToRemove
           = new ConcurrentHashMap<ApplicationId, Set<ApplicationAttemptId>>();
-  private final Map<String, ApplicationAttemptState> appAttempts
-          = new ConcurrentHashMap<String, ApplicationAttemptState>();
-  private final Map<ApplicationAttemptId, Map<Integer, RanNode>> ranNodeToAdd
-          = new ConcurrentHashMap<ApplicationAttemptId, Map<Integer, RanNode>>();
-  private final Map<ApplicationAttemptId, AllocateResponse>
+  protected final Map<String, ApplicationAttemptState> appAttempts =
+      new ConcurrentHashMap<String, ApplicationAttemptState>();
+  protected final Map<ApplicationAttemptId, Map<Integer, RanNode>> ranNodeToAdd =
+          new ConcurrentHashMap<ApplicationAttemptId, Map<Integer, RanNode>>();
+  protected final Map<ApplicationAttemptId, AllocateResponse>
       allocateResponsesToAdd =
       new ConcurrentHashMap<ApplicationAttemptId, AllocateResponse>();
-  private final Map<ApplicationAttemptId, AllocateResponse> allocateResponsesToRemove =
+  protected final Map<ApplicationAttemptId, AllocateResponse> allocateResponsesToRemove =
       new ConcurrentHashMap<ApplicationAttemptId, AllocateResponse>();
   
-  private final Map<ContainerId, JustFinishedContainer> justFinishedContainerToAdd = 
+  protected final Map<ContainerId, JustFinishedContainer> justFinishedContainerToAdd =
           new ConcurrentHashMap<ContainerId, JustFinishedContainer>();
-  private final Map<ContainerId, JustFinishedContainer> justFinishedContainerToRemove = 
+  protected final Map<ContainerId, JustFinishedContainer> justFinishedContainerToRemove =
           new ConcurrentHashMap<ContainerId, JustFinishedContainer>();
   
   
   //COMTEXT
-  private final RMContextInfo rmcontextInfo = new RMContextInfo();
+  protected final RMContextInfo rmcontextInfo = new RMContextInfo();
   
-  
-  
+  // RPCs
+  protected final Map<Integer, RPC> allocRPCToRemove =
+          new ConcurrentHashMap<Integer, RPC>();
+  protected final Map<Integer, List<ToRemoveAllocAsk>> allocRPCAsk =
+          new ConcurrentHashMap<Integer, List<ToRemoveAllocAsk>>();
+  protected final Map<Integer, List<ToRemoveBlacklist>> allocBlAdd =
+          new ConcurrentHashMap<Integer, List<ToRemoveBlacklist>>();
+  protected final Map<Integer, List<ToRemoveBlacklist>> allocBlRemove =
+          new ConcurrentHashMap<Integer, List<ToRemoveBlacklist>>();
+  protected final Map<Integer, List<ToRemoveResource>> allocRelease =
+          new ConcurrentHashMap<Integer, List<ToRemoveResource>>();
+  protected final Map<Integer, List<ToRemoveResource>> allocIncrease =
+          new ConcurrentHashMap<Integer, List<ToRemoveResource>>();
+
+  protected final Map<Integer, RPC> hbRPCToRemove =
+          new ConcurrentHashMap<Integer, RPC>();
+  protected final Map<Integer, List<ToRemoveHBContainerStatus>> hbContStat =
+          new ConcurrentHashMap<Integer, List<ToRemoveHBContainerStatus>>();
+  protected final Map<Integer, List<ToRemoveHBKeepAliveApp>> hbKeepAlive =
+          new ConcurrentHashMap<Integer, List<ToRemoveHBKeepAliveApp>>();
 
   //PersistedEvent to persist for distributed RT
   private final Queue<PendingEvent> pendingEventsToAdd =
       new ConcurrentLinkedQueue<PendingEvent>();
-  private final Queue<PendingEvent> persistedEventsToRemove =
+  protected final Queue<PendingEvent> persistedEventsToRemove =
       new ConcurrentLinkedQueue<PendingEvent>();
 
   //for debug and evaluation
@@ -189,7 +194,146 @@ public class TransactionStateImpl extends TransactionState {
     this.manager = manager;
   }
 
-  
+  public void addHeartbeatRPC(HeartBeatRPC rpc) {
+    int rpcId = rpc.getRpcId();
+    hbRPCToRemove.put(rpcId, new RPC(rpcId));
+
+    List<ToRemoveHBContainerStatus> contStatList =
+            new ArrayList<ToRemoveHBContainerStatus>(rpc.getContainersStatuses().size());
+    for (String contId : rpc.getContainersStatuses().keySet()) {
+      contStatList.add(new ToRemoveHBContainerStatus(rpcId, contId));
+    }
+    hbContStat.put(rpcId, contStatList);
+
+    List<ToRemoveHBKeepAliveApp> keepAliveList =
+            new ArrayList<ToRemoveHBKeepAliveApp>(rpc.getKeepAliveApplications().size());
+    for (String appId : rpc.getKeepAliveApplications()) {
+      keepAliveList.add(new ToRemoveHBKeepAliveApp(rpcId, appId));
+    }
+    hbKeepAlive.put(rpcId, keepAliveList);
+  }
+
+  public void addAllocateRPC(AllocateRPC rpc) {
+    int rpcId = rpc.getRpcID();
+    allocRPCToRemove.put(rpcId, new RPC(rpcId));
+
+    List<ToRemoveAllocAsk> askList =
+            new ArrayList<ToRemoveAllocAsk>(rpc.getAsk().size());
+    for (String reqId : rpc.getAsk().keySet()) {
+      askList.add(new ToRemoveAllocAsk(rpcId, reqId));
+    }
+    allocRPCAsk.put(rpc.getRpcID(), askList);
+
+    List<ToRemoveBlacklist> blAdd =
+            new ArrayList<ToRemoveBlacklist>(rpc.getBlackListAddition().size());
+    for (String resource : rpc.getBlackListAddition()) {
+      blAdd.add(new ToRemoveBlacklist(rpcId, resource));
+    }
+    allocBlAdd.put(rpcId, blAdd);
+
+    List<ToRemoveBlacklist> blRem =
+            new ArrayList<ToRemoveBlacklist>(rpc.getBlackListRemovals().size());
+    for (String resource : rpc.getBlackListRemovals()) {
+      blRem.add(new ToRemoveBlacklist(rpcId, resource));
+    }
+    allocBlRemove.put(rpcId, blRem);
+
+    List<ToRemoveResource> release =
+            new ArrayList<ToRemoveResource>(rpc.getReleaseList().size());
+    for (String contId : rpc.getReleaseList()) {
+      release.add(new ToRemoveResource(rpcId, contId));
+    }
+    allocRelease.put(rpcId, release);
+
+    List<ToRemoveResource> increase =
+            new ArrayList<ToRemoveResource>(rpc.getResourceIncreaseRequest().size());
+    for (String contId : rpc.getResourceIncreaseRequest().keySet()) {
+      increase.add(new ToRemoveResource(rpcId, contId));
+    }
+    allocIncrease.put(rpcId, increase);
+  }
+
+  private void persistHeartbeatRPCRemoval() throws IOException {
+    List<RPC> hbRPCs =
+            new ArrayList<RPC>(hbRPCToRemove.size());
+    hbRPCs.addAll(hbRPCToRemove.values());
+
+    // TODO: I should remove them
+    List<ToRemoveHBContainerStatus> contStat =
+            new ArrayList<ToRemoveHBContainerStatus>();
+    /*for (List<ToRemoveHBContainerStatus> item : hbContStat.values()) {
+      contStat.addAll(item);
+    }*/
+
+    List<ToRemoveHBKeepAliveApp> keepAlive =
+            new ArrayList<ToRemoveHBKeepAliveApp>();
+    /*for (List<ToRemoveHBKeepAliveApp> item : hbKeepAlive.values()) {
+      keepAlive.addAll(item);
+    }*/
+
+    HeartBeatRPCDataAccess hbDAO = (HeartBeatRPCDataAccess) RMStorageFactory
+            .getDataAccess(HeartBeatRPCDataAccess.class);
+    hbDAO.removeAll(hbRPCs);
+  }
+
+  private void persistAllocateRPCRemoval() throws IOException {
+    List<RPC> allocRPCs =
+            new ArrayList<RPC>(allocRPCToRemove.size());
+    allocRPCs.addAll(allocRPCToRemove.values());
+
+    // TODO: I should remove them
+    List<ToRemoveAllocAsk> allocAsk =
+            new ArrayList<ToRemoveAllocAsk>();
+    /*for (List<ToRemoveAllocAsk> item : allocRPCAsk.values()) {
+      allocAsk.addAll(item);
+    }*/
+
+    List<ToRemoveBlacklist> blAdd =
+            new ArrayList<ToRemoveBlacklist>();
+    /*for (List<ToRemoveBlacklist> item : allocBlAdd.values()) {
+      blAdd.addAll(item);
+    }*/
+
+    List<ToRemoveBlacklist> blRemove =
+            new ArrayList<ToRemoveBlacklist>();
+    /*for (List<ToRemoveBlacklist> item : allocBlRemove.values()) {
+      blRemove.addAll(item);
+    }*/
+
+    List<ToRemoveResource> release =
+            new ArrayList<ToRemoveResource>();
+    /*for (List<ToRemoveResource> item : allocRelease.values()) {
+      release.addAll(item);
+    }*/
+
+    List<ToRemoveResource> increase =
+            new ArrayList<ToRemoveResource>();
+    /*for (List<ToRemoveResource> item : allocIncrease.values()) {
+      increase.addAll(item);
+    }*/
+
+    AllocateRPCDataAccess allocDAO = (AllocateRPCDataAccess) RMStorageFactory
+            .getDataAccess(AllocateRPCDataAccess.class);
+    allocDAO.removeAll(allocRPCs);
+  }
+
+  private void persistGarbageCollectedRPCs() throws IOException {
+    List<GarbageCollectorRPC> gcRPCs =
+            new ArrayList<GarbageCollectorRPC>(
+                    allocRPCToRemove.size() + hbRPCToRemove.size());
+    for (RPC allocRPC : allocRPCToRemove.values()) {
+      gcRPCs.add(new GarbageCollectorRPC(allocRPC.getRPCId(), GarbageCollectorRPC.TYPE.ALLOCATE));
+    }
+
+    for (RPC hbRPC : hbRPCToRemove.values()) {
+      gcRPCs.add(new GarbageCollectorRPC(hbRPC.getRPCId(), GarbageCollectorRPC.TYPE.HEARTBEAT));
+    }
+
+    GarbageCollectorRPCDataAccess gcDAO = (GarbageCollectorRPCDataAccess) RMStorageFactory
+            .getDataAccess(GarbageCollectorRPCDataAccess.class);
+    gcDAO.addAll(gcRPCs);
+  }
+
   @Override
   public void commit(boolean first) throws IOException {
     if(first){
@@ -198,10 +342,6 @@ public class TransactionStateImpl extends TransactionState {
       RMUtilities.logPutInCommitingQueue(this);
     }
     GlobalThreadPool.getExecutorService().execute(new RPCFinisher(this));
-  }
-  
-  public Set<NodeId> getNodesIds(){
-    return nodesIds;
   }
 
   public FairSchedulerNodeInfo getFairschedulerNodeInfo() {
@@ -218,12 +358,12 @@ public class TransactionStateImpl extends TransactionState {
     return schedulerApplicationInfo;
   }
     
-  public void persist() throws IOException {
+  public void persist(StorageConnector connector) throws IOException {
     persitApplicationToAdd();
     persistApplicationStateToRemove();
     persistAppAttempt();
     persistRandNode();
-    persistAllocateResponsesToAdd();
+    persistAllocateResponsesToAdd(connector);
     persistAllocateResponsesToRemove();
     persistRMContainerToUpdate();
     persistRMContainersToRemove();
@@ -233,6 +373,9 @@ public class TransactionStateImpl extends TransactionState {
     persistUpdatedNodeToRemove();
     persistJustFinishedContainersToAdd();
     persistJustFinishedContainersToRemove();
+    persistAllocateRPCRemoval();
+    persistHeartbeatRPCRemoval();
+    persistGarbageCollectedRPCs();
   }
 
   public void persistSchedulerApplicationInfo(QueueMetricsDataAccess QMDA, StorageConnector connector)
@@ -664,7 +807,7 @@ public class TransactionStateImpl extends TransactionState {
     return s;
   }
 
-  private void persistAllocateResponsesToAdd() throws IOException {
+  private void persistAllocateResponsesToAdd(StorageConnector connector) throws IOException {
     if (!allocateResponsesToAdd.isEmpty()) {
       AllocateResponseDataAccess da =
           (AllocateResponseDataAccess) RMStorageFactory
@@ -672,11 +815,16 @@ public class TransactionStateImpl extends TransactionState {
       AllocatedContainersDataAccess containersDA = (AllocatedContainersDataAccess)
               RMStorageFactory.getDataAccess(AllocatedContainersDataAccess.class);
       da.update(allocateResponsesToAdd.values());
+      connector.flush();
+
       containersDA.update(allocateResponsesToAdd.values());
+      connector.flush();
+
       CompletedContainersStatusDataAccess completedContainersDA =
               (CompletedContainersStatusDataAccess) 
               RMStorageFactory.getDataAccess(CompletedContainersStatusDataAccess.class);
       completedContainersDA.update(allocateResponsesToAdd.values());
+      connector.flush();
     }
   }
   
@@ -749,7 +897,8 @@ public class TransactionStateImpl extends TransactionState {
       cDA.addAll(toUpdateContainers.values());
     }
   }
-  
+
+
   public void addContainerToUpdate(
           org.apache.hadoop.yarn.api.records.Container container,
           ApplicationId appId){
@@ -1008,7 +1157,7 @@ public class TransactionStateImpl extends TransactionState {
     public void run() {
       try{
         Thread.currentThread().setPriority(Thread.MAX_PRIORITY-1);
-        RMUtilities.finishRPCs(ts);
+        RMUtilities.finishRPCsAggr(ts);
       }catch(IOException ex){
         LOG.error("did not commit state properly", ex);
     }

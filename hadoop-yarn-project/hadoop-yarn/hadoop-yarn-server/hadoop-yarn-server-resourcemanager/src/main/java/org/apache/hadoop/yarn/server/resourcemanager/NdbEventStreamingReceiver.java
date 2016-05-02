@@ -152,6 +152,7 @@ public class NdbEventStreamingReceiver {
   }
 
   public void setHopPendingEventId(int hopPendingEventId) {
+    LOG.info("received pending event " + hopPendingEventId);
     this.hopPendingEventId = hopPendingEventId;
   }
 

@@ -453,7 +453,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
     try {
         //TORECOVER should we realy clear here?
-      this.containersToClean.clear();
+//      this.containersToClean.clear();
       this.containersToClean.addAll(newSet);
     } finally {
       this.writeLock.unlock();
@@ -830,6 +830,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     }
   }
 
+  private int nbFalse=0;
   public static class StatusUpdateWhenHealthyTransition
           implements MultipleArcTransition<RMNodeImpl, RMNodeEvent, NodeState> {
 
@@ -1005,6 +1006,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
               "HOP :: next herbeat node " + rmNode.nextHeartBeat + " nexthb "
               + rmNode.nextHeartBeat);
       if (rmNode.nextHeartBeat) {
+        rmNode.nbFalse=0;
         LOG.debug("set next HeartBeat to false " + rmNode.nodeId);
         rmNode.nextHeartBeat = false;
         ((TransactionStateImpl) event.getTransactionState())
@@ -1033,6 +1035,8 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
         }
       } else if (rmNode.context.isDistributedEnabled() &&
           !rmNode.context.isLeader()) {
+        rmNode.nbFalse++;
+        LOG.info("next hb false for node " + rmNode.nodeId + " for time " + rmNode.nbFalse);
         //Add NodeUpdatedSchedulerEvent to TransactionState
 
         LOG.debug(

@@ -48,27 +48,27 @@ public class RMNodeInfo {
   private static final Log LOG = LogFactory.getLog(RMNodeInfo.class);
   private String rmnodeId = null;
   //PersistedEvent to persist for distributed RT
-  private final Map<PendingEventID, PendingEvent> persistedEventsToAdd
+  public final Map<PendingEventID, PendingEvent> persistedEventsToAdd
           = new HashMap<PendingEventID, PendingEvent>();
-  private final ArrayList<PendingEvent> PendingEventsToRemove
+  public final ArrayList<PendingEvent> PendingEventsToRemove
           = new ArrayList<PendingEvent>();
-  private Set<org.apache.hadoop.yarn.api.records.ContainerId>
+  public Set<org.apache.hadoop.yarn.api.records.ContainerId>
       containerToCleanToAdd =
           new TreeSet<org.apache.hadoop.yarn.api.records.ContainerId>();
-  private Set< org.apache.hadoop.yarn.api.records.ContainerId> containerToCleanToRemove= new TreeSet< org.apache.hadoop.yarn.api.records.ContainerId>();
-  private Map<org.apache.hadoop.yarn.api.records.ContainerId, ContainerStatus>
+  public Set< org.apache.hadoop.yarn.api.records.ContainerId> containerToCleanToRemove= new TreeSet< org.apache.hadoop.yarn.api.records.ContainerId>();
+  public Map<org.apache.hadoop.yarn.api.records.ContainerId, ContainerStatus>
       justLaunchedContainersToAdd =
           new HashMap<org.apache.hadoop.yarn.api.records.ContainerId, ContainerStatus>();
-  private Map<org.apache.hadoop.yarn.api.records.ContainerId, ContainerStatus> justLaunchedContainersToRemove = 
+  public Map<org.apache.hadoop.yarn.api.records.ContainerId, ContainerStatus> justLaunchedContainersToRemove =
           new HashMap<org.apache.hadoop.yarn.api.records.ContainerId, ContainerStatus>();
-  private Map<Integer, UpdatedContainerInfoToAdd> nodeUpdateQueueToAdd
+  public Map<Integer, UpdatedContainerInfoToAdd> nodeUpdateQueueToAdd
           = new ConcurrentHashMap<Integer, UpdatedContainerInfoToAdd>();
-  private Map<Integer, UpdatedContainerInfoToAdd> nodeUpdateQueueToRemove
+  public Map<Integer, UpdatedContainerInfoToAdd> nodeUpdateQueueToRemove
           = new ConcurrentHashMap<Integer, UpdatedContainerInfoToAdd>();
-  private Set<ApplicationId> finishedApplicationsToAdd = new ConcurrentSkipListSet<ApplicationId>();;
-  private Set<ApplicationId> finishedApplicationsToRemove = new ConcurrentSkipListSet<ApplicationId>();;
-  private NodeHBResponse latestNodeHeartBeatResponse;
-  private NextHeartbeat nextHeartbeat;
+  public Set<ApplicationId> finishedApplicationsToAdd = new ConcurrentSkipListSet<ApplicationId>();;
+  public Set<ApplicationId> finishedApplicationsToRemove = new ConcurrentSkipListSet<ApplicationId>();;
+  public NodeHBResponse latestNodeHeartBeatResponse;
+  public NextHeartbeat nextHeartbeat;
   private int pendingId = -1;
 
   public RMNodeInfo(String rmnodeId) {

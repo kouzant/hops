@@ -17,6 +17,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.hops.ha.common.GarbageCollectorService;
 import io.hops.ha.common.TransactionStateManager;
 import io.hops.metadata.util.RMStorageFactory;
 import io.hops.metadata.util.YarnAPIStorageFactory;
@@ -165,6 +166,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
   protected RMContextImpl rmContext;//recovered
   private Dispatcher rmDispatcher;
   private TransactionStateManager transactionStateManager;
+  private GarbageCollectorService garbageCollectorService;
+
   @VisibleForTesting
   protected AdminService adminService;
   protected GroupMembershipService groupMembershipService;
@@ -242,7 +245,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
     transactionStateManager = new TransactionStateManager();
     addIfService(transactionStateManager);
     rmContext.setTransactionStateManager(transactionStateManager);
-    
+
     this.configurationProvider =
         ConfigurationProviderFactory.getConfigurationProvider(conf);
     this.configurationProvider.init(this.conf);
@@ -1094,6 +1097,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   synchronized void transitionToLeadingRT(){
     //create and start containersLogService
     createAndStartQuotaServices();
+    createGarbageCollectorService();
   }
   
   synchronized void transitionToNonLeadingRT(){
@@ -1103,6 +1107,9 @@ public class ResourceManager extends CompositeService implements Recoverable {
     }
     if (quotaService != null) {
       quotaService.stop();
+    }
+    if (garbageCollectorService != null) {
+      garbageCollectorService.stop();
     }
   }
   
@@ -1176,6 +1183,10 @@ public class ResourceManager extends CompositeService implements Recoverable {
       if (quotaService != null) {
         quotaService.stop();
       }
+      if (garbageCollectorService != null) {
+        garbageCollectorService.stop();
+      }
+
       RMStorageFactory.stopTheNdbEventStreamingAPI();
       super.serviceStop();
       LOG.info("transition to standby serviceStop");
@@ -1227,6 +1238,12 @@ public class ResourceManager extends CompositeService implements Recoverable {
       containersLogsService.start();
       quotaService.start();
     }
+  }
+
+  protected void createGarbageCollectorService() {
+    garbageCollectorService = new GarbageCollectorService();
+    garbageCollectorService.init(conf);
+    garbageCollectorService.start();
   }
 
   @Private

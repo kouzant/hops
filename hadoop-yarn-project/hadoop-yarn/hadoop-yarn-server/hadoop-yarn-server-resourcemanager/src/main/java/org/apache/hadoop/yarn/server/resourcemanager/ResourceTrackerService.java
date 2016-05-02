@@ -509,6 +509,8 @@ public class ResourceTrackerService extends AbstractService
     // Send ping
     this.nmLivelinessMonitor.receivedPing(nodeId);
     boolean isValid = this.nodesListManager.isValidNode(rmNode.getHostName());
+    HeartBeatRPC rpc = null;
+
     if (rpcID == null) {
       rpcID = HopYarnAPIUtilities.getRPCID();
       byte[] allHBRequestData = ((NodeHeartbeatRequestPBImpl) request).
@@ -553,7 +555,7 @@ public class ResourceTrackerService extends AbstractService
         lastKnownNMTokenMasterKey = ((MasterKeyPBImpl) request.
                 getLastKnownNMTokenMasterKey()).getProto().toByteArray();
       }
-      HeartBeatRPC rpc = new HeartBeatRPC(request.getNodeStatus().getNodeId().
+      rpc = new HeartBeatRPC(request.getNodeStatus().getNodeId().
               toString(),
               request.getNodeStatus().getResponseId(), containersStatuses,
               keepAliveApplications,
@@ -566,6 +568,10 @@ public class ResourceTrackerService extends AbstractService
     TransactionState transactionState = rmContext.getTransactionStateManager().
             getCurrentTransactionStatePriority(rpcID, "nodeHeartbeat");
     ((transactionStateWrapper) transactionState).addTime(1);
+
+    if (rpc != null) {
+      ((transactionStateWrapper) transactionState).addHeartbeatRPC(rpc);
+    }
 
     // 2. Check if it's a valid (i.e. not excluded) node
     if (!isValid) {

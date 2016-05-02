@@ -27,6 +27,10 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 import io.hops.metadata.yarn.entity.ContainerStatus;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.proto.YarnServerCommonProtos;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.api.records.impl.pb.MasterKeyPBImpl;
@@ -39,14 +43,16 @@ public class NdbRtStreamingReceiver {
           = new ArrayBlockingQueue<StreamingRTComps>(100000);
 
   private static final Log LOG = LogFactory.getLog(NdbRtStreamingReceiver.class);
-  private Set<org.apache.hadoop.yarn.api.records.ContainerId> containersToCleanSet
+  private Map<String, Set<org.apache.hadoop.yarn.api.records.ContainerId>> containersToCleanSet
           = null;
-  private List<org.apache.hadoop.yarn.api.records.ApplicationId> finishedAppList
+  private Map<String, List<org.apache.hadoop.yarn.api.records.ApplicationId>> finishedAppList
           = null;
   private String containerId = null;
   private String applicationId = null;
-  private String nodeId = null;
-  private boolean nextHeartbeat = false;
+  private Set<String>nodeIds;
+  private Map<String, Boolean> nextHeartbeatMap = null;
+  private boolean nextHeartbeat=false;
+  private String nextHBNodeId = null;
   private int finishedAppPendingId = 0;
   private int cidToCleanPendingId = 0;
   private int nextHBPendingId = 0;
@@ -90,25 +96,36 @@ public class NdbRtStreamingReceiver {
 
   public void setContainerIdToClenrmnodeid(String rmnodeid) {
     this.containerIdToCleanrmnodeid = rmnodeid;
+    nodeIds.add(rmnodeid);
   }
 
+  public void buildNodeIds(){
+    nodeIds = new HashSet<String>();
+  }
+  
   public void buildContainersToClean() {
     containersToCleanSet
-            = new TreeSet<org.apache.hadoop.yarn.api.records.ContainerId>();
+            = new HashMap<String, Set<ContainerId>>();
   }
 
   public void AddContainersToClean() {
     org.apache.hadoop.yarn.api.records.ContainerId addContainerId
             = ConverterUtils.toContainerId(containerId);
-    containersToCleanSet.add(addContainerId);
+    Set<ContainerId> containerIds = containersToCleanSet.get(containerIdToCleanrmnodeid);
+    if(containerIds==null){
+      containerIds = new HashSet<ContainerId>();
+      containersToCleanSet.put(containerIdToCleanrmnodeid, containerIds);
+    }
+    containerIds.add(addContainerId);
   }
 
   public void buildFinishedApplications() {
-    finishedAppList = new ArrayList<ApplicationId>();
+    finishedAppList = new HashMap<String, List<ApplicationId>>();
   }
 
   public void setApplicationIdrmnodeid(String rmnodeid) {
     this.finishedApplicationrmnodeid = rmnodeid;
+    nodeIds.add(rmnodeid);
   }
 
   public void setApplicationId(String applicationId) {
@@ -117,21 +134,35 @@ public class NdbRtStreamingReceiver {
 
   public void AddFinishedApplications() {
     ApplicationId appId = ConverterUtils.toApplicationId(applicationId);
-    finishedAppList.add(appId);
+    List<ApplicationId> finishedApps = finishedAppList.get(finishedApplicationrmnodeid);
+    if(finishedApps==null){
+      finishedApps = new ArrayList<ApplicationId>();
+      finishedAppList.put(finishedApplicationrmnodeid, finishedApps);
+    }
+    finishedApps.add(appId);
     LOG.debug("finishedapplications appid : " + appId + " pending id : "
             + finishedAppPendingId + " rmnode node : "
             + finishedApplicationrmnodeid);
 
   }
 
+  public void buildNextHBMap(){
+    nextHeartbeatMap = new HashMap<String, Boolean>();
+  }
+  
   public void setNodeId(String nodeId) {
-    this.nodeId = nodeId;
+    LOG.info("set nextHBNode id " + nodeId);
+    this.nextHBNodeId = nodeId;
+    nodeIds.add(nodeId);
   }
 
   public void setNextHeartbeat(boolean nextHeartbeat) {
     this.nextHeartbeat = nextHeartbeat;
   }
 
+  public void AddNextHeartbeat() {
+    nextHeartbeatMap.put(nextHBNodeId, nextHeartbeat);
+  }
   
   private MasterKey currentNMMasterKey = null;
   private MasterKey nextNMMasterKey = null;
@@ -176,7 +207,7 @@ public class NdbRtStreamingReceiver {
   //This will be called by c++ shared library, libhopsndbevent.so
   public void onEventMethod() throws InterruptedException {
     StreamingRTComps streamingRTComps = new StreamingRTComps(
-            containersToCleanSet, finishedAppList, nodeId, nextHeartbeat,
+            containersToCleanSet, finishedAppList, nodeIds, nextHeartbeatMap,
             hopContainersStatusList, currentNMMasterKey, nextNMMasterKey,
             currentRMContainerMasterKey, nextRMContainerMasterKey,
             currentPrice, currentPriceTick);
@@ -234,7 +265,7 @@ public class NdbRtStreamingReceiver {
   // this two methods are using for multi-thread version from c++ library
   StreamingRTComps buildStreamingRTComps() {
     return new StreamingRTComps(
-            containersToCleanSet, finishedAppList, nodeId, nextHeartbeat,
+            containersToCleanSet, finishedAppList, nodeIds, nextHeartbeatMap,
             hopContainersStatusList, currentNMMasterKey, nextNMMasterKey,
             currentRMContainerMasterKey, nextRMContainerMasterKey, currentPrice,
             currentPriceTick);
@@ -248,8 +279,8 @@ public class NdbRtStreamingReceiver {
   public void resetObjects() {
     containersToCleanSet = null;
     finishedAppList = null;
-    nodeId = null;
-    nextHeartbeat = false;
+    nodeIds = null;
+    nextHeartbeatMap = null;
     hopContainersStatusList = null;
     currentNMMasterKey = null;
     nextNMMasterKey = null;

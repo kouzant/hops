@@ -122,6 +122,7 @@ public class NdbEventStreamingProcessor extends PendingEventRetrieval {
 
                 if (rmNode != null) {
                   updateRMContext(rmNode);
+                  LOG.info("tringer event pid " + hopRMNodeCompObject.getPendingEvent().getId().getEventId() + " rmnode " + rmNode.getNodeID());
                   triggerEvent(rmNode, hopRMNodeCompObject.getPendingEvent(),
                           false);
                 }

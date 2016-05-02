@@ -133,6 +133,7 @@ public class RMNodeInfoAgregate {
   }
 
   public void addNextHeartbeat(NextHeartbeat nextHeartbeat) {
+    LOG.info("agregate nextHeartbeat " + nextHeartbeat.getRmnodeid() + " pid " + nextHeartbeat.getPendingEventId() + " val " + nextHeartbeat.isNextheartbeat());
     nextHeartBeatToUpdate.add(nextHeartbeat);
   }
 

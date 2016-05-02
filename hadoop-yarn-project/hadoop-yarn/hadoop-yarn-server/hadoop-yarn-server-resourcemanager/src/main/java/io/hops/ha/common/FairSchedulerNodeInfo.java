@@ -56,6 +56,16 @@ public class FairSchedulerNodeInfo {
     fsschedulerNodesToRemove.put(nodeId, fsnode);
   }
 
+  public Map<NodeId, org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSSchedulerNode>
+            getFsSchedulerNodesToAdd() {
+    return fsschedulerNodesToAdd;
+  }
+
+  public Map<NodeId, org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FSSchedulerNode>
+            getFsSchedulerNodesToRemove() {
+    return fsschedulerNodesToRemove;
+  }
+
   private void persistFSSchedulerNodesToAdd(FSSchedulerNodeDataAccess FSSNodeDA)
       throws StorageException {
     if (fsschedulerNodesToAdd != null) {

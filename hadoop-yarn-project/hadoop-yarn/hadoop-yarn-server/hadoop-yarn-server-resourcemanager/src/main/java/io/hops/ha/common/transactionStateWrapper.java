@@ -37,6 +37,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import io.hops.metadata.yarn.entity.appmasterrpc.AllocateRPC;
+import io.hops.metadata.yarn.entity.appmasterrpc.HeartBeatRPC;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
@@ -176,6 +179,16 @@ public class transactionStateWrapper extends TransactionStateImpl {
   }
 
   @Override
+  public void addAllocateRPC(AllocateRPC rpc) {
+    ts.addAllocateRPC(rpc);
+  }
+
+  @Override
+  public void addHeartbeatRPC(HeartBeatRPC rpc) {
+    ts.addHeartbeatRPC(rpc);
+  }
+
+  @Override
   public void commit(boolean first) throws IOException {
     ts.commit(first);
   }
@@ -192,8 +205,8 @@ public class transactionStateWrapper extends TransactionStateImpl {
   }
 
   @Override
-  public void persist() throws IOException {
-    ts.persist();
+  public void persist(StorageConnector connector) throws IOException {
+    ts.persist(connector);
   }
 
   @Override

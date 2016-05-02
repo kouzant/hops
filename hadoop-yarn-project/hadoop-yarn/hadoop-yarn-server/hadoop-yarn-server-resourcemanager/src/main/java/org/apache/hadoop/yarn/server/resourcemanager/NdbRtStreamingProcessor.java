@@ -41,23 +41,32 @@ public class NdbRtStreamingProcessor implements Runnable {
   }
 
   public void printStreamingRTComps(StreamingRTComps streamingRTComps) {
-    List<org.apache.hadoop.yarn.api.records.ApplicationId> applicationIdList
-            = streamingRTComps.getFinishedApp();
-    for (org.apache.hadoop.yarn.api.records.ApplicationId appId
-            : applicationIdList) {
-      LOG.debug("<Processor> Finished application : appid : " + appId.toString()
-              + "node id : " + streamingRTComps.getNodeId());
+    for (String streamingRTCompsNodeId : streamingRTComps.getNodeIds()) {
+      LOG.info("============ " + streamingRTCompsNodeId);
+      List<org.apache.hadoop.yarn.api.records.ApplicationId> applicationIdList
+              = streamingRTComps.getFinishedApp(streamingRTCompsNodeId);
+      if (applicationIdList != null) {
+        for (org.apache.hadoop.yarn.api.records.ApplicationId appId
+                : applicationIdList) {
+          LOG.info("<Processor> Finished application : appid : " + appId.
+                  toString()
+                  + "node id : " + streamingRTCompsNodeId);
+        }
+      }
+      Set<org.apache.hadoop.yarn.api.records.ContainerId> containerIdList
+              = streamingRTComps.getContainersToClean(streamingRTCompsNodeId);
+      if (containerIdList != null) {
+        for (org.apache.hadoop.yarn.api.records.ContainerId conId
+                : containerIdList) {
+          LOG.info("<Processor> Containers to clean  containerid: " + conId.
+                  toString());
+        }
+      }
+      if (streamingRTComps.isNextHeartbeat(streamingRTCompsNodeId) != null) {
+        LOG.info("RTReceived: " + streamingRTCompsNodeId + " nexthb: "
+                + streamingRTComps.isNextHeartbeat(streamingRTCompsNodeId));
+      }
     }
-
-    Set<org.apache.hadoop.yarn.api.records.ContainerId> containerIdList
-            = streamingRTComps.getContainersToClean();
-    for (org.apache.hadoop.yarn.api.records.ContainerId conId : containerIdList) {
-      LOG.debug("<Processor> Containers to clean  containerid: " + conId.
-              toString());
-    }
-    LOG.debug("RTReceived: " + streamingRTComps.getNodeId() + " nexthb: "
-            + streamingRTComps.isNextHeartbeat());
-
   }
 
   @Override
@@ -72,24 +81,34 @@ public class NdbRtStreamingProcessor implements Runnable {
                   = (StreamingRTComps) NdbRtStreamingReceiver.blockingRTQueue.
                   take();
           if (streamingRTComps != null) {
-            if (LOG.isDebugEnabled()) {
+//            if (LOG.isDebugEnabled()) {
               printStreamingRTComps(streamingRTComps);
-            }
+//            }
 
-            
-            String streamingRTCompsNodeId = streamingRTComps.getNodeId();
-            if(streamingRTCompsNodeId != null) {
+            if (streamingRTComps.getNodeIds() != null) {
+              for (String streamingRTCompsNodeId : streamingRTComps.getNodeIds()) {
                 NodeId nodeId = ConverterUtils.
-                    toNodeId(streamingRTCompsNodeId);
+                        toNodeId(streamingRTCompsNodeId);
                 rmNode = context.getActiveRMNodes().get(nodeId);
                 if (rmNode != null) {
-                  rmNode.setContainersToCleanUp(streamingRTComps.
-                          getContainersToClean());
-                  rmNode.setAppsToCleanup(streamingRTComps.getFinishedApp());
-                  rmNode.setNextHeartBeat(streamingRTComps.isNextHeartbeat());
+                  if (streamingRTComps.
+                          getContainersToClean(streamingRTCompsNodeId) != null) {
+                    rmNode.setContainersToCleanUp(streamingRTComps.
+                            getContainersToClean(streamingRTCompsNodeId));
+                  }
+                  if (streamingRTComps.getFinishedApp(
+                          streamingRTCompsNodeId) != null) {
+                    rmNode.setAppsToCleanup(streamingRTComps.getFinishedApp(
+                            streamingRTCompsNodeId));
+                  }
+                  if (streamingRTComps.isNextHeartbeat(
+                          streamingRTCompsNodeId) != null) {
+                    rmNode.setNextHeartBeat(streamingRTComps.isNextHeartbeat(
+                            streamingRTCompsNodeId));
+                  }
                 }
+              }
             }
-            
             // Processes container statuses for ContainersLogs service
             List<ContainerStatus> hopContainersStatusList 
                     = streamingRTComps.getHopContainersStatusList();

@@ -61,11 +61,33 @@ public class SchedulerApplicationInfo {
   public SchedulerApplicationInfo(TransactionStateImpl transactionState){
     this.transactionState = transactionState;
   }
-  
+
+  public Map<ApplicationId, SchedulerApplicationInfoToAdd> getSchedulerApplicationsToAdd() {
+    return schedulerApplicationsToAdd;
+  }
+
+  // FOR TESTING
+  public void setSchedulerApplicationsToAdd(ApplicationId appId, SchedulerApplicationInfoToAdd app) {
+    schedulerApplicationsToAdd.put(appId, app);
+  }
+
+  public Set<ApplicationId> getApplicationsIdToRemove() {
+    return applicationsIdToRemove;
+  }
+
+  public Map<String, Map<String, FiCaSchedulerAppInfo>> getFiCaSchedulerAppInfo() {
+    return fiCaSchedulerAppInfo;
+  }
+
+  public void setFiCaSchedulerAppInfo() {
+
+  }
+
   public void persist(QueueMetricsDataAccess QMDA, StorageConnector connector) throws StorageException {
     //TODO: The same QueueMetrics (DEFAULT_QUEUE) is persisted with every app. Its extra overhead. We can persist it just once
     persistApplicationIdToAdd(QMDA);
     persistFiCaSchedulerAppInfo(connector);
+    connector.flush();
     persistApplicationIdToRemove();
   }
 
@@ -78,14 +100,9 @@ public class SchedulerApplicationInfo {
       List<SchedulerApplication> toAddSchedulerApp =
           new ArrayList<SchedulerApplication>();
       for (SchedulerApplicationInfoToAdd appInfo : schedulerApplicationsToAdd.values()) {
-        
-
-          LOG.debug("adding scheduler app " + appInfo.getSchedulerApplication().getAppid());
-
-
           toAddSchedulerApp.add(appInfo.getSchedulerApplication());
-        
       }
+
       sappDA.addAll(toAddSchedulerApp);
     }
   }
@@ -120,6 +137,9 @@ public class SchedulerApplicationInfo {
 
     this.schedulerApplicationsToAdd
             .put(applicationIdToAdd, appInfo);
+
+    transactionState.appIds.add(applicationIdToAdd);
+
     applicationsIdToRemove.remove(applicationIdToAdd);
   }
 
@@ -127,6 +147,7 @@ public class SchedulerApplicationInfo {
                                        ApplicationAttemptId appAttId,
                                        Set<String> blackListedResources) {
     if(schedulerApplicationsToAdd.remove(applicationIdToRemove)==null){
+      transactionState.appIds.add(applicationIdToRemove);
       this.applicationsIdToRemove.add(applicationIdToRemove);
 
       FiCaSchedulerAppInfo toBeRemoved = getFiCaSchedulerAppInfo(appAttId);
@@ -152,6 +173,9 @@ public class SchedulerApplicationInfo {
     }
     Map<String, FiCaSchedulerAppInfo> map = fiCaSchedulerAppInfo.get(appId.toString());
     String appAttemptIdString = appAttemptId.toString();
+
+      transactionState.appIds.add(appId);
+
     return map.get(appAttemptIdString);
     }finally{
       fiCaSchedulerAppInfoLock.unlock();
@@ -159,7 +183,7 @@ public class SchedulerApplicationInfo {
   }
 
   private void persistFiCaSchedulerAppInfo(StorageConnector connector) throws StorageException {
-    if(!fiCaSchedulerAppInfo.isEmpty()){
+    if(!fiCaSchedulerAppInfo.isEmpty() || !applicationAttemptsToRemove.isEmpty()){
       AgregatedAppInfo agregatedAppInfo = new AgregatedAppInfo();
       for (Map<String,FiCaSchedulerAppInfo> map : fiCaSchedulerAppInfo.values()) {
         for(FiCaSchedulerAppInfo appInfo: map.values()){
@@ -172,7 +196,7 @@ public class SchedulerApplicationInfo {
                 new AppSchedulingInfo(appAttId.toString()));
       }
 
-      agregatedAppInfo.persist();
+      agregatedAppInfo.persist(connector);
     }
   }
   
