@@ -69,7 +69,7 @@ public class RMNodeInfo {
   public Set<ApplicationId> finishedApplicationsToRemove = new ConcurrentSkipListSet<ApplicationId>();;
   public NodeHBResponse latestNodeHeartBeatResponse;
   public NextHeartbeat nextHeartbeat;
-  private int pendingId = -1;
+  public int pendingId = -1;
 
   public RMNodeInfo(String rmnodeId) {
     this.rmnodeId = rmnodeId;

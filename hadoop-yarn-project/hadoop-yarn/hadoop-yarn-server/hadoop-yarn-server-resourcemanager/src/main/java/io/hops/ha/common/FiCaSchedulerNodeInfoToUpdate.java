@@ -43,13 +43,13 @@ public class FiCaSchedulerNodeInfoToUpdate {
       LogFactory.getLog(FiCaSchedulerNodeInfoToUpdate.class);
   
   private final TransactionStateImpl transactionState;
-  private FiCaSchedulerNode
+  public FiCaSchedulerNode
       infoToUpdate;
-  private final String id;
-  private Map<String, LaunchedContainers> launchedContainersToAdd
+  public String id;
+  public Map<String, LaunchedContainers> launchedContainersToAdd
           = new HashMap<String, LaunchedContainers>();
-  private Set<String> launchedContainersToRemove = new HashSet<String>();
-  private Map<Integer, Resource>
+  public Set<String> launchedContainersToRemove = new HashSet<String>();
+  public Map<Integer, Resource>
       toUpdateResources = new HashMap<Integer, Resource>();
 
   public FiCaSchedulerNodeInfoToUpdate(String id, TransactionStateImpl transactionState) {

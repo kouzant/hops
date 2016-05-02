@@ -2198,21 +2198,21 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       finishRPC(aggrTx);
 
-      Thread writer = new Thread(new CountersWriter(aggrTx));
-      writer.start();
+      //Thread writer = new Thread(new CountersWriter(aggrTx));
+      //writer.start();
 
-      LOG.debug("Threads waiting in tryCommit to take the lock: " + ((ReentrantLock) nextRPCLock).getQueueLength());
+      //LOG.debug("Threads waiting in tryCommit to take the lock: " + ((ReentrantLock) nextRPCLock).getQueueLength());
       long startLockWait = System.currentTimeMillis();
       nextRPCLock.lock();
 
-      LOG.debug("Waiting to take the lock after finishRPC in tryCommit (ms): " + (System.currentTimeMillis() - startLockWait));
+      //LOG.debug("Waiting to take the lock after finishRPC in tryCommit (ms): " + (System.currentTimeMillis() - startLockWait));
 
       aggregationPolicy.toggleSuccessfulCommitStatus();
       if (aggregationPolicy.getLastCommitStatus()) {
         aggregationPolicy.enforce(aggrTx);
       }
       clearQueuesFromAggregatedTS(aggrTx.getAggregatedTs());
-      writer.join();
+      //writer.join();
       nextRPCLock.unlock();
     } catch (StorageException ex) {
       if (ex instanceof InconsistentTCBlockException) {
@@ -2239,8 +2239,6 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
         tryCommit(aggrTx);
       }
-    } catch (InterruptedException ex) {
-      ex.printStackTrace();
     }
   }
 
@@ -2322,7 +2320,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     }
     //LOG.debug("Conflicting Transaction State is in aggregated set");
     isHeadTime = System.currentTimeMillis() - start;
-    LOG.debug("Total time spent on checking the head of aggregated set (ms): " + isHeadTime);
+    //LOG.debug("Total time spent on checking the head of aggregated set (ms): " + isHeadTime);
     return true;
   }
 
