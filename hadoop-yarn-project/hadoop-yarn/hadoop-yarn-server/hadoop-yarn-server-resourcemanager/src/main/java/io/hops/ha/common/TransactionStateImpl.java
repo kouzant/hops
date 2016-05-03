@@ -148,23 +148,9 @@ public class TransactionStateImpl extends TransactionState {
   // RPCs
   protected final Map<Integer, RPC> allocRPCToRemove =
           new ConcurrentHashMap<Integer, RPC>();
-  protected final Map<Integer, List<ToRemoveAllocAsk>> allocRPCAsk =
-          new ConcurrentHashMap<Integer, List<ToRemoveAllocAsk>>();
-  protected final Map<Integer, List<ToRemoveBlacklist>> allocBlAdd =
-          new ConcurrentHashMap<Integer, List<ToRemoveBlacklist>>();
-  protected final Map<Integer, List<ToRemoveBlacklist>> allocBlRemove =
-          new ConcurrentHashMap<Integer, List<ToRemoveBlacklist>>();
-  protected final Map<Integer, List<ToRemoveResource>> allocRelease =
-          new ConcurrentHashMap<Integer, List<ToRemoveResource>>();
-  protected final Map<Integer, List<ToRemoveResource>> allocIncrease =
-          new ConcurrentHashMap<Integer, List<ToRemoveResource>>();
 
   protected final Map<Integer, RPC> hbRPCToRemove =
           new ConcurrentHashMap<Integer, RPC>();
-  protected final Map<Integer, List<ToRemoveHBContainerStatus>> hbContStat =
-          new ConcurrentHashMap<Integer, List<ToRemoveHBContainerStatus>>();
-  protected final Map<Integer, List<ToRemoveHBKeepAliveApp>> hbKeepAlive =
-          new ConcurrentHashMap<Integer, List<ToRemoveHBKeepAliveApp>>();
 
   //PersistedEvent to persist for distributed RT
   private final Queue<PendingEvent> pendingEventsToAdd =
@@ -194,82 +180,18 @@ public class TransactionStateImpl extends TransactionState {
     this.manager = manager;
   }
 
-  public void addHeartbeatRPC(HeartBeatRPC rpc) {
-    int rpcId = rpc.getRpcId();
+  public void addHeartbeatRPC(int rpcId) {
     hbRPCToRemove.put(rpcId, new RPC(rpcId));
-
-    List<ToRemoveHBContainerStatus> contStatList =
-            new ArrayList<ToRemoveHBContainerStatus>(rpc.getContainersStatuses().size());
-    for (String contId : rpc.getContainersStatuses().keySet()) {
-      contStatList.add(new ToRemoveHBContainerStatus(rpcId, contId));
-    }
-    hbContStat.put(rpcId, contStatList);
-
-    List<ToRemoveHBKeepAliveApp> keepAliveList =
-            new ArrayList<ToRemoveHBKeepAliveApp>(rpc.getKeepAliveApplications().size());
-    for (String appId : rpc.getKeepAliveApplications()) {
-      keepAliveList.add(new ToRemoveHBKeepAliveApp(rpcId, appId));
-    }
-    hbKeepAlive.put(rpcId, keepAliveList);
   }
 
-  public void addAllocateRPC(AllocateRPC rpc) {
-    int rpcId = rpc.getRpcID();
+  public void addAllocateRPC(int rpcId) {
     allocRPCToRemove.put(rpcId, new RPC(rpcId));
-
-    List<ToRemoveAllocAsk> askList =
-            new ArrayList<ToRemoveAllocAsk>(rpc.getAsk().size());
-    for (String reqId : rpc.getAsk().keySet()) {
-      askList.add(new ToRemoveAllocAsk(rpcId, reqId));
-    }
-    allocRPCAsk.put(rpc.getRpcID(), askList);
-
-    List<ToRemoveBlacklist> blAdd =
-            new ArrayList<ToRemoveBlacklist>(rpc.getBlackListAddition().size());
-    for (String resource : rpc.getBlackListAddition()) {
-      blAdd.add(new ToRemoveBlacklist(rpcId, resource));
-    }
-    allocBlAdd.put(rpcId, blAdd);
-
-    List<ToRemoveBlacklist> blRem =
-            new ArrayList<ToRemoveBlacklist>(rpc.getBlackListRemovals().size());
-    for (String resource : rpc.getBlackListRemovals()) {
-      blRem.add(new ToRemoveBlacklist(rpcId, resource));
-    }
-    allocBlRemove.put(rpcId, blRem);
-
-    List<ToRemoveResource> release =
-            new ArrayList<ToRemoveResource>(rpc.getReleaseList().size());
-    for (String contId : rpc.getReleaseList()) {
-      release.add(new ToRemoveResource(rpcId, contId));
-    }
-    allocRelease.put(rpcId, release);
-
-    List<ToRemoveResource> increase =
-            new ArrayList<ToRemoveResource>(rpc.getResourceIncreaseRequest().size());
-    for (String contId : rpc.getResourceIncreaseRequest().keySet()) {
-      increase.add(new ToRemoveResource(rpcId, contId));
-    }
-    allocIncrease.put(rpcId, increase);
   }
 
   private void persistHeartbeatRPCRemoval() throws IOException {
     List<RPC> hbRPCs =
             new ArrayList<RPC>(hbRPCToRemove.size());
     hbRPCs.addAll(hbRPCToRemove.values());
-
-    // TODO: I should remove them
-    List<ToRemoveHBContainerStatus> contStat =
-            new ArrayList<ToRemoveHBContainerStatus>();
-    /*for (List<ToRemoveHBContainerStatus> item : hbContStat.values()) {
-      contStat.addAll(item);
-    }*/
-
-    List<ToRemoveHBKeepAliveApp> keepAlive =
-            new ArrayList<ToRemoveHBKeepAliveApp>();
-    /*for (List<ToRemoveHBKeepAliveApp> item : hbKeepAlive.values()) {
-      keepAlive.addAll(item);
-    }*/
 
     HeartBeatRPCDataAccess hbDAO = (HeartBeatRPCDataAccess) RMStorageFactory
             .getDataAccess(HeartBeatRPCDataAccess.class);
@@ -280,37 +202,6 @@ public class TransactionStateImpl extends TransactionState {
     List<RPC> allocRPCs =
             new ArrayList<RPC>(allocRPCToRemove.size());
     allocRPCs.addAll(allocRPCToRemove.values());
-
-    // TODO: I should remove them
-    List<ToRemoveAllocAsk> allocAsk =
-            new ArrayList<ToRemoveAllocAsk>();
-    /*for (List<ToRemoveAllocAsk> item : allocRPCAsk.values()) {
-      allocAsk.addAll(item);
-    }*/
-
-    List<ToRemoveBlacklist> blAdd =
-            new ArrayList<ToRemoveBlacklist>();
-    /*for (List<ToRemoveBlacklist> item : allocBlAdd.values()) {
-      blAdd.addAll(item);
-    }*/
-
-    List<ToRemoveBlacklist> blRemove =
-            new ArrayList<ToRemoveBlacklist>();
-    /*for (List<ToRemoveBlacklist> item : allocBlRemove.values()) {
-      blRemove.addAll(item);
-    }*/
-
-    List<ToRemoveResource> release =
-            new ArrayList<ToRemoveResource>();
-    /*for (List<ToRemoveResource> item : allocRelease.values()) {
-      release.addAll(item);
-    }*/
-
-    List<ToRemoveResource> increase =
-            new ArrayList<ToRemoveResource>();
-    /*for (List<ToRemoveResource> item : allocIncrease.values()) {
-      increase.addAll(item);
-    }*/
 
     AllocateRPCDataAccess allocDAO = (AllocateRPCDataAccess) RMStorageFactory
             .getDataAccess(AllocateRPCDataAccess.class);

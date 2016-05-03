@@ -573,7 +573,7 @@ public class ResourceTrackerService extends AbstractService
     ((transactionStateWrapper) transactionState).addTime(1);
 
     if (rpc != null) {
-      ((transactionStateWrapper) transactionState).addHeartbeatRPC(rpc);
+      ((transactionStateWrapper) transactionState).addHeartbeatRPC(rpc.getRpcId());
     }
 
     // 2. Check if it's a valid (i.e. not excluded) node

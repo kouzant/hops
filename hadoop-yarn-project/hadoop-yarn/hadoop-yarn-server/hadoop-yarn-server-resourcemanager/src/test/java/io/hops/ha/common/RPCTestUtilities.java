@@ -189,19 +189,14 @@ public class RPCTestUtilities {
 
     public static class RemoveHBRPC extends LightWeightRequestHandler {
 
-        private List<ToRemoveRPC> hbRPC;
-        private List<ToRemoveHBContainerStatus> hbContStat;
-        private List<ToRemoveHBKeepAliveApp> hbKeepAlive;
+        private List<RPC> hbRPC;
 
         public RemoveHBRPC() {
             super(YARNOperationType.TEST);
         }
 
-        public void setToCommit(List<ToRemoveRPC> hbRPC, List<ToRemoveHBContainerStatus> hbContStat,
-                List<ToRemoveHBKeepAliveApp> hbKeepAlive) {
+        public void setToCommit(List<RPC> hbRPC) {
             this.hbRPC = hbRPC;
-            this.hbContStat = hbContStat;
-            this.hbKeepAlive = hbKeepAlive;
         }
 
         @Override
@@ -229,26 +224,14 @@ public class RPCTestUtilities {
 
     public static class RemoveAllocRPC extends LightWeightRequestHandler {
 
-        private List<ToRemoveRPC> allocRPCsToRemove;
-        private List<ToRemoveAllocAsk> allocAsksToRemove;
-        private List<ToRemoveBlacklist> allocBlAddToRemove;
-        private List<ToRemoveBlacklist> allocBlRemToRemove;
-        private List<ToRemoveResource> allocReleaseToRemove;
-        private List<ToRemoveResource> allocIncreaseToRemove;
+        private List<RPC> allocRPCsToRemove;
 
         public RemoveAllocRPC() {
             super(YARNOperationType.TEST);
         }
 
-        public void setCommit(List<ToRemoveRPC> allocRPCsToRemove, List<ToRemoveAllocAsk> allocAsksToRemove,
-                List<ToRemoveBlacklist> allocBlAddToRemove, List<ToRemoveBlacklist> allocBlRemToRemove,
-                List<ToRemoveResource> allocReleaseToRemove, List<ToRemoveResource> allocIncreaseToRemove) {
+        public void setCommit(List<RPC> allocRPCsToRemove) {
             this.allocRPCsToRemove = allocRPCsToRemove;
-            this.allocAsksToRemove = allocAsksToRemove;
-            this.allocBlAddToRemove = allocBlAddToRemove;
-            this.allocBlRemToRemove = allocBlRemToRemove;
-            this.allocReleaseToRemove = allocReleaseToRemove;
-            this.allocIncreaseToRemove = allocIncreaseToRemove;
         }
 
         @Override

@@ -526,7 +526,7 @@ public class ApplicationMasterService extends AbstractService
                     "allocate");
     // Add allocateRPC in TS in order to remove it from DB
     if (rpc != null) {
-      ((TransactionStateImpl) transactionState).addAllocateRPC(rpc);
+      ((TransactionStateImpl) transactionState).addAllocateRPC(rpc.getRpcID());
     }
 
     this.amLivelinessMonitor.receivedPing(appAttemptId);

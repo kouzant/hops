@@ -150,18 +150,9 @@ public class MicrobenchRPCs {
         final RPCTestUtilities.RemoveHBRPC removeHBRPC = new RPCTestUtilities.RemoveHBRPC();
         final RPCTestUtilities.RemoveAllocRPC removeAllocRPC = new RPCTestUtilities.RemoveAllocRPC();
 
-        final List<ToRemoveRPC> hbRPCsToRemove = new ArrayList<ToRemoveRPC>();
-        final List<ToRemoveHBContainerStatus> hbContStatToRemove =
-                new ArrayList<ToRemoveHBContainerStatus>();
-        final List<ToRemoveHBKeepAliveApp> hbKeepAliveToRemove =
-                new ArrayList<ToRemoveHBKeepAliveApp>();
+        final List<RPC> hbRPCsToRemove = new ArrayList<RPC>();
 
-        final List<ToRemoveRPC> allocRPCsToRemove = new ArrayList<ToRemoveRPC>();
-        final List<ToRemoveAllocAsk> allocAsksToRemove = new ArrayList<ToRemoveAllocAsk>();
-        final List<ToRemoveBlacklist> allocBlAddToRemove = new ArrayList<ToRemoveBlacklist>();
-        final List<ToRemoveBlacklist> allocBlRemToRemove = new ArrayList<ToRemoveBlacklist>();
-        final List<ToRemoveResource> allocReleaseToRemove = new ArrayList<ToRemoveResource>();
-        final List<ToRemoveResource> allocIncreaseToRemove = new ArrayList<ToRemoveResource>();
+        final List<RPC> allocRPCsToRemove = new ArrayList<RPC>();
 
         FileWriter writer;
 
@@ -195,46 +186,17 @@ public class MicrobenchRPCs {
                     HeartBeatRPC hbRPC = RPCTestUtilities.createHeartBeatRPC(j, smallPayload);
                     // It should be equal to j
                     int rpcId = hbRPC.getRpcId();
-                    hbRPCsToRemove.add(new ToRemoveRPC(rpcId));
-
-                    for (String containerId : hbRPC.getContainersStatuses().keySet()) {
-                        hbContStatToRemove.add(new ToRemoveHBContainerStatus(rpcId, containerId));
-                    }
-
-                    for (String appId : hbRPC.getKeepAliveApplications()) {
-                        hbKeepAliveToRemove.add(new ToRemoveHBKeepAliveApp(rpcId, appId));
-                    }
+                    hbRPCsToRemove.add(new RPC(rpcId));
 
                     AllocateRPC allocRPC = RPCTestUtilities.createAllocateRPC(j, smallPayload);
                     rpcId = allocRPC.getRpcID();
-                    allocRPCsToRemove.add(new ToRemoveRPC(rpcId));
-
-                    for (String requestId : allocRPC.getAsk().keySet()) {
-                        allocAsksToRemove.add(new ToRemoveAllocAsk(rpcId, requestId));
-                    }
-
-                    for (String resource : allocRPC.getBlackListAddition()) {
-                        allocBlAddToRemove.add(new ToRemoveBlacklist(rpcId, resource));
-                    }
-
-                    for (String resource : allocRPC.getBlackListRemovals()) {
-                        allocBlRemToRemove.add(new ToRemoveBlacklist(rpcId, resource));
-                    }
-
-                    for (String containerId : allocRPC.getReleaseList()) {
-                        allocReleaseToRemove.add(new ToRemoveResource(rpcId, containerId));
-                    }
-
-                    for (String containerId : allocRPC.getResourceIncreaseRequest().keySet()) {
-                        allocIncreaseToRemove.add(new ToRemoveResource(rpcId, containerId));
-                    }
+                    allocRPCsToRemove.add(new RPC(rpcId));
                 }
 
-                removeHBRPC.setToCommit(hbRPCsToRemove, hbContStatToRemove, hbKeepAliveToRemove);
+                removeHBRPC.setToCommit(hbRPCsToRemove);
                 Long removeHBRPCTime = (Long) removeHBRPC.handle();
 
-                removeAllocRPC.setCommit(allocRPCsToRemove, allocAsksToRemove, allocBlAddToRemove,
-                        allocBlRemToRemove, allocReleaseToRemove, allocIncreaseToRemove);
+                removeAllocRPC.setCommit(allocRPCsToRemove);
                 Long removeAllocRPCTime = (Long) removeAllocRPC.handle();
 
                 System.out.println("RPCs: " + rpcsToCommit.size());
@@ -249,15 +211,8 @@ public class MicrobenchRPCs {
                 rpcsToCommit.clear();
 
                 hbRPCsToRemove.clear();
-                hbContStatToRemove.clear();
-                hbKeepAliveToRemove.clear();
 
                 allocRPCsToRemove.clear();
-                allocAsksToRemove.clear();
-                allocBlAddToRemove.clear();
-                allocBlRemToRemove.clear();
-                allocReleaseToRemove.clear();
-                allocIncreaseToRemove.clear();
                 writer.flush();
             }
             writer.close();

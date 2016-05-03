@@ -703,9 +703,13 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       setAppMasterRPCHandler.handle();
     } catch (StorageException ex) {
-      //LOG.error("Re-committing AppMasterRPC: " + rpcID);
-      persistAppMasterRPC(rpcID, type, rpc, userId);
-      //LOG.error("Persisted previously failed AppMasterRPC: " + rpcID);
+      if (ex instanceof InconsistentTCBlockException) {
+        //LOG.error("Re-committing AppMasterRPC: " + rpcID);
+        persistAppMasterRPC(rpcID, type, rpc, userId);
+        //LOG.error("Persisted previously failed AppMasterRPC: " + rpcID);
+      } else {
+        throw ex;
+      }
     }
   }
 
@@ -716,7 +720,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
               @Override
               public Object performTask() throws StorageException {
                 connector.beginTransaction();
+                long start = System.currentTimeMillis();
                 connector.writeLock();
+                LOG.info("Persist HBRPC wait to take the lock: " + (System.currentTimeMillis() - start));
                 RPCDataAccess DA = (RPCDataAccess) RMStorageFactory
                 .getDataAccess(RPCDataAccess.class);
                 RPC hop = new RPC(rpc.getRpcId(), RPC.Type.NodeHeartbeat, null,
@@ -737,9 +743,13 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       heartBeatRPCHandler.handle();
     } catch (StorageException ex) {
-      //LOG.error("Re-committing HeartBeatRPC: " + rpc.getRpcId());
-      persistHeartBeatRPC(rpc);
-      //LOG.error("Persisted previously failed HeartBeatRPC: " + rpc.getRpcId());
+      if (ex instanceof InconsistentTCBlockException) {
+        //LOG.error("Re-committing HeartBeatRPC: " + rpc.getRpcId());
+        persistHeartBeatRPC(rpc);
+        //LOG.error("Persisted previously failed HeartBeatRPC: " + rpc.getRpcId());
+      } else {
+        throw ex;
+      }
     }
   }
   
@@ -771,9 +781,13 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       allocateRPCHandler.handle();
     } catch (StorageException ex) {
-      //LOG.error("Re-committing AllocateRPC: " + rpc.getRpcID());
-      persistAllocateRPC(rpc, userId);
-      //LOG.error("Persisted previously failed AllocateRPC: " + rpc.getRpcID());
+      if (ex instanceof InconsistentTCBlockException) {
+        //LOG.error("Re-committing AllocateRPC: " + rpc.getRpcID());
+        persistAllocateRPC(rpc, userId);
+        //LOG.error("Persisted previously failed AllocateRPC: " + rpc.getRpcID());
+      } else {
+        throw ex;
+      }
     }
   }
   
@@ -2157,7 +2171,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
           tryCommit(aggrTx);
 
         } else {
-          //LOG.debug("I have nothing to aggregate, I break!");
+          LOG.debug("I have nothing to aggregate, I break!");
           nextRPCLock.unlock();
           break;
         }
@@ -2194,7 +2208,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     }
   }
 
-  private static void tryCommit(AggregatedTransactionState aggrTx) {
+  private static void tryCommit(AggregatedTransactionState aggrTx) throws StorageException {
     try {
       finishRPC(aggrTx);
 
@@ -2238,6 +2252,8 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         nextRPCLock.unlock();
 
         tryCommit(aggrTx);
+      } else {
+        throw ex;
       }
     }
   }
@@ -2305,14 +2321,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     long start = System.currentTimeMillis();
 
     for (TransactionState prAppTs : previousAppTs) {
-      if (!aggrTx.getAggregatedTs().contains(new ToBeAggregatedTS(prAppTs))) {
+      if (!aggrTx.getAggregatedSet().contains(prAppTs)) {
         //LOG.debug("Conflicting Transaction State for Application is NOT in aggregated set");
         //isHeadTime += System.currentTimeMillis() - start;
         return false;
       }
     }
     for (TransactionState prNodeTs : previousNodeTs) {
-      if (!aggrTx.getAggregatedTs().contains(new ToBeAggregatedTS(prNodeTs))) {
+      if (!aggrTx.getAggregatedSet().contains(prNodeTs)) {
         //LOG.debug("Conflicting Transaction State for Node is NOT in aggregated set");
         //isHeadTime += System.currentTimeMillis() - start;
         return false;
@@ -2351,15 +2367,6 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
           previousTs.add(queueTs);
         }
       }
-
-      /*if (ApplicationId.class.equals(type)) {
-        LOG.debug("Previous Application TS for id: " + ts.getId());
-      } else if (NodeId.class.equals(type)) {
-        LOG.debug("Previous Node TS for id: " + ts.getId());
-      }
-      for (TransactionState blah : previousTs) {
-        LOG.debug("TS: " + blah.getId());
-      }*/
     }
 
     getHeadTime = System.currentTimeMillis() - start;
@@ -2379,14 +2386,10 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       txToAggregate.remove(tbaTs);
 
       for (ApplicationId appId : ts.getAppIds()) {
-        if (transactionStateForApp.get(appId).remove(ts)) {
-          //LOG.debug("Removed aggregated TS id: " + ts.getId() + " from App: " + appId);
-        }
+        transactionStateForApp.get(appId).remove(ts);
       }
       for (NodeId nodeId : ts.getNodesIds()) {
-        if (transactionStateForRMNode.get(nodeId).remove(ts)) {
-          //LOG.debug("Removed aggregated TS id: " + ts.getId() + " from Node: " + nodeId);
-        }
+        transactionStateForRMNode.get(nodeId).remove(ts);
       }
     }
     clearQueuesWait = System.currentTimeMillis() - startClear;

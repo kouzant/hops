@@ -36,6 +36,9 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     private final Set<RMUtilities.ToBeAggregatedTS> aggregatedTs =
             new HashSet<RMUtilities.ToBeAggregatedTS>();
 
+    private final Set<TransactionState> aggregatedSet =
+            new HashSet<TransactionState>();
+
     // FOR EVALUATION
     public long commitRPCRemove = 0L;
     public long commitRMContextInfo = 0L;
@@ -95,14 +98,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     private final String NIPendingEventsToRemove = "NIPendingEventsToRemove";
     private final String RPCids = "RPCids";
     private final String AllocRPC = "allocRPC";
-    private final String AllocRPCAsk = "allocRPCAsk";
-    private final String AllocBlAdd = "allocBlAdd";
-    private final String AllocBlRemove = "allocBlRemove";
-    private final String AllocRelease = "allocRelease";
-    private final String AllocIncrease = "allocIncrease";
     private final String HBRPCs = "hbRPCs";
-    private final String HBContStat = "hbContStat";
-    private final String HBKeepAlive = "hbKeepAlive";
 
     private final Map<String, Integer> counters =
             new HashMap<String, Integer>();
@@ -156,14 +152,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         counters.put(PersistedEventsToRemove, 0);
         counters.put(RPCids, 0);
         counters.put(AllocRPC, 0);
-        counters.put(AllocRPCAsk, 0);
-        counters.put(AllocBlAdd, 0);
-        counters.put(AllocBlRemove, 0);
-        counters.put(AllocRelease, 0);
-        counters.put(AllocIncrease, 0);
         counters.put(HBRPCs, 0);
-        counters.put(HBContStat, 0);
-        counters.put(HBKeepAlive, 0);
     }
 
     private void updateCounters(String counterName, int size) {
@@ -230,6 +219,8 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     public boolean aggregate(RMUtilities.ToBeAggregatedTS aggrTs) {
         if (aggrTs.getTs() instanceof TransactionStateImpl) {
             aggregatedTs.add(aggrTs);
+            aggregatedSet.add(aggrTs.getTs());
+
             TransactionStateImpl tsImpl = (TransactionStateImpl) aggrTs.getTs();
             //LOG.info("Aggregating TS: " + ts.getId());
 
@@ -274,23 +265,6 @@ public class AggregatedTransactionState extends TransactionStateImpl {
                 LOG.debug("Aggregated more than 3 RMContainersToAdd and I won't aggregate any more");
                 return true;
             }*/
-
-            if (rmContainersToUpdate.size() > 300) {
-                return true;
-            }
-
-            if (allocateResponsesToAdd.size() > 100) {
-                return true;
-            }
-
-            if (rmNodeInfos.size() > 150) {
-                LOG.debug("Aggregated more than enough, have mercy on my soul!");
-                return true;
-            }
-
-            if (schedulerApplicationInfo.getFiCaSchedulerAppInfo().size() > 100) {
-                return true;
-            }
         } else {
             LOG.info("Transaction state " + aggrTs.getTs().getId() + " is not of TransactionStateImpl" +
                     "and cannot aggregate!");
@@ -304,6 +278,10 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
     public Set<RMUtilities.ToBeAggregatedTS> getAggregatedTs() {
         return aggregatedTs;
+    }
+
+    public Set<TransactionState> getAggregatedSet() {
+        return aggregatedSet;
     }
 
     private void aggregateContainersToAdd(TransactionStateImpl ts) {
@@ -353,7 +331,6 @@ public class AggregatedTransactionState extends TransactionStateImpl {
                 updateCounters(NIPendingEventsToRemove, info.PendingEventsToRemove.size());
             }
         }
-        //genericMapAggregate(ts.rmNodeInfos, rmNodeInfos);
         RMNodeInfo info = null;
         for (Map.Entry<NodeId, RMNodeInfo> entry : ts.rmNodeInfos.entrySet()) {
             if ((info = rmNodeInfos.get(entry.getKey())) == null) {
@@ -371,8 +348,12 @@ public class AggregatedTransactionState extends TransactionStateImpl {
                 genericMapAggregate(value.nodeUpdateQueueToRemove, info.nodeUpdateQueueToRemove);
                 genericCollectionAggregate(value.finishedApplicationsToAdd, info.finishedApplicationsToAdd);
                 genericCollectionAggregate(value.finishedApplicationsToRemove, info.finishedApplicationsToRemove);
-                info.latestNodeHeartBeatResponse = value.latestNodeHeartBeatResponse;
-                info.nextHeartbeat = value.nextHeartbeat;
+                if (value.latestNodeHeartBeatResponse != null) {
+                    info.latestNodeHeartBeatResponse = value.latestNodeHeartBeatResponse;
+                }
+                if (value.nextHeartbeat != null) {
+                    info.nextHeartbeat = value.nextHeartbeat;
+                }
                 info.pendingId = value.pendingId;
             }
         }
@@ -382,7 +363,6 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         if (TESTING) {
             updateCounters(FicaSchedulerNodeInfoToUpdate, ts.ficaSchedulerNodeInfoToUpdate.size());
         }
-        //genericMapAggregate(ts.ficaSchedulerNodeInfoToUpdate, ficaSchedulerNodeInfoToUpdate);
         FiCaSchedulerNodeInfoToUpdate fica = null;
         for (Map.Entry<String, FiCaSchedulerNodeInfoToUpdate> entry : ts.ficaSchedulerNodeInfoToUpdate.entrySet()) {
             if ((fica = ficaSchedulerNodeInfoToUpdate.get(entry.getKey())) == null) {
@@ -613,45 +593,17 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     private void aggregateAllocRPCToRemove(TransactionStateImpl ts) {
         if (TESTING) {
             updateCounters(AllocRPC, ts.allocRPCToRemove.size());
-            for (List<ToRemoveAllocAsk> item : ts.allocRPCAsk.values()) {
-                updateCounters(AllocRPCAsk, item.size());
-            }
-            for (List<ToRemoveBlacklist> item : ts.allocBlAdd.values()) {
-                updateCounters(AllocBlAdd, item.size());
-            }
-            for (List<ToRemoveBlacklist> item : ts.allocBlRemove.values()) {
-                updateCounters(AllocBlRemove, item.size());
-            }
-            for (List<ToRemoveResource> item : ts.allocRelease.values()) {
-                updateCounters(AllocRelease, item.size());
-            }
-            for (List<ToRemoveResource> item : ts.allocIncrease.values()) {
-                updateCounters(AllocIncrease, item.size());
-            }
         }
 
         genericMapAggregate(ts.allocRPCToRemove, allocRPCToRemove);
-        genericMapAggregate(ts.allocRPCAsk, allocRPCAsk);
-        genericMapAggregate(ts.allocBlAdd, allocBlAdd);
-        genericMapAggregate(ts.allocBlRemove, allocBlRemove);
-        genericMapAggregate(ts.allocRelease, allocRelease);
-        genericMapAggregate(ts.allocIncrease, allocIncrease);
     }
 
     private void aggregateHeartbeartRPCsToRemove(TransactionStateImpl ts) {
         if (TESTING) {
             updateCounters(HBRPCs, ts.hbRPCToRemove.size());
-            for (List<ToRemoveHBContainerStatus> item : ts.hbContStat.values()) {
-                updateCounters(HBContStat, item.size());
-            }
-            for (List<ToRemoveHBKeepAliveApp> item : ts.hbKeepAlive.values()) {
-                updateCounters(HBKeepAlive, item.size());
-            }
         }
 
         genericMapAggregate(ts.hbRPCToRemove, hbRPCToRemove);
-        genericMapAggregate(ts.hbContStat, hbContStat);
-        genericMapAggregate(ts.hbKeepAlive, hbKeepAlive);
     }
 
     private <T> void genericCollectionAggregate(Collection<T> source, Collection<T> target) {

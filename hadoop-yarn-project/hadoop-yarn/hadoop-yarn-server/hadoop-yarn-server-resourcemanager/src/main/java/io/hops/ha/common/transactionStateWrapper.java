@@ -179,13 +179,13 @@ public class transactionStateWrapper extends TransactionStateImpl {
   }
 
   @Override
-  public void addAllocateRPC(AllocateRPC rpc) {
-    ts.addAllocateRPC(rpc);
+  public void addAllocateRPC(int rpcId) {
+    ts.addAllocateRPC(rpcId);
   }
 
   @Override
-  public void addHeartbeatRPC(HeartBeatRPC rpc) {
-    ts.addHeartbeatRPC(rpc);
+  public void addHeartbeatRPC(int rpcId) {
+    ts.addHeartbeatRPC(rpcId);
   }
 
   @Override
