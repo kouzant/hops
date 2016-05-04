@@ -494,7 +494,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         if (TESTING) {
             updateCounters(ApplicationsStateToRemove, ts.applicationsStateToRemove.size());
         }
-        genericCollectionAggregate(ts.applicationsStateToRemove, applicationsStateToRemove);
+        genericMapAggregate(ts.applicationsStateToRemove, applicationsStateToRemove);
     }
 
     private void aggregateAppAttempts(TransactionStateImpl ts) {

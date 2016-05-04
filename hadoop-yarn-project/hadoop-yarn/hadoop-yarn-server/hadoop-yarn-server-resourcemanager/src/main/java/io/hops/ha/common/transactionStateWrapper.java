@@ -240,8 +240,9 @@ public class transactionStateWrapper extends TransactionStateImpl {
   }
 
   @Override
-  public void addApplicationToRemove(ApplicationId appId) {
-    ts.addApplicationToRemove(appId);
+  public void addApplicationStateToRemove(ApplicationId appId,
+                                          Set<ApplicationAttemptId> appAttIds) {
+    ts.addApplicationStateToRemove(appId, appAttIds);
   }
 
   @Override
@@ -250,8 +251,10 @@ public class transactionStateWrapper extends TransactionStateImpl {
   }
 
   @Override
-  public void removeAllocateResponse(ApplicationAttemptId id, int responseId) {
-    ts.removeAllocateResponse(id, responseId);
+  public void removeAllocateResponse(ApplicationAttemptId id, int responseId,
+                                     List<String> allocatedContainers,
+                                     List<String> completedContainers) {
+    ts.removeAllocateResponse(id, responseId, allocatedContainers, completedContainers);
   }
 
   @Override
@@ -323,7 +326,7 @@ public class transactionStateWrapper extends TransactionStateImpl {
   public void addRanNode(NodeId nid, ApplicationAttemptId appAttemptId) {
    ts.addRanNode(nid, appAttemptId);
   }
-    
+
   
   @Override
   public void addAllJustFinishedContainersToAdd(List<ContainerStatus> status,
