@@ -133,7 +133,7 @@ public class RMNodeInfoAgregate {
   }
 
   public void addNextHeartbeat(NextHeartbeat nextHeartbeat) {
-    LOG.info("agregate nextHeartbeat " + nextHeartbeat.getRmnodeid() + " pid " + nextHeartbeat.getPendingEventId() + " val " + nextHeartbeat.isNextheartbeat());
+    LOG.debug("agregate nextHeartbeat " + nextHeartbeat.getRmnodeid() + " pid " + nextHeartbeat.getPendingEventId() + " val " + nextHeartbeat.isNextheartbeat());
     nextHeartBeatToUpdate.add(nextHeartbeat);
   }
 
@@ -144,22 +144,43 @@ public class RMNodeInfoAgregate {
           FinishedApplicationsDataAccess faDA, ContainerStatusDataAccess csDA,
           PendingEventDataAccess persistedEventsDA, StorageConnector connector)
           throws StorageException {
+    long startTime = System.currentTimeMillis();
     persistContainerStatusToAdd(csDA);
     persistJustLaunchedContainersToAdd(justLaunchedContainersDA);
     persistContainerToCleanToAdd(cidToCleanDA);
     persistFinishedApplicationToAdd(faDA);
+    connector.flush();
+     long delta = System.currentTimeMillis() - startTime;
+    if(delta>100){
+            LOG.info("Time spent adding in rmnodeinfo 1: " + delta);
+    }
+    startTime = System.currentTimeMillis();
     persistNodeUpdateQueueToAdd(updatedContainerInfoDA);
     persistLatestHeartBeatResponseToAdd(hbDA);
+    connector.flush();
+    delta = System.currentTimeMillis() - startTime;
+    if(delta>100){
+            LOG.info("Time spent adding in rmnodeinfo 2: " + delta);
+    }
+    startTime = System.currentTimeMillis();
     persistNextHeartbeat();
     persistPendingEventsToAdd(persistedEventsDA);
     connector.flush();
-
+    delta = System.currentTimeMillis() - startTime;
+    if(delta>100){
+            LOG.info("Time spent adding in rmnodeinfo 3: " + delta);
+    }
+    startTime = System.currentTimeMillis();
     persistContainerStatusToRemove(csDA);
     persistJustLaunchedContainersToRemove(justLaunchedContainersDA);
     persistContainerToCleanToRemove(cidToCleanDA);
     persistFinishedApplicationToRemove(faDA);
     persistNodeUpdateQueueToRemove(updatedContainerInfoDA);
     persistPendingEventsToRemove(persistedEventsDA);
+    delta = System.currentTimeMillis() - startTime;
+        if(delta>100){
+            LOG.info("Time spent removing in rmnodeinfo: " + delta);
+    }
   }
 
   private void persistContainerStatusToAdd(ContainerStatusDataAccess csDA)

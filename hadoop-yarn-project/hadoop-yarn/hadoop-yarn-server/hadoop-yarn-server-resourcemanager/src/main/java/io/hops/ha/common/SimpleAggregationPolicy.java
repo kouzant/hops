@@ -34,9 +34,9 @@ public class SimpleAggregationPolicy extends AggregationPolicyAbstr {
             if (aggregationLimit < 2) {
                 return;
             }
-            LOG.info("Aggregation limit was " + aggregationLimit);
+            LOG.info("aggregation limit was " + aggregationLimit);
             aggregationLimit = (int) Math.ceil(((AggregatedTransactionState) ts).getAggregatedTs().size() * 0.7);
-            LOG.info("Reducing aggregationLimit to " + aggregationLimit);
+            LOG.info("Reducing aggregation limit to " + aggregationLimit);
         }
     }
 

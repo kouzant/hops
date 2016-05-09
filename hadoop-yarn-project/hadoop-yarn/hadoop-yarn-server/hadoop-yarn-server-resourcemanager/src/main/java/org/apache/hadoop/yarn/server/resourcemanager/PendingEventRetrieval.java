@@ -77,6 +77,10 @@ public abstract class PendingEventRetrieval {
 
   }
 
+  static int nut = 0;
+  static int hbt = 0;
+  static long start = System.currentTimeMillis();
+  
   public void triggerEvent(final RMNode rmNode, PendingEvent pendingEvent,
           boolean recovery) throws InterruptedException {
     if (recovery) {
@@ -128,6 +132,7 @@ public abstract class PendingEventRetrieval {
       // whether to process or not
       if (pendingEvent.getStatus()
               == PendingEventTableDef.SCHEDULER_FINISHED_PROCESSING) {
+        hbt++;
         LOG.debug("Nodeupdate event_Scheduler_finished_processing rmnode : "
                 + rmNode.getNodeID() + " pending event: "
                 + pendingEvent.getId().getEventId());
@@ -139,12 +144,22 @@ public abstract class PendingEventRetrieval {
 
       } else if (pendingEvent.getStatus()
               == PendingEventTableDef.SCHEDULER_NOT_FINISHED_PROCESSING) {
+        nut++;
         LOG.debug("Nodeupdate event_Scheduler_not_finished_processing rmnode : "
                 + rmNode.getNodeID() + " pending event: "
                 + pendingEvent.getId().getEventId());
       }
     }
-
+    if(System.currentTimeMillis()-start>=1000){
+      long delta = System.currentTimeMillis()-start;
+      float hbts = (float) hbt / delta *1000;
+      float nuts = (float) nut/delta * 1000;
+      float tts = (float) (nut + hbt)/delta * 1000;
+      LOG.info("triger events hb " + hbts + " nu " + nuts + " total " + tts);
+      start = System.currentTimeMillis();
+      hbt=0;
+      nut=0;
+    }
     try {
       if (transactionState != null) {
         transactionState.decCounter(TransactionState.TransactionType.INIT);

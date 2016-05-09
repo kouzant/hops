@@ -152,7 +152,7 @@ public class NdbEventStreamingReceiver {
   }
 
   public void setHopPendingEventId(int hopPendingEventId) {
-    LOG.info("received pending event " + hopPendingEventId);
+    LOG.debug("received pending event " + hopPendingEventId);
     this.hopPendingEventId = hopPendingEventId;
   }
 
@@ -327,6 +327,9 @@ public class NdbEventStreamingReceiver {
     hopContainersStatusList.add(hopContainerStatus);
   }
 
+  static int nut = 0;
+  static long start = System.currentTimeMillis();
+  
   //This will be called by c++ shared library, libhopsndbevent.so
   public void onEventMethod() throws InterruptedException {
     RMNodeComps hopRMNodeBDBObject
@@ -339,6 +342,14 @@ public class NdbEventStreamingReceiver {
     LOG.debug("put event in queue: " + hopRMNodeBDBObject.getPendingEvent().
             getId() + " ; " + hopRMNodeBDBObject.getPendingEvent().getId().
             getNodeId());
+    nut++;
+     if(System.currentTimeMillis()-start>=1000){
+      long delta = System.currentTimeMillis()-start;
+      float nuts = (float) nut/delta * 1000;
+      LOG.info("triger events per seconds " + nuts);
+      start = System.currentTimeMillis();
+      nut=0;
+    }
     blockingQueue.put(hopRMNodeBDBObject);
   }
   
@@ -354,6 +365,14 @@ public class NdbEventStreamingReceiver {
 
   public void onEventMethodMultiThread(RMNodeComps hopCompObject) throws
           InterruptedException {
+     nut++;
+     if(System.currentTimeMillis()-start>=1000){
+      long delta = System.currentTimeMillis()-start;
+      float nuts = (float) nut/delta * 1000;
+      LOG.info("triger events per seconds" + nuts);
+      start = System.currentTimeMillis();
+      nut=0;
+    }
     blockingQueue.put(hopCompObject);
   }
  

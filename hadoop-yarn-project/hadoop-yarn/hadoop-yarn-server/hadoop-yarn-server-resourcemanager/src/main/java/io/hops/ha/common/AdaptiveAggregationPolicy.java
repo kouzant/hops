@@ -48,12 +48,12 @@ public class AdaptiveAggregationPolicy extends AggregationPolicyAbstr {
                 }
                 aggregationLimit = (int) Math.ceil(((AggregatedTransactionState) ts).
                         getAggregatedTs().size() * DECREMENT_FACTOR);
-                LOG.debug("Reducing aggregation limit to " + aggregationLimit);
+                LOG.info("Reducing aggregation limit to " + aggregationLimit);
                 limits.add(aggregationLimit);
             } else {
                 // Last commit succeed, increase aggregation limit
                 aggregationLimit += Math.floor(aggregationLimit * INCREMENT_FACTOR);
-                LOG.debug("Incrementing aggregation limit to " + aggregationLimit);
+                LOG.info("Incrementing aggregation limit to " + aggregationLimit);
                 limits.add(aggregationLimit);
             }
         }

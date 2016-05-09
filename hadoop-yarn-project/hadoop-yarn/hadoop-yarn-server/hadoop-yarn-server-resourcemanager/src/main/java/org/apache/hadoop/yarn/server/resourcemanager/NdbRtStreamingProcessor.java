@@ -81,9 +81,9 @@ public class NdbRtStreamingProcessor implements Runnable {
                   = (StreamingRTComps) NdbRtStreamingReceiver.blockingRTQueue.
                   take();
           if (streamingRTComps != null) {
-//            if (LOG.isDebugEnabled()) {
+            if (LOG.isDebugEnabled()) {
               printStreamingRTComps(streamingRTComps);
-//            }
+            }
 
             if (streamingRTComps.getNodeIds() != null) {
               for (String streamingRTCompsNodeId : streamingRTComps.getNodeIds()) {

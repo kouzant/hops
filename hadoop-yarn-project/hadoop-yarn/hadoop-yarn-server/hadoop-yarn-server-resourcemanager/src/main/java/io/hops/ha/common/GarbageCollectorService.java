@@ -35,13 +35,15 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.*;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class GarbageCollectorService extends AbstractService {
 
     private final Log LOG = LogFactory.getLog(GarbageCollectorService.class);
 
-    private final int RPCS_LIMIT = 3000;
-    private final int RPCS_PER_THREAD = 300;
+    private final int RPCS_LIMIT = 1000;
+    private final int RPCS_PER_THREAD = 20;
     private Thread worker;
     private GarbageCollectorRPCDataAccess gcDAO;
     private ExecutorService exec;
@@ -86,10 +88,14 @@ public class GarbageCollectorService extends AbstractService {
 
         @Override
         public void run() {
+          while (!Thread.currentThread().isInterrupted()) {
+            boolean exception=false;
             try {
-                while (!Thread.currentThread().isInterrupted()) {
-                    TimeUnit.MILLISECONDS.sleep(100);
-                    List<GarbageCollectorRPC> rpcIdsToRemove = gcDAO.getSubset(RPCS_LIMIT);
+                
+                    long start=System.currentTimeMillis();
+                    List<GarbageCollectorRPC> rpcIdsToRemove = getToGarbadge(
+                            RPCS_LIMIT);
+                    long getDuration = System.currentTimeMillis() - start;
                     if (!rpcIdsToRemove.isEmpty()) {
                         LOG.debug("I will remove " + rpcIdsToRemove.size() + " RPCs");
 
@@ -116,17 +122,54 @@ public class GarbageCollectorService extends AbstractService {
                         }
 
                         LOG.debug("Going to create " + collectors.size() + " Removers");
-                        exec.invokeAll(collectors);
+                        List<Future<Boolean>> futures = exec.invokeAll(collectors);
+                        for(Future<Boolean> future: futures){
+                            future.get();
+                        }
                     }
-                }
+                long delta = System.currentTimeMillis() - start;
+                float perSecond= (float)rpcIdsToRemove.size()/delta*1000;
+                LOG.debug("collected " + rpcIdsToRemove.size() + " in " + delta + " ms " + perSecond + " collect per seconds (" + getDuration + ")");
             } catch (StorageException ex) {
-                LOG.debug(ex.getMessage());
+                LOG.error(ex, ex);
+                exception=true;
             } catch (InterruptedException ex) {
-                LOG.debug("Stop interrupting me");
+                LOG.error("Stop interrupting me", ex);
+                exception=true;
+            } catch (ExecutionException ex){
+                LOG.error(ex, ex);
+                exception=true;
+            } catch (IOException ex) {
+              LOG.error(ex, ex);
+                exception=true;
             }
+            if(exception){
+              try {
+                Thread.sleep(1000);
+              } catch (InterruptedException ex) {
+                LOG.error(ex,ex);
+              }
+            }
+          }
         }
     }
 
+    private List<GarbageCollectorRPC> getToGarbadge(final int size) throws IOException{
+      LightWeightRequestHandler dbHandler = new LightWeightRequestHandler(YARNOperationType.TEST) {
+                    @Override
+                    public Object performTask() throws IOException {
+                        connector.beginTransaction();
+                        connector.writeLock();
+                        List<GarbageCollectorRPC> result = gcDAO.getSubset(size);
+                        connector.commit();
+                        return result;
+                    }
+                };
+
+                return (List<GarbageCollectorRPC>) dbHandler.handle();
+    }
+    
+    
     private class Remover implements Callable<Boolean> {
 
         private final List<GarbageCollectorRPC> rpcsToRemove;
@@ -166,12 +209,14 @@ public class GarbageCollectorService extends AbstractService {
                         connector.beginTransaction();
                         connector.writeLock();
                         hbDAO.removeGarbage(hbRPCs);
+                        connector.flush();
                         LOG.debug("Removed Heartbeat RPCs");
                         allocDAO.removeGarbage(allocRPCs);
+                        connector.flush();
                         LOG.debug("Removed Allocate RPCs");
                         gcDAO.removeAll(rpcsToRemove);
                         LOG.debug("Removed Garbage Collector RPC ids");
-
+                        connector.flush();
                         connector.commit();
                         return (System.currentTimeMillis() - startTime);
                     }
@@ -181,9 +226,9 @@ public class GarbageCollectorService extends AbstractService {
                 LOG.debug("Time to commit (ms): " + commitTime);
                 return true;
             } catch (StorageException ex) {
-                LOG.error(ex.getMessage());
+                LOG.error(ex.getMessage(),ex);
             } catch (IOException ex) {
-                LOG.error(ex.getMessage());
+                LOG.error(ex.getMessage(),ex);
             }
 
             return false;

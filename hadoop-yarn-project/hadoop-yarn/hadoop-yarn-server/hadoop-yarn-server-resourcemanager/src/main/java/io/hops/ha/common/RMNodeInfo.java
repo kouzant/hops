@@ -426,6 +426,7 @@ public void agregateFinishedApplicationToRemove(RMNodeInfoAgregate agregate){
  
 
   public void toAddNextHeartbeat(String rmnodeid, boolean nextHeartbeat) {
+    LOG.debug("add next hb " + nextHeartbeat + " nid " + rmnodeid + " pid " + getPendingId());
     this.nextHeartbeat = new NextHeartbeat(rmnodeid, nextHeartbeat, getPendingId());
   }
 

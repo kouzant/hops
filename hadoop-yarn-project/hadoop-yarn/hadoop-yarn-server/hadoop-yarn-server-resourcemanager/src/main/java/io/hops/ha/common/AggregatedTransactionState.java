@@ -275,22 +275,22 @@ public class AggregatedTransactionState extends TransactionStateImpl {
                 return true;
             }*/
 
-            if (rmContainersToUpdate.size() > 300) {
-                return true;
-            }
-
-            if (allocateResponsesToAdd.size() > 100) {
-                return true;
-            }
-
-            if (rmNodeInfos.size() > 150) {
-                LOG.debug("Aggregated more than enough, have mercy on my soul!");
-                return true;
-            }
-
-            if (schedulerApplicationInfo.getFiCaSchedulerAppInfo().size() > 100) {
-                return true;
-            }
+//            if (rmContainersToUpdate.size() > 300) {
+//                return true;
+//            }
+//
+//            if (allocateResponsesToAdd.size() > 100) {
+//                return true;
+//            }
+//
+//            if (rmNodeInfos.size() > 150) {
+//                LOG.debug("Aggregated more than enough, have mercy on my soul!");
+//                return true;
+//            }
+//
+//            if (schedulerApplicationInfo.getFiCaSchedulerAppInfo().size() > 100) {
+//                return true;
+//            }
         } else {
             LOG.info("Transaction state " + aggrTs.getTs().getId() + " is not of TransactionStateImpl" +
                     "and cannot aggregate!");
@@ -357,6 +357,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         RMNodeInfo info = null;
         for (Map.Entry<NodeId, RMNodeInfo> entry : ts.rmNodeInfos.entrySet()) {
             if ((info = rmNodeInfos.get(entry.getKey())) == null) {
+                LOG.debug("agregate hb " + entry.getValue().nextHeartbeat + " for nid " + entry.getValue().getRmnodeId() + " pid " + entry.getValue().pendingId);
                 rmNodeInfos.put(entry.getKey(), entry.getValue());
             } else {
                 // Go through each element of entry.value and update the map
@@ -371,8 +372,13 @@ public class AggregatedTransactionState extends TransactionStateImpl {
                 genericMapAggregate(value.nodeUpdateQueueToRemove, info.nodeUpdateQueueToRemove);
                 genericCollectionAggregate(value.finishedApplicationsToAdd, info.finishedApplicationsToAdd);
                 genericCollectionAggregate(value.finishedApplicationsToRemove, info.finishedApplicationsToRemove);
-                info.latestNodeHeartBeatResponse = value.latestNodeHeartBeatResponse;
-                info.nextHeartbeat = value.nextHeartbeat;
+                if(value.latestNodeHeartBeatResponse!=null){
+                  info.latestNodeHeartBeatResponse = value.latestNodeHeartBeatResponse;
+                }
+                if(value.nextHeartbeat!=null){
+                  LOG.debug("agregate hb " + value.nextHeartbeat + " for nid " + info.getRmnodeId() + " pid " + value.pendingId);
+                  info.nextHeartbeat = value.nextHeartbeat;
+                }
                 info.pendingId = value.pendingId;
             }
         }

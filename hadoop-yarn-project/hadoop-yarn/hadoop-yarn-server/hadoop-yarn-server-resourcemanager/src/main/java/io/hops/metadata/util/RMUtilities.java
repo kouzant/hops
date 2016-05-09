@@ -703,9 +703,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       setAppMasterRPCHandler.handle();
     } catch (StorageException ex) {
+      if (ex instanceof InconsistentTCBlockException) {
+        LOG.error(ex,ex);
       //LOG.error("Re-committing AppMasterRPC: " + rpcID);
       persistAppMasterRPC(rpcID, type, rpc, userId);
       //LOG.error("Persisted previously failed AppMasterRPC: " + rpcID);
+      }else{
+        throw ex;
+      }
     }
   }
 
@@ -737,9 +742,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       heartBeatRPCHandler.handle();
     } catch (StorageException ex) {
+      if (ex instanceof InconsistentTCBlockException) {
+        LOG.error(ex,ex);
       //LOG.error("Re-committing HeartBeatRPC: " + rpc.getRpcId());
       persistHeartBeatRPC(rpc);
       //LOG.error("Persisted previously failed HeartBeatRPC: " + rpc.getRpcId());
+      }else{
+        throw ex;
+      }
     }
   }
   
@@ -771,9 +781,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     try {
       allocateRPCHandler.handle();
     } catch (StorageException ex) {
+      if (ex instanceof InconsistentTCBlockException) {
+        LOG.error(ex,ex);
       //LOG.error("Re-committing AllocateRPC: " + rpc.getRpcID());
       persistAllocateRPC(rpc, userId);
       //LOG.error("Persisted previously failed AllocateRPC: " + rpc.getRpcID());
+      }else{
+        throw ex;
+      }
     }
   }
   
@@ -2282,7 +2297,10 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         break;
       }
     }
-    LOG.info("Aggregated " + counter + " and I break but I traversed " + blah);
+    if (counter > 0) {
+      LOG.info("Aggregated " + counter + " and I break but I traversed " + blah
+              + " queue length " + getQueueLength());
+    }
   }
 
   // Check if we can aggregate a Transaction State
@@ -2390,6 +2408,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
     if (startCommitTime != null) {
       long commitAndQueueDuration = System.currentTimeMillis() - startCommitTime;
+      if(commitAndQueueDuration>100){
+        LOG.info("commit and queue too long " + commitAndQueueDuration);
+      }
       startCommit.remove(ts);
 
       if (((TransactionStateImpl)ts).getManager() != null) {
@@ -2535,7 +2556,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   }
 
   static int commitAndQueueThreshold = 500;
-  static int commitQueueMaxLength = 1000;
+  static int commitQueueMaxLength = 10;
 
   public static void setCommitAndQueueLimits(Configuration conf) {
     commitAndQueueThreshold = conf.getInt(
@@ -2642,7 +2663,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitRPCRemove = delta;
             }
-            LOG.debug("Time spent on RPC-remove (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on RPC-remove (ms): " + delta);
+            }
 //            //TODO put all of this in ts.persist
             startTime = System.currentTimeMillis();
              ts.persistRmcontextInfo(rmnodeDA, resourceDA, nodeDA,
@@ -2652,7 +2675,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitRMContextInfo = delta;
             }
-            LOG.debug("Time spent on persistRMContext (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on persistRMContext (ms): " + delta);
+            }
             startTime = System.currentTimeMillis();
             ts.persistCSQueueInfo(connector);
             connector.flush();
@@ -2660,7 +2685,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitCSQueueInfo = delta;
             }
-            LOG.debug("Time spent on persistCSQueueInfo (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on persistCSQueueInfo (ms): " + delta);
+            }
             startTime = System.currentTimeMillis();
             ts.persistRMNodeToUpdate(rmnodeDA);
             connector.flush();
@@ -2668,7 +2695,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitRMNodeToUpdate = delta;
             }
-            LOG.debug("Time spent on persistRMNodeToUpdate (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on persistRMNodeToUpdate (ms): " + delta);
+            }
             startTime = System.currentTimeMillis();
             ts.persistRMNodeInfo(hbDA, cidToCleanDA, justLaunchedContainersDA,
                 updatedContainerInfoDA, faDA, csDA,persistedEventDA, connector);
@@ -2677,7 +2706,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitRMNodeInfo = delta;
             }
-            LOG.debug("Time spent on persistRMNodeInfo (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on persistRMNodeInfo (ms): " + delta);
+            }
             startTime = System.currentTimeMillis();
             ts.persist(connector);
             connector.flush();
@@ -2685,7 +2716,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitTransactionState = delta;
             }
-            LOG.debug("Time spent on persistTransactionState (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on persistTransactionState (ms): " + delta);
+            }
             startTime = System.currentTimeMillis();
             ts.persistFicaSchedulerNodeInfo(resourceDA, ficaNodeDA,
                 rmcontainerDA, launchedContainersDA);
@@ -2694,7 +2727,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitFiCaSchedulerNodeInfo = delta;
             }
-            LOG.debug("Time spent on persistFiCaSchedulerNodeInfo (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on persistFiCaSchedulerNodeInfo (ms): " + delta);
+            }
             startTime = System.currentTimeMillis();
             ts.persistFairSchedulerNodeInfo(FSSNodeDA);
             connector.flush();
@@ -2702,7 +2737,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitFairSchedulerNodeInfo = delta;
             }
-            LOG.debug("Time spent on persistFairSchedulerNodeInfo (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on persistFairSchedulerNodeInfo (ms): " + delta);
+            }
             startTime = System.currentTimeMillis();
             ts.persistSchedulerApplicationInfo(QMDA, connector);
             connector.commit();
@@ -2710,7 +2747,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitSchedulerApplicationInfo = delta;
             }
-            LOG.debug("Time spent on persistSchedulerApplicationInfo (ms): " + delta);
+            if(delta>100){
+            LOG.info("Time spent on persistSchedulerApplicationInfo (ms): " + delta);
+            }
             return System.currentTimeMillis() - start;
           }
         };
@@ -2725,7 +2764,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       }*/
 
       delta = (Long) setfinishRPCHandler.handle();
-      LOG.debug("Time spent on commit skata (ms):" + delta);
+      if(delta>100){
+        LOG.info("Time spent on commit skata (ms):" + delta);
+      }
       totalCommitTime.addAndGet(delta);
       numOfCommits.incrementAndGet();
     } catch (StorageException ex) {
@@ -2739,6 +2780,9 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
     if (startCommitTime != null) {
       long commitAndQueueDuration = System.currentTimeMillis() - startCommitTime;
+      if(commitAndQueueDuration>100){
+        LOG.info("commit and queue too long " + commitAndQueueDuration);
+      }
       startCommit.remove(ts);
 
       if (ts.getManager() != null) {

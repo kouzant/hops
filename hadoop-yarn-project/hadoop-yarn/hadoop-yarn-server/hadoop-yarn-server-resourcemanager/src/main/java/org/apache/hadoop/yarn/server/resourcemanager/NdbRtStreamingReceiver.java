@@ -151,7 +151,7 @@ public class NdbRtStreamingReceiver {
   }
   
   public void setNodeId(String nodeId) {
-    LOG.info("set nextHBNode id " + nodeId);
+    LOG.debug("set nextHBNode id " + nodeId);
     this.nextHBNodeId = nodeId;
     nodeIds.add(nodeId);
   }
