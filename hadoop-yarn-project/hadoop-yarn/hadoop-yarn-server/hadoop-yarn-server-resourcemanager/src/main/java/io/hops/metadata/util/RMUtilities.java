@@ -734,7 +734,6 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
                 hbDA.add(rpc);
 
-
                 connector.commit();
                 return null;
               }
@@ -2167,10 +2166,8 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         AggregatedTransactionState aggrTx = new AggregatedTransactionState(TransactionState.TransactionType.APP,
                 1, false, null);
 
-        long startAggr = System.currentTimeMillis();
         aggregate(aggrTx, aggregationPolicy);
 
-        LOG.debug("Time spent before tryCommit sdf (ms): " + (System.currentTimeMillis() - startAggr));
         if (aggrTx.hasAggregated()) {
           // Error in NdbJTie: returnCode -1, code 293, mysqlCode -1, status 2, classification 12, message Inconsistent trigger state in TC block
           nextRPCLock.unlock();
@@ -2222,11 +2219,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       //Thread writer = new Thread(new CountersWriter(aggrTx));
       //writer.start();
 
-      //LOG.debug("Threads waiting in tryCommit to take the lock: " + ((ReentrantLock) nextRPCLock).getQueueLength());
-      long startLockWait = System.currentTimeMillis();
       nextRPCLock.lock();
-
-      //LOG.debug("Waiting to take the lock after finishRPC in tryCommit (ms): " + (System.currentTimeMillis() - startLockWait));
 
       aggregationPolicy.toggleSuccessfulCommitStatus();
       if (aggregationPolicy.getLastCommitStatus()) {
@@ -2566,8 +2559,13 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     return totalCommitTime.get();
   }
 
-  public static long finishRPC(final TransactionStateImpl ts) throws StorageException {
+  public static void printTimeLog(String name, long time, long threshold) {
+    if (time > threshold) {
+      LOG.info("Time spent on " + name + "(ms): " + time);
+    }
+  }
 
+  public static long finishRPC(final TransactionStateImpl ts) throws StorageException {
 
     LightWeightRequestHandler setfinishRPCHandler =
         new LightWeightRequestHandler(YARNOperationType.TEST) {
@@ -2650,7 +2648,8 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitRPCRemove = delta;
             }
-            LOG.info("Time spent on RPC-remove (ms): " + delta);
+            printTimeLog("RPC-Remove", delta, 50);
+
 //            //TODO put all of this in ts.persist
             startTime = System.currentTimeMillis();
              ts.persistRmcontextInfo(rmnodeDA, resourceDA, nodeDA,
@@ -2660,7 +2659,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitRMContextInfo = delta;
             }
-            LOG.info("Time spent on persistRMContext (ms): " + delta);
+            printTimeLog("persistRMContext", delta, 100);
             startTime = System.currentTimeMillis();
             ts.persistCSQueueInfo(connector);
             connector.flush();
@@ -2668,7 +2667,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitCSQueueInfo = delta;
             }
-            LOG.info("Time spent on persistCSQueueInfo (ms): " + delta);
+            printTimeLog("persistCSQueueInfo", delta, 50);
             startTime = System.currentTimeMillis();
             ts.persistRMNodeToUpdate(rmnodeDA);
             connector.flush();
@@ -2676,7 +2675,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitRMNodeToUpdate = delta;
             }
-            LOG.info("Time spent on persistRMNodeToUpdate (ms): " + delta);
+            printTimeLog("persistRMNodeToUpdate", delta, 50);
             startTime = System.currentTimeMillis();
             ts.persistRMNodeInfo(hbDA, cidToCleanDA, justLaunchedContainersDA,
                 updatedContainerInfoDA, faDA, csDA,persistedEventDA, connector);
@@ -2685,7 +2684,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitRMNodeInfo = delta;
             }
-            LOG.info("Time spent on persistRMNodeInfo (ms): " + delta);
+            printTimeLog("persistRMNodeInfo", delta, 200);
             startTime = System.currentTimeMillis();
             ts.persist(connector);
             connector.flush();
@@ -2693,7 +2692,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitTransactionState = delta;
             }
-            LOG.info("Time spent on persistTransactionState (ms): " + delta);
+            printTimeLog("persistTransactionState", delta, 150);
             startTime = System.currentTimeMillis();
             ts.persistFicaSchedulerNodeInfo(resourceDA, ficaNodeDA,
                 rmcontainerDA, launchedContainersDA);
@@ -2702,7 +2701,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitFiCaSchedulerNodeInfo = delta;
             }
-            LOG.info("Time spent on persistFiCaSchedulerNodeInfo (ms): " + delta);
+            printTimeLog("persistFiCaSchedulerNodeInfo", delta, 50);
             startTime = System.currentTimeMillis();
             ts.persistFairSchedulerNodeInfo(FSSNodeDA);
             connector.flush();
@@ -2710,7 +2709,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitFairSchedulerNodeInfo = delta;
             }
-            LOG.info("Time spent on persistFairSchedulerNodeInfo (ms): " + delta);
+            printTimeLog("persistFairSchedulerNodeInfo", delta, 50);
             startTime = System.currentTimeMillis();
             ts.persistSchedulerApplicationInfo(QMDA, connector);
             connector.commit();
@@ -2718,7 +2717,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             if (printTime) {
               ((AggregatedTransactionState) ts).commitSchedulerApplicationInfo = delta;
             }
-            LOG.info("Time spent on persistSchedulerApplicationInfo (ms): " + delta);
+            printTimeLog("persistSchedulerApplicationInfo", delta, 50);
             return System.currentTimeMillis() - start;
           }
         };
@@ -2733,9 +2732,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       }*/
 
       delta = (Long) setfinishRPCHandler.handle();
-      if(delta>100){
-        LOG.info("Time spent on commit skata (ms):" + delta);
-      }
+      printTimeLog("skata", delta, 500);
       totalCommitTime.addAndGet(delta);
       numOfCommits.incrementAndGet();
     } catch (StorageException ex) {

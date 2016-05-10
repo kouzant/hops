@@ -41,7 +41,7 @@ public class GarbageCollectorService extends AbstractService {
     private final Log LOG = LogFactory.getLog(GarbageCollectorService.class);
 
     private final int RPCS_LIMIT = 1000;
-    private final int RPCS_PER_THREAD = 30;
+    private final int RPCS_PER_THREAD = 50;
     private Thread worker;
     private GarbageCollectorRPCDataAccess gcDAO;
     private ExecutorService exec;
@@ -90,14 +90,12 @@ public class GarbageCollectorService extends AbstractService {
                 LightWeightRequestHandler rpcsFetcher = new LightWeightRequestHandler(YARNOperationType.TEST) {
                     @Override
                     public Object performTask() throws IOException {
-                        long start = System.currentTimeMillis();
                         connector.beginTransaction();
                         connector.readLock();
 
                         List<GarbageCollectorRPC> resultSet = gcDAO.getSubset(RPCS_LIMIT);
 
                         connector.commit();
-                        LOG.info("Time to retrieve RPCs to collect: " + (System.currentTimeMillis() - start));
                         return resultSet;
                     }
                 };
@@ -179,6 +177,7 @@ public class GarbageCollectorService extends AbstractService {
                         new ArrayList<RPC>();
 
                 for (GarbageCollectorRPC rpc : rpcsToRemove) {
+                    LOG.debug("Removing RPC ID: " + rpc.getRpcid());
                     if (rpc.getType().equals(GarbageCollectorRPC.TYPE.HEARTBEAT)) {
                         hbRPCs.add(new RPC(rpc.getRpcid()));
                     } else {
@@ -189,24 +188,25 @@ public class GarbageCollectorService extends AbstractService {
                 LightWeightRequestHandler dbHandler = new LightWeightRequestHandler(YARNOperationType.TEST) {
                     @Override
                     public Object performTask() throws IOException {
-                        long startTime = System.currentTimeMillis();
                         connector.beginTransaction();
                         connector.writeLock();
 
                         hbDAO.removeGarbage(hbRPCs);
-                        LOG.debug("Removed Heartbeat RPCs");
+                        connector.flush();
+                        LOG.info("Removed Heartbeat GC");
+
                         allocDAO.removeGarbage(allocRPCs);
-                        LOG.debug("Removed Allocate RPCs");
+                        connector.flush();
+                        LOG.info("Removed Allocate GC");
+
                         gcDAO.removeAll(rpcsToRemove);
-                        LOG.debug("Removed Garbage Collector RPC ids");
 
                         connector.commit();
-                        return (System.currentTimeMillis() - startTime);
+                        return null;
                     }
                 };
 
-                Long commitTime = (Long) dbHandler.handle();
-                LOG.debug("Time to garbage collect (ms): " + commitTime);
+                dbHandler.handle();
                 return true;
             } catch (StorageException ex) {
                 LOG.error(ex.getMessage(), ex);

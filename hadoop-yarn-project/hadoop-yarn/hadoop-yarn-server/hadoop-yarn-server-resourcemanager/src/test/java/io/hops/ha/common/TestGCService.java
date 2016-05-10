@@ -24,6 +24,7 @@ import io.hops.metadata.yarn.entity.appmasterrpc.RPC;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
+import org.apache.hadoop.service.Service;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -67,6 +68,9 @@ public class TestGCService {
     public void testGC() throws Exception {
         persistRPCs(100);
         MockRM rm = new MockRM(conf);
+        GarbageCollectorService gc = new GarbageCollectorService();
+        gc.init(conf);
+        rm.addService(gc);
         rm.start();
 
         Thread.sleep(5000);
