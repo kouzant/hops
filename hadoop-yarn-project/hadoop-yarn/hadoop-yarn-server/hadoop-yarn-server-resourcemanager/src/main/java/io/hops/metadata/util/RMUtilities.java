@@ -704,6 +704,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       setAppMasterRPCHandler.handle();
     } catch (StorageException ex) {
       if (ex instanceof InconsistentTCBlockException) {
+        LOG.error(ex, ex);
         //LOG.error("Re-committing AppMasterRPC: " + rpcID);
         persistAppMasterRPC(rpcID, type, rpc, userId);
         //LOG.error("Persisted previously failed AppMasterRPC: " + rpcID);
@@ -720,9 +721,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
               @Override
               public Object performTask() throws StorageException {
                 connector.beginTransaction();
-                long start = System.currentTimeMillis();
                 connector.writeLock();
-                LOG.info("Persist HBRPC wait to take the lock: " + (System.currentTimeMillis() - start));
                 RPCDataAccess DA = (RPCDataAccess) RMStorageFactory
                 .getDataAccess(RPCDataAccess.class);
                 RPC hop = new RPC(rpc.getRpcId(), RPC.Type.NodeHeartbeat, null,
@@ -744,6 +743,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       heartBeatRPCHandler.handle();
     } catch (StorageException ex) {
       if (ex instanceof InconsistentTCBlockException) {
+        LOG.error(ex, ex);
         //LOG.error("Re-committing HeartBeatRPC: " + rpc.getRpcId());
         persistHeartBeatRPC(rpc);
         //LOG.error("Persisted previously failed HeartBeatRPC: " + rpc.getRpcId());
@@ -782,6 +782,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       allocateRPCHandler.handle();
     } catch (StorageException ex) {
       if (ex instanceof InconsistentTCBlockException) {
+        LOG.error(ex, ex);
         //LOG.error("Re-committing AllocateRPC: " + rpc.getRpcID());
         persistAllocateRPC(rpc, userId);
         //LOG.error("Persisted previously failed AllocateRPC: " + rpc.getRpcID());
@@ -1121,66 +1122,72 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
               //Retrieve all UpdatedContainerInfo entries for this particular RMNode
               Map<Integer, List<UpdatedContainerInfo>>
                   hopUpdatedContainerInfoMap = uciDA.findByRMNode(id);
-              if (hopUpdatedContainerInfoMap != null &&
-                  !hopUpdatedContainerInfoMap.isEmpty()) {
-                ConcurrentLinkedQueue<org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo>
-                    updatedContainerInfoQueue =
-                    new ConcurrentLinkedQueue<org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo>();
-                Map<String, ContainerStatus> hopUCIContainerStatuses =
-                  new HashMap<String, ContainerStatus>();
+              if (hopUpdatedContainerInfoMap != null
+                      && !hopUpdatedContainerInfoMap.isEmpty()) {
+                ConcurrentLinkedQueue<org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo> updatedContainerInfoQueue
+                        = new ConcurrentLinkedQueue<org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo>();
+                Map<Integer, org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo> ucis
+                        = new HashMap<Integer, org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo>();
+                Map<String, ContainerStatus> hopUCIContainerStatuses
+                        = new HashMap<String, ContainerStatus>();
                 for (int uciId : hopUpdatedContainerInfoMap.keySet()) {
+                  ucis.put(uciId,
+                          new org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo(
+                                  new ArrayList<org.apache.hadoop.yarn.api.records.ContainerStatus>(),
+                                  new ArrayList<org.apache.hadoop.yarn.api.records.ContainerStatus>(),
+                                  uciId));
+
                   for (UpdatedContainerInfo hopUCI : hopUpdatedContainerInfoMap
-                      .get(uciId)) {
-                    List<org.apache.hadoop.yarn.api.records.ContainerStatus>
-                        newlyAllocated =
-                        new ArrayList<org.apache.hadoop.yarn.api.records.ContainerStatus>();
-                    List<org.apache.hadoop.yarn.api.records.ContainerStatus>
-                        completed =
-                        new ArrayList<org.apache.hadoop.yarn.api.records.ContainerStatus>();
-                    //Retrieve containerstatus entries for the particular updatedcontainerinfo
-                    org.apache.hadoop.yarn.api.records.ContainerId cid =
-                        ConverterUtils.toContainerId(hopUCI.getContainerId());
-                    if (!hopUCIContainerStatuses
-                        .containsKey(hopUCI.getContainerId())) {
-                      hopUCIContainerStatuses.put(hopUCI.getContainerId(),
-                          (ContainerStatus) containerStatusDA
+                          .get(uciId)) {
+
+                    org.apache.hadoop.yarn.api.records.ContainerId cid
+                            = ConverterUtils.toContainerId(hopUCI.
+                                    getContainerId());
+                    ContainerStatus hopContainerStatus
+                            = hopUCIContainerStatuses.get(hopUCI.
+                                    getContainerId());
+                    if (hopContainerStatus == null) {
+                      hopContainerStatus = (ContainerStatus) containerStatusDA
                               .findEntry(hopUCI.getContainerId(), id,
-                                      ContainerStatus.Type.UCI.toString()));
+                                      ContainerStatus.Type.UCI.toString());
+                      hopUCIContainerStatuses.put(hopUCI.getContainerId(),
+                              hopContainerStatus);
                     }
-                    org.apache.hadoop.yarn.api.records.ContainerStatus
-                        conStatus =
-                        org.apache.hadoop.yarn.api.records.ContainerStatus
-                            .newInstance(cid, ContainerState.valueOf(
-                                    hopUCIContainerStatuses
-                                        .get(hopUCI.getContainerId())
-                                        .getState()), hopUCIContainerStatuses
-                                    .get(hopUCI.getContainerId())
-                                    .getDiagnostics(), hopUCIContainerStatuses
-                                    .get(hopUCI.getContainerId())
-                                    .getExitstatus());
+
+                    org.apache.hadoop.yarn.api.records.ContainerStatus conStatus
+                            = org.apache.hadoop.yarn.api.records.ContainerStatus.
+                            newInstance(cid, ContainerState.valueOf(
+                                    hopContainerStatus.getState()),
+                                    hopContainerStatus.getDiagnostics(),
+                                    hopContainerStatus.getExitstatus());
                     //Check ContainerStatus state to add it to appropriate list
                     if (conStatus != null) {
-                      if (conStatus.getState().toString()
-                          .equals(TablesDef.ContainerStatusTableDef.STATE_RUNNING)) {
-                        newlyAllocated.add(conStatus);
-                      } else if (conStatus.getState().toString()
-                          .equals(TablesDef.ContainerStatusTableDef.STATE_COMPLETED)) {
-                        completed.add(conStatus);
+                      LOG.debug("add uci for container " + conStatus.
+                              getContainerId()
+                              + " status " + conStatus.getState());
+                      if (conStatus.getState().equals(ContainerState.RUNNING)) {
+                        ucis.get(hopUCI.getUpdatedContainerInfoId()).
+                                getNewlyLaunchedContainers().add(conStatus);
+                      } else if (conStatus.getState().equals(
+                              ContainerState.COMPLETE)) {
+                        ucis.get(hopUCI.getUpdatedContainerInfoId()).
+                                getCompletedContainers().add(conStatus);
                       }
                     }
-                    org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo
-                        uci =
-                        new org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo(
-                            newlyAllocated, completed,
-                            hopUCI.getUpdatedContainerInfoId());
-                    updatedContainerInfoQueue.add(uci);
-                    ((RMNodeImpl) rmNode)
-                        .setUpdatedContainerInfo(updatedContainerInfoQueue);
-                    //Update uci counter
-                    ((RMNodeImpl) rmNode)
-                        .setUpdatedContainerInfoId(hopRMNode.getUciId());
                   }
                 }
+                int maxUciId = 0;
+                for (org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo uci
+                        : ucis.values()) {
+                  updatedContainerInfoQueue.add(uci);
+                  if (uci.getUpdatedContainerInfoId() > maxUciId) {
+                    maxUciId = uci.getUpdatedContainerInfoId();
+                  }
+                }
+
+                ((RMNodeImpl) rmNode).setUpdatedContainerInfoId(maxUciId);
+                ((RMNodeImpl) rmNode).setUpdatedContainerInfo(
+                        updatedContainerInfoQueue);
               }
 
               //5. Retrieve latestNodeHeartBeatResponse
@@ -2163,7 +2170,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         long startAggr = System.currentTimeMillis();
         aggregate(aggrTx, aggregationPolicy);
 
-        LOG.info("Time spent before tryCommit sdf (ms): " + (System.currentTimeMillis() - startAggr));
+        LOG.debug("Time spent before tryCommit sdf (ms): " + (System.currentTimeMillis() - startAggr));
         if (aggrTx.hasAggregated()) {
           // Error in NdbJTie: returnCode -1, code 293, mysqlCode -1, status 2, classification 12, message Inconsistent trigger state in TC block
           nextRPCLock.unlock();
@@ -2171,7 +2178,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
           tryCommit(aggrTx);
 
         } else {
-          LOG.debug("I have nothing to aggregate, I break!");
+          //LOG.debug("I have nothing to aggregate, I break!");
           nextRPCLock.unlock();
           break;
         }
@@ -2210,7 +2217,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
   private static void tryCommit(AggregatedTransactionState aggrTx) throws StorageException {
     try {
-      finishRPC(aggrTx);
+      long delta = finishRPC(aggrTx);
 
       //Thread writer = new Thread(new CountersWriter(aggrTx));
       //writer.start();
@@ -2225,11 +2232,12 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       if (aggregationPolicy.getLastCommitStatus()) {
         aggregationPolicy.enforce(aggrTx);
       }
-      clearQueuesFromAggregatedTS(aggrTx.getAggregatedTs());
-      //writer.join();
+      clearQueuesFromAggregatedTS(aggrTx.getAggregatedTs(), delta);
+//      writer.join();
       nextRPCLock.unlock();
     } catch (StorageException ex) {
       if (ex instanceof InconsistentTCBlockException) {
+        LOG.error(ex,ex);
         //LOG.debug("Tried to commit too big aggregated TS");
         nextRPCLock.lock();
         long startRecommit = System.currentTimeMillis();
@@ -2255,6 +2263,8 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
       } else {
         throw ex;
       }
+//    } catch (InterruptedException ex) {
+//      ex.printStackTrace();
     }
   }
 
@@ -2287,7 +2297,10 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         break;
       }
     }
-    LOG.info("Aggregated " + counter + " and I break but I traversed " + blah);
+    if (counter > 0) {
+      LOG.info("Aggregated " + counter + " and I break but I traversed " + blah
+              + " queue length " + getQueueLength());
+    }
   }
 
   // Check if we can aggregate a Transaction State
@@ -2376,12 +2389,32 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
   public static long clearQueuesWait = 0l;
   // After commit of aggregated TS, remove them from their respective queue
-  private static void clearQueuesFromAggregatedTS(Set<ToBeAggregatedTS> aggregatedTs) {
+  private static void clearQueuesFromAggregatedTS(Set<ToBeAggregatedTS> aggregatedTs, long delta) {
     //nextRPCLock.lock();
     long startClear = System.currentTimeMillis();
     for (ToBeAggregatedTS tbaTs : aggregatedTs) {
       TransactionState ts = tbaTs.getTs();
+
+      Long startCommitTime = startCommit.get(ts);
+
+    if (startCommitTime != null) {
+      long commitAndQueueDuration = System.currentTimeMillis() - startCommitTime;
+      if(commitAndQueueDuration>100){
+        LOG.info("commit and queue too long " + commitAndQueueDuration);
+      }
       startCommit.remove(ts);
+
+      if (((TransactionStateImpl)ts).getManager() != null) {
+        if (commitAndQueueDuration > commitAndQueueThreshold || getQueueLength() > commitQueueMaxLength) {
+          if (((TransactionStateImpl)ts).getManager().blockNonHB()) {
+            LOG.info("blocking non priority duration: " + commitAndQueueDuration +"(" + delta + ")"
+                    + " length: " + getQueueLength());
+          }
+        } else {
+          ((TransactionStateImpl)ts).getManager().unblockNonHB();
+        }
+      }
+    }
 
       txToAggregate.remove(tbaTs);
 
@@ -2510,7 +2543,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   }
 
   static int commitAndQueueThreshold = 500;
-  static int commitQueueMaxLength = 2;
+  static int commitQueueMaxLength = 10;
 
   public static void setCommitAndQueueLimits(Configuration conf) {
     commitAndQueueThreshold = conf.getInt(
@@ -2533,7 +2566,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
     return totalCommitTime.get();
   }
 
-  public static void finishRPC(final TransactionStateImpl ts) throws StorageException {
+  public static long finishRPC(final TransactionStateImpl ts) throws StorageException {
 
 
     LightWeightRequestHandler setfinishRPCHandler =
@@ -2689,6 +2722,7 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
             return System.currentTimeMillis() - start;
           }
         };
+    long delta=0;
     try {
       // FOR TESTING
       /*if (ts instanceof AggregatedTransactionState) {
@@ -2698,8 +2732,10 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
         }
       }*/
 
-      Long delta = (Long) setfinishRPCHandler.handle();
-      LOG.info("Time spent on commit skata (ms):" + delta);
+      delta = (Long) setfinishRPCHandler.handle();
+      if(delta>100){
+        LOG.info("Time spent on commit skata (ms):" + delta);
+      }
       totalCommitTime.addAndGet(delta);
       numOfCommits.incrementAndGet();
     } catch (StorageException ex) {
@@ -2713,23 +2749,27 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
     if (startCommitTime != null) {
       long commitAndQueueDuration = System.currentTimeMillis() - startCommitTime;
+      if(commitAndQueueDuration>100){
+        LOG.info("commit and queue too long " + commitAndQueueDuration);
+      }
       startCommit.remove(ts);
 
       if (ts.getManager() != null) {
         if (commitAndQueueDuration > commitAndQueueThreshold || getQueueLength() > commitQueueMaxLength) {
           if (ts.getManager().blockNonHB()) {
-            //LOG.info("blocking non priority duration: " + commitAndQueueDuration
-            //        + " length: " + getQueueLength());
+            LOG.info("blocking non priority duration: " + commitAndQueueDuration + "(" + delta + ")"
+                    + " length: " + getQueueLength());
           }
         } else {
           ts.getManager().unblockNonHB();
         }
       }
     }
+    return delta;
   }
   
   public static int getQueueLength(){
-    return finishedTs.size();
+    return txToAggregate.size();
   }
    
   //for testing (todo: move in test class)

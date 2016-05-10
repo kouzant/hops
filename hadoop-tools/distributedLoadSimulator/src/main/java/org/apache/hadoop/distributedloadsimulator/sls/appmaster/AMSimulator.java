@@ -62,6 +62,7 @@ import org.apache.log4j.Logger;
 import org.apache.hadoop.distributedloadsimulator.sls.scheduler.ContainerSimulator;
 import org.apache.hadoop.distributedloadsimulator.sls.scheduler.ResourceSchedulerWrapper;
 import org.apache.hadoop.distributedloadsimulator.sls.SLSRunner;
+import static org.apache.hadoop.distributedloadsimulator.sls.SLSRunner.LOG;
 import org.apache.hadoop.distributedloadsimulator.sls.scheduler.TaskRunner;
 import org.apache.hadoop.distributedloadsimulator.sls.utils.SLSUtils;
 import org.apache.hadoop.security.Credentials;
@@ -150,7 +151,7 @@ public abstract class AMSimulator extends TaskRunner.Task {
   public void init(int id, int heartbeatInterval,
           List task, ResourceManager rm, SLSRunner se,
           long traceStartTime, long traceFinishTime, String user, String queue,
-          boolean isTracked, String oldAppId, String[] listOfRemoteSimIp,
+          boolean isTracked, String oldAppId, String[] listOfRemoteSimIp,int rmiport,
           YarnClient rmClient, Configuration conf) throws IOException {
     super.init(traceStartTime, traceStartTime + 1000000L * heartbeatInterval,
             heartbeatInterval);
@@ -176,7 +177,8 @@ public abstract class AMSimulator extends TaskRunner.Task {
     Registry primaryRegistry;
     Registry secondryRegistry;
     try {
-      primaryRegistry = LocateRegistry.getRegistry("127.0.0.1");
+      LOG.info("get registry with port " + rmiport);
+      primaryRegistry = LocateRegistry.getRegistry("127.0.0.1", rmiport);
       primaryRemoteConnection = (AMNMCommonObject) primaryRegistry.lookup(
               "AMNMCommonObject");
       RemoteConnections.add(primaryRemoteConnection);
@@ -193,7 +195,8 @@ public abstract class AMSimulator extends TaskRunner.Task {
     for (String remoteIp : listOfRemoteSimIp) {
       if (!(remoteIp.equals("127.0.0.1"))) {
         try {
-          secondryRegistry = LocateRegistry.getRegistry(remoteIp);
+          LOG.info("get registry with port " + rmiport);
+          secondryRegistry = LocateRegistry.getRegistry(remoteIp, rmiport);
           AMNMCommonObject secondryConnections
                   = (AMNMCommonObject) secondryRegistry.lookup(
                           "AMNMCommonObject");

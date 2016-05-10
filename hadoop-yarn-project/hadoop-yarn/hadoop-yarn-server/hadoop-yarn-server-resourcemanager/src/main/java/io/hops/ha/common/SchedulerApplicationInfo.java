@@ -184,7 +184,7 @@ public class SchedulerApplicationInfo {
   }
 
   private void persistFiCaSchedulerAppInfo(StorageConnector connector) throws StorageException {
-    if(!fiCaSchedulerAppInfo.isEmpty()){
+    if(!fiCaSchedulerAppInfo.isEmpty() || !applicationAttemptsToRemove.isEmpty()){
       AgregatedAppInfo agregatedAppInfo = new AgregatedAppInfo();
       for (Map<String,FiCaSchedulerAppInfo> map : fiCaSchedulerAppInfo.values()) {
         for(FiCaSchedulerAppInfo appInfo: map.values()){

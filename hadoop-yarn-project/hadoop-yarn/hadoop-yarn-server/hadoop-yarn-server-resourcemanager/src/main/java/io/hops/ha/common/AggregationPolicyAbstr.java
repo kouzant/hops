@@ -15,15 +15,20 @@
  */
 package io.hops.ha.common;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
+
 public abstract class AggregationPolicyAbstr implements AggregationPolicy {
     protected int aggregationLimit;
     protected boolean lastCommitStatus;
-
+    private static final Log LOG = LogFactory.getLog(AggregationPolicyAbstr.class);
+    
     public AggregationPolicyAbstr() {
         this(Integer.MAX_VALUE);
     }
 
     public AggregationPolicyAbstr(int initialLimit) {
+        LOG.info("setting aggregation limit to " + aggregationLimit);
         this.aggregationLimit = initialLimit;
         lastCommitStatus = false;
     }

@@ -97,6 +97,11 @@ public class NdbEventStreamingProcessor extends PendingEventRetrieval {
     }
   }
   
+  long ctrmNode = 0;
+  long ctTrigger = 0;
+  int countNode=0;
+  int countTrigger=0;
+  long globalStart = System.currentTimeMillis();
   private class RetrivingThread implements Runnable {
 
     @Override
@@ -115,18 +120,43 @@ public class NdbEventStreamingProcessor extends PendingEventRetrieval {
             if (rmContext.isDistributedEnabled()) {
               RMNode rmNode = null;
               try {
+                long start = System.currentTimeMillis();
                 rmNode = RMUtilities.processHopRMNodeCompsForScheduler(
                         hopRMNodeCompObject,
                         rmContext);
+                long delta = System.currentTimeMillis() - start;
+                ctrmNode += delta;
+                if(delta >500){
+                  LOG.error("triger events too slow: " + delta + "   ********************************************");
+                }
+                countNode++;
                 LOG.debug("HOP :: RMNodeWorker rmNode:" + rmNode);
 
                 if (rmNode != null) {
+                  start = System.currentTimeMillis();
                   updateRMContext(rmNode);
                   triggerEvent(rmNode, hopRMNodeCompObject.getPendingEvent(),
                           false);
+                  delta = System.currentTimeMillis()-start;
+                  ctTrigger += delta;
+                  if(delta >500){
+                    LOG.error("triger events too slow: " + delta + "   ********************************************");
+                  }
+                  countTrigger++;
                 }
               } catch (Exception ex) {
                 LOG.error("HOP :: Error retrieving rmNode:" + ex, ex);
+              }
+              
+              if(System.currentTimeMillis()-globalStart>=1000){
+                float avgNode = (float)ctrmNode/countNode;
+                float avgTr = (float) ctTrigger/countTrigger;
+                LOG.info("triger events time node: " + avgNode + " tr: " + avgTr);
+                ctTrigger=0;
+                ctrmNode=0;
+                countNode=0;
+                countTrigger=0;
+                globalStart=System.currentTimeMillis();
               }
             }
             // Processes container statuses for ContainersLogs service

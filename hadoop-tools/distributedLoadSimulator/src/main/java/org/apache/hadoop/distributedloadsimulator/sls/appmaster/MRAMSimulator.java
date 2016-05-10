@@ -141,11 +141,12 @@ public class MRAMSimulator extends AMSimulator {
           List tasks, ResourceManager rm, SLSRunner se,
           long traceStartTime, long traceFinishTime, String user, String queue,
           boolean isTracked, String oldAppId,
-          String[] remoteSimIp, YarnClient rmClient, Configuration conf) throws
+          String[] remoteSimIp, int rmiPort,
+          YarnClient rmClient, Configuration conf) throws
           IOException {
     super.init(id, heartbeatInterval, tasks, rm, se,
             traceStartTime, traceFinishTime, user, queue,
-            isTracked, oldAppId, remoteSimIp,
+            isTracked, oldAppId, remoteSimIp, rmiPort,
             rmClient, conf);
     amtype = "mapreduce";
 
@@ -161,8 +162,7 @@ public class MRAMSimulator extends AMSimulator {
   }
 
   @Override
-  public void firstStep()
-          throws YarnException, IOException, InterruptedException {
+  public void firstStep() {
     int containerVCores = conf.getInt(SLSConfiguration.CONTAINER_VCORES,
             SLSConfiguration.CONTAINER_VCORES_DEFAULT);
     int containerMemoryMB = conf.getInt(SLSConfiguration.CONTAINER_MEMORY_MB,
@@ -202,10 +202,15 @@ public class MRAMSimulator extends AMSimulator {
     mapTotal = pendingMaps.size();
     reduceTotal = pendingReduces.size();
     totalContainers = mapTotal + reduceTotal;
-
-    super.firstStep();
-    if (submited) {
-      requestAMContainer();
+    
+    try {
+      super.firstStep();
+      if (submited) {
+        requestAMContainer();
+      }
+    } catch (Exception e) {
+      LOG.error(e);
+      se.finishSimulation(false);
     }
   }
 

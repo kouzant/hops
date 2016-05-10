@@ -31,7 +31,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
     private static final Log LOG = LogFactory.getLog(AggregatedTransactionState.class);
 
-    public final boolean TESTING = true;
+    public final boolean TESTING = false;
 
     private final Set<RMUtilities.ToBeAggregatedTS> aggregatedTs =
             new HashSet<RMUtilities.ToBeAggregatedTS>();
@@ -334,6 +334,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         RMNodeInfo info = null;
         for (Map.Entry<NodeId, RMNodeInfo> entry : ts.rmNodeInfos.entrySet()) {
             if ((info = rmNodeInfos.get(entry.getKey())) == null) {
+                LOG.debug("agregate hb " + entry.getValue().nextHeartbeat + " for nid " + entry.getValue().getRmnodeId() + " pid " + entry.getValue().pendingId);
                 rmNodeInfos.put(entry.getKey(), entry.getValue());
             } else {
                 // Go through each element of entry.value and update the map

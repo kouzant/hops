@@ -17,65 +17,94 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 
 import io.hops.metadata.yarn.entity.ContainerStatus;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import org.apache.hadoop.yarn.server.api.records.MasterKey;
+import org.apache.hadoop.yarn.server.security.MasterKeyData;
 
-/**
- *
- * @author sri
- */
 public class StreamingRTComps {
 
-  private final Set<org.apache.hadoop.yarn.api.records.ContainerId> containersToClean;
-  private final List<org.apache.hadoop.yarn.api.records.ApplicationId> finishedApp;
-  private final String nodeId;
-  private final boolean nextHeartbeat;
+  private final Map<String, Set<org.apache.hadoop.yarn.api.records.ContainerId>> containersToClean;
+  private final Map<String, List<org.apache.hadoop.yarn.api.records.ApplicationId>> finishedApp;
+  private final Set<String> nodeId;
+  private final Map<String, Boolean> nextHeartbeat;
   private final List<ContainerStatus> hopContainersStatusList;
-  private final float CurrentPrice;
-  private final long CurrentPriceTick;
+  private final MasterKey currentNMMasterKey;
+  private final MasterKey nextNMMasterKey;
+  private final MasterKey currentRMContainerMasterKey;
+  private final MasterKey nextRMContainerMasterKey;  
+  private final float currentPrice;
+  private final long currentPriceTick;
 
 
   public StreamingRTComps(
-          Set<org.apache.hadoop.yarn.api.records.ContainerId> containersToClean,
-          List<org.apache.hadoop.yarn.api.records.ApplicationId> finishedApp,
-          String nodeId, boolean nextHeartbeat, 
+          Map<String, Set<org.apache.hadoop.yarn.api.records.ContainerId>> containersToClean,
+          Map<String, List<org.apache.hadoop.yarn.api.records.ApplicationId>> finishedApp,
+          Set<String> nodeId, Map<String, Boolean> nextHeartbeat,
           List<ContainerStatus> hopContainersStatusList,
+          MasterKey currentNMMasterKey,
+          MasterKey nextNMMasterKey,
+          MasterKey currentRMContainerMasterKey,
+          MasterKey nextRMContainerMasterKey,
           float currentPrice,
-          long  currentPriceTick) {
+          long currentPriceTick
+  ) {
     this.containersToClean = containersToClean;
     this.finishedApp = finishedApp;
     this.nodeId = nodeId;
     this.nextHeartbeat = nextHeartbeat;
     this.hopContainersStatusList = hopContainersStatusList;
-    this.CurrentPrice = currentPrice;
-    this.CurrentPriceTick = currentPriceTick;
+    this.currentNMMasterKey=currentNMMasterKey;
+    this.nextNMMasterKey = nextNMMasterKey;
+    this.currentRMContainerMasterKey = currentRMContainerMasterKey;
+    this.nextRMContainerMasterKey = nextRMContainerMasterKey;
+    this.currentPrice = currentPrice;
+    this.currentPriceTick = currentPriceTick;
   }
   
   public float getCurrentPrice() {
-    return CurrentPrice;
+    return currentPrice;
   }
 
   public long getCurrentPriceTick() {
-    return CurrentPriceTick;
+    return currentPriceTick;
   }
 
-  public Set<org.apache.hadoop.yarn.api.records.ContainerId> getContainersToClean() {
-    return containersToClean;
+  public Set<org.apache.hadoop.yarn.api.records.ContainerId> getContainersToClean(String nodeId) {
+    return containersToClean.get(nodeId);
   }
 
-  public List<org.apache.hadoop.yarn.api.records.ApplicationId> getFinishedApp() {
-    return finishedApp;
+  public List<org.apache.hadoop.yarn.api.records.ApplicationId> getFinishedApp(String nodeId) {
+    return finishedApp.get(nodeId);
   }
 
-  public String getNodeId() {
+  public Set<String> getNodeIds() {
     return nodeId;
   }
 
-  public boolean isNextHeartbeat() {
-    return nextHeartbeat;
+  public Boolean isNextHeartbeat(String nodeId) {
+    return nextHeartbeat.get(nodeId);
   }
   
   public List<ContainerStatus> getHopContainersStatusList() {
       return hopContainersStatusList;
   }
 
+  public MasterKey getCurrentNMMasterKey() {
+    return currentNMMasterKey;
+  }
+
+  public MasterKey getNextNMMasterKey() {
+    return nextNMMasterKey;
+  }
+
+  public MasterKey getCurrentRMContainerMasterKey() {
+    return currentRMContainerMasterKey;
+  }
+
+  public MasterKey getNextRMContainerMasterKey() {
+    return nextRMContainerMasterKey;
+  }
+
+  
 }

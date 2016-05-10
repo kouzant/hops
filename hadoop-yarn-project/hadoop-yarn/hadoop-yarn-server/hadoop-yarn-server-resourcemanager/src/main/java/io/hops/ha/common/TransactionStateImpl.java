@@ -467,9 +467,11 @@ public class TransactionStateImpl extends TransactionState {
   }
   
   public static int callsAddApplicationStateToRemove = 0;
+
   public void addApplicationStateToRemove(ApplicationId appId,
-                                          Set<ApplicationAttemptId> appAttempts) {
-    if(applicationsToAdd.remove(appId)==null){
+          Set<ApplicationAttemptId> appAttempts) {
+    if (applicationsToAdd.remove(appId) == null) {
+      updatedNodeIdToAdd.remove(appId);
       applicationsStateToRemove.put(appId, appAttempts);
     }
     callsAddApplicationStateToRemove++;
@@ -854,7 +856,8 @@ public class TransactionStateImpl extends TransactionState {
       cDA.addAll(toUpdateContainers.values());
     }
   }
-  
+
+
   public void addContainerToUpdate(
           org.apache.hadoop.yarn.api.records.Container container,
           ApplicationId appId){
@@ -990,8 +993,7 @@ public class TransactionStateImpl extends TransactionState {
             rmnodeToAdd.getHttpAddress(), rmnodeToAdd.getHealthReport(),
             rmnodeToAdd.getLastHealthReportTime(),
             ((RMNodeImpl) rmnodeToAdd).getCurrentState(),
-            rmnodeToAdd.getNodeManagerVersion(), -1,
-            ((RMNodeImpl) rmnodeToAdd).getUpdatedContainerInfoId(),
+            rmnodeToAdd.getNodeManagerVersion(), -1, //overcomitTimeOut is never set and getting it return an error
             pendingEventId);
     
     RMNodeToAdd hopRMNodeToAdd = getRMContextInfo().getToAddActiveRMNode(rmnodeToAdd.getNodeID());
