@@ -128,13 +128,10 @@ public class GarbageCollectorService extends AbstractService {
                         }
 
                         LOG.debug("Going to create " + collectors.size() + " Removers");
-                        long start = System.currentTimeMillis();
                         List<Future<Boolean>> futures = exec.invokeAll(collectors);
                         for (Future<Boolean> future : futures) {
                             future.get();
                         }
-
-                        LOG.info("Time to remove " + rpcIdsToRemove.size() + " rubbishes: " + (System.currentTimeMillis() - start));
                     }
                 }
             } catch (StorageException ex) {
@@ -193,11 +190,11 @@ public class GarbageCollectorService extends AbstractService {
 
                         hbDAO.removeGarbage(hbRPCs);
                         connector.flush();
-                        LOG.info("Removed Heartbeat GC");
+                        LOG.debug("Removed Heartbeat GC");
 
                         allocDAO.removeGarbage(allocRPCs);
                         connector.flush();
-                        LOG.info("Removed Allocate GC");
+                        LOG.debug("Removed Allocate GC");
 
                         gcDAO.removeAll(rpcsToRemove);
 
