@@ -75,6 +75,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.ConcurrentSkipListMap;
+import java.util.concurrent.ConcurrentSkipListSet;
+
 import org.apache.commons.lang.StringUtils;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
@@ -148,9 +150,10 @@ public class TransactionStateImpl extends TransactionState {
   // RPCs
   protected final Map<Integer, RPC> allocRPCToRemove =
           new ConcurrentHashMap<Integer, RPC>();
-
   protected final Map<Integer, RPC> hbRPCToRemove =
           new ConcurrentHashMap<Integer, RPC>();
+  protected final Map<Integer, GarbageCollectorRPC> gcRPCs =
+          new ConcurrentHashMap<Integer, GarbageCollectorRPC>();
 
   //PersistedEvent to persist for distributed RT
   private final Queue<PendingEvent> pendingEventsToAdd =
@@ -182,47 +185,30 @@ public class TransactionStateImpl extends TransactionState {
 
   public void addHeartbeatRPC(int rpcId) {
     hbRPCToRemove.put(rpcId, new RPC(rpcId));
+    gcRPCs.put(rpcId, new GarbageCollectorRPC(rpcId, GarbageCollectorRPC.TYPE.HEARTBEAT));
   }
 
   public void addAllocateRPC(int rpcId) {
     allocRPCToRemove.put(rpcId, new RPC(rpcId));
+    gcRPCs.put(rpcId, new GarbageCollectorRPC(rpcId, GarbageCollectorRPC.TYPE.ALLOCATE));
   }
 
   private void persistHeartbeatRPCRemoval() throws IOException {
-    List<RPC> hbRPCs =
-            new ArrayList<RPC>(hbRPCToRemove.size());
-    hbRPCs.addAll(hbRPCToRemove.values());
-
     HeartBeatRPCDataAccess hbDAO = (HeartBeatRPCDataAccess) RMStorageFactory
             .getDataAccess(HeartBeatRPCDataAccess.class);
-    hbDAO.removeAll(hbRPCs);
+    hbDAO.removeAll(hbRPCToRemove.values());
   }
 
   private void persistAllocateRPCRemoval() throws IOException {
-    List<RPC> allocRPCs =
-            new ArrayList<RPC>(allocRPCToRemove.size());
-    allocRPCs.addAll(allocRPCToRemove.values());
-
     AllocateRPCDataAccess allocDAO = (AllocateRPCDataAccess) RMStorageFactory
             .getDataAccess(AllocateRPCDataAccess.class);
-    allocDAO.removeAll(allocRPCs);
+    allocDAO.removeAll(allocRPCToRemove.values());
   }
 
   private void persistGarbageCollectedRPCs() throws IOException {
-    List<GarbageCollectorRPC> gcRPCs =
-            new ArrayList<GarbageCollectorRPC>(
-                    allocRPCToRemove.size() + hbRPCToRemove.size());
-    for (RPC allocRPC : allocRPCToRemove.values()) {
-      gcRPCs.add(new GarbageCollectorRPC(allocRPC.getRPCId(), GarbageCollectorRPC.TYPE.ALLOCATE));
-    }
-
-    for (RPC hbRPC : hbRPCToRemove.values()) {
-      gcRPCs.add(new GarbageCollectorRPC(hbRPC.getRPCId(), GarbageCollectorRPC.TYPE.HEARTBEAT));
-    }
-
     GarbageCollectorRPCDataAccess gcDAO = (GarbageCollectorRPCDataAccess) RMStorageFactory
             .getDataAccess(GarbageCollectorRPCDataAccess.class);
-    gcDAO.addAll(gcRPCs);
+    gcDAO.addAll(gcRPCs.values());
   }
 
   @Override

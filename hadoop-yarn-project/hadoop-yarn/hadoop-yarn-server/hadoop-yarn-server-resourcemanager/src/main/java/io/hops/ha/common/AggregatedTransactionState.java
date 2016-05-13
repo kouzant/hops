@@ -259,6 +259,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
             aggregateAllocRPCToRemove(tsImpl);
             aggregateHeartbeartRPCsToRemove(tsImpl);
+            aggregateGarbageCollectionRPCs(tsImpl);
 
             // FOR TESTING with TestTSCommit#testTxOrdering3
             /*if (toAddContainers.size() > 3) {
@@ -605,6 +606,10 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         }
 
         genericMapAggregate(ts.hbRPCToRemove, hbRPCToRemove);
+    }
+
+    private void aggregateGarbageCollectionRPCs(TransactionStateImpl ts) {
+        genericMapAggregate(ts.gcRPCs, gcRPCs);
     }
 
     private <T> void genericCollectionAggregate(Collection<T> source, Collection<T> target) {

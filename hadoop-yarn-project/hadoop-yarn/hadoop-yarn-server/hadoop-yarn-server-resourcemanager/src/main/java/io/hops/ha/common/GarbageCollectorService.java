@@ -87,20 +87,8 @@ public class GarbageCollectorService extends AbstractService {
         @Override
         public void run() {
             try {
-                LightWeightRequestHandler rpcsFetcher = new LightWeightRequestHandler(YARNOperationType.TEST) {
-                    @Override
-                    public Object performTask() throws IOException {
-                        connector.beginTransaction();
-                        connector.readLock();
-
-                        List<GarbageCollectorRPC> resultSet = gcDAO.getSubset(RPCS_LIMIT);
-
-                        connector.commit();
-                        return resultSet;
-                    }
-                };
-
                 while (!Thread.currentThread().isInterrupted()) {
+                    GarbageGetter rpcsFetcher = new GarbageGetter();
                     List<GarbageCollectorRPC> rpcIdsToRemove = (List<GarbageCollectorRPC>) rpcsFetcher.handle();
                     if (!rpcIdsToRemove.isEmpty()) {
                         LOG.debug("I will remove " + rpcIdsToRemove.size() + " RPCs");
@@ -189,11 +177,11 @@ public class GarbageCollectorService extends AbstractService {
                         connector.writeLock();
 
                         hbDAO.removeGarbage(hbRPCs);
-                        connector.flush();
+                        //connector.flush();
                         LOG.debug("Removed Heartbeat GC");
 
                         allocDAO.removeGarbage(allocRPCs);
-                        connector.flush();
+                        //connector.flush();
                         LOG.debug("Removed Allocate GC");
 
                         gcDAO.removeAll(rpcsToRemove);
@@ -215,4 +203,20 @@ public class GarbageCollectorService extends AbstractService {
         }
     }
 
+    private class GarbageGetter extends LightWeightRequestHandler {
+        public GarbageGetter() {
+            super(YARNOperationType.TEST);
+        }
+
+        @Override
+        public Object performTask() throws IOException {
+            connector.beginTransaction();
+            connector.readLock();
+
+            List<GarbageCollectorRPC> resultSet = gcDAO.getSubset(RPCS_LIMIT);
+
+            connector.commit();
+            return resultSet;
+        }
+    }
 }
