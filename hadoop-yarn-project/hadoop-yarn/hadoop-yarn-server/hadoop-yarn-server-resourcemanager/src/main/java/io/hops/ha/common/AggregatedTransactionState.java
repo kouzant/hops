@@ -246,6 +246,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             aggregateRanNodeToAdd(tsImpl);
             aggregateAllocateResponsesToAdd(tsImpl);
             aggregateAllocateResponsesToRemove(tsImpl);
+            aggregateGarbageCollectorAllocResp(tsImpl);
             aggregateJustFinishedContainerToAdd(tsImpl);
             aggregateJustFinishedContainerToRemove(tsImpl);
 
@@ -525,6 +526,10 @@ public class AggregatedTransactionState extends TransactionStateImpl {
             updateCounters(AllocateResponsesToRemove, ts.allocateResponsesToRemove.size());
         }
         genericMapAggregate(ts.allocateResponsesToRemove, allocateResponsesToRemove);
+    }
+
+    private void aggregateGarbageCollectorAllocResp(TransactionStateImpl ts) {
+        genericCollectionAggregate(ts.gcAllocateResponses, gcAllocateResponses);
     }
 
     private void aggregateJustFinishedContainerToAdd(TransactionStateImpl ts) {

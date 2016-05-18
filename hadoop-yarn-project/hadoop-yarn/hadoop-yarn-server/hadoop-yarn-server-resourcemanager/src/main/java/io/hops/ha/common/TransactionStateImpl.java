@@ -50,11 +50,7 @@ import io.hops.metadata.yarn.entity.RMNode;
 import io.hops.metadata.yarn.entity.RMNodeToAdd;
 import io.hops.metadata.yarn.entity.Resource;
 import io.hops.metadata.yarn.entity.appmasterrpc.*;
-import io.hops.metadata.yarn.entity.rmstatestore.AllocateResponse;
-import io.hops.metadata.yarn.entity.rmstatestore.ApplicationAttemptState;
-import io.hops.metadata.yarn.entity.rmstatestore.ApplicationState;
-import io.hops.metadata.yarn.entity.rmstatestore.UpdatedNode;
-import io.hops.metadata.yarn.entity.rmstatestore.RanNode;
+import io.hops.metadata.yarn.entity.rmstatestore.*;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.yarn.api.protocolrecords.impl.pb.AllocateResponsePBImpl;
@@ -137,6 +133,8 @@ public class TransactionStateImpl extends TransactionState {
       new ConcurrentHashMap<ApplicationAttemptId, AllocateResponse>();
   protected final Map<ApplicationAttemptId, AllocateResponse> allocateResponsesToRemove =
       new ConcurrentHashMap<ApplicationAttemptId, AllocateResponse>();
+  protected final Queue<GarbageCollectorAllocResp> gcAllocateResponses =
+          new ConcurrentLinkedQueue<GarbageCollectorAllocResp>();
   
   protected final Map<ContainerId, JustFinishedContainer> justFinishedContainerToAdd =
           new ConcurrentHashMap<ContainerId, JustFinishedContainer>();
@@ -272,6 +270,12 @@ public class TransactionStateImpl extends TransactionState {
     connector.flush();
     RMUtilities.printTimeLog("TS - persistAllocateResponsesToRemove", System.currentTimeMillis() - startTime,
             20);
+
+    startTime = System.currentTimeMillis();
+    persistGarbageCollectedAllocResp();
+    connector.flush();
+    RMUtilities.printTimeLog("TS - persistGarbageCollectedAllocResp", System.currentTimeMillis() - startTime,
+            50);
 
     startTime = System.currentTimeMillis();
     persistRMContainerToUpdate();
@@ -716,7 +720,15 @@ public class TransactionStateImpl extends TransactionState {
               lastResponse.getAllocatedContainers()){
         allocatedContainers.add(container.getId().toString());
       }
-      
+
+      // Let the Garbage Collector remove the old values
+      // -1 is the response ID when an AM is registered with the AMService
+      if (lastResponse.getResponseId() > -1) {
+        GarbageCollectorAllocResp toAdd = new GarbageCollectorAllocResp(id.toString(), lastResponse.getResponseId() - 1,
+                GarbageCollectorAllocResp.TYPE.ALLOCATED_CONTAINERS);
+        gcAllocateResponses.add(toAdd);
+      }
+
       Map<String, byte[]> completedContainersStatuses = new HashMap<String, byte[]>();
       for(ContainerStatus status: lastResponse.getCompletedContainersStatuses()){
              ContainerStatus toPersist = status;
@@ -726,6 +738,12 @@ public class TransactionStateImpl extends TransactionState {
         }
         completedContainersStatuses.put(status.getContainerId().toString(),
                 ((ContainerStatusPBImpl)toPersist).getProto().toByteArray());
+      }
+
+      if (lastResponse.getResponseId() > -1) {
+        GarbageCollectorAllocResp toAdd = new GarbageCollectorAllocResp(id.toString(), lastResponse.getResponseId() -1,
+                GarbageCollectorAllocResp.TYPE.CONTAINERS_STATUSES);
+        gcAllocateResponses.add(toAdd);
       }
       
       AllocateResponsePBImpl toPersist = new AllocateResponsePBImpl();
@@ -790,7 +808,15 @@ public class TransactionStateImpl extends TransactionState {
       connector.flush();
     }
   }
-  
+
+  private void persistGarbageCollectedAllocResp() throws IOException {
+    if (!gcAllocateResponses.isEmpty()) {
+      GarbageCollectorAllocRespDataAccess gcAllocRespDAO = (GarbageCollectorAllocRespDataAccess)
+              RMStorageFactory.getDataAccess(GarbageCollectorAllocRespDataAccess.class);
+      gcAllocRespDAO.addAll(gcAllocateResponses);
+    }
+  }
+
   public void removeAllocateResponse(ApplicationAttemptId id, int responseId,
                                      List<String> allocatedContainers,
                                      List<String> completedContainers) {

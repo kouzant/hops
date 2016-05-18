@@ -400,15 +400,32 @@ public class RMUtilities {
   }
 
   private static void setAllocatedContainers(
-          Map<ApplicationAttemptId, org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse> allocateResponses) throws IOException{
-    Map<String, List<String>> allocatedContainersId
+          Map<ApplicationAttemptId, org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse> allocateResponses)
+          throws IOException{
+    // ApplicationAttemptID might have more than one AllocatedContainers set
+    // since yarn_allocated_containers table is cleared from old values
+    // asynchronously from the Garbage Collector Service
+    Map<String, List<AllocateResponse>> dbAllocatedContainersId
             = getAllAllocatedContainers();
+
     Map<String, Container> containersInfo = getAllContainers();
-    for (ApplicationAttemptId applicationAttemptId : allocateResponses.keySet()) {
+    for (Map.Entry<ApplicationAttemptId, org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse> allocResponse :
+            allocateResponses.entrySet()) {
       List<org.apache.hadoop.yarn.api.records.Container> allocatedContainers
               = new ArrayList<org.apache.hadoop.yarn.api.records.Container>();
-      List<String> allocatedContainersIds = 
-              allocatedContainersId.get(applicationAttemptId.toString());
+      // Take only the allocated containers for the correct responseID
+      List<String> allocatedContainersIds = null;
+      List<AllocateResponse> recoveredAllocatedCont = dbAllocatedContainersId.get(allocResponse.getKey().toString());
+
+      if (recoveredAllocatedCont != null) {
+        for (AllocateResponse dbResp : recoveredAllocatedCont) {
+          if (dbResp.getResponseId() == allocResponse.getValue().getResponseId()) {
+            allocatedContainersIds = dbResp.getAllocatedContainers();
+            break;
+          }
+        }
+      }
+
       if (allocatedContainersIds != null) {
         for (String containerId : allocatedContainersIds) {
           Container hopContainer = containersInfo.get(containerId);
@@ -418,7 +435,7 @@ public class RMUtilities {
           allocatedContainers.add(container);
         }
       }
-      allocateResponses.get(applicationAttemptId).setAllocatedContainers(
+      allocateResponses.get(allocResponse.getKey()).setAllocatedContainers(
               allocatedContainers);
     }
   }
@@ -426,7 +443,7 @@ public class RMUtilities {
     
    
     
-  private static Map<String, List<String>> getAllAllocatedContainers() throws
+  private static Map<String, List<AllocateResponse>> getAllAllocatedContainers() throws
           IOException {
     AllocatedContainersDataAccess da
             = (AllocatedContainersDataAccess) RMStorageFactory.
