@@ -2585,14 +2585,14 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
   public static long finishRPC(final TransactionStateImpl ts) throws StorageException {
 
     LightWeightRequestHandler setfinishRPCHandler =
-        new LightWeightRequestHandler(YARNOperationType.TEST) {
+        new LightWeightRequestHandler(YARNOperationType.TEST, true) {
           @Override
           public Object performTask() throws IOException {
             boolean printTime = false;
             if (ts instanceof AggregatedTransactionState) {
               printTime = true;
             }
-            connector.beginTransaction();
+            connector.beginCachedTransaction();
             connector.writeLock();
             long start = System.currentTimeMillis();
             RPCDataAccess DA = (RPCDataAccess) RMStorageFactory
