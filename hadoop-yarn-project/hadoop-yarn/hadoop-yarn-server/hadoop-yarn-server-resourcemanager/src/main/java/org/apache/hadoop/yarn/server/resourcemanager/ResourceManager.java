@@ -1100,7 +1100,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   synchronized void transitionToLeadingRT(){
     //create and start containersLogService
     createAndStartQuotaServices();
-    createGarbageCollectorService();
+    //createGarbageCollectorService();
   }
   
   synchronized void transitionToNonLeadingRT(){
@@ -1191,6 +1191,9 @@ public class ResourceManager extends CompositeService implements Recoverable {
       }
 
       RMStorageFactory.stopTheNdbEventStreamingAPI();
+      RMStorageFactory.getConnector().stopStorage();
+      YarnAPIStorageFactory.getConnector().stopStorage();
+
       super.serviceStop();
       LOG.info("transition to standby serviceStop");
       transitionToStandby(false);
