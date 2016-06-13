@@ -1100,7 +1100,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   synchronized void transitionToLeadingRT(){
     //create and start containersLogService
     createAndStartQuotaServices();
-    createGarbageCollectorService();
+    //createGarbageCollectorService();
   }
   
   synchronized void transitionToNonLeadingRT(){
