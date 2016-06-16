@@ -1607,7 +1607,9 @@ public class ResourceManager extends CompositeService implements Recoverable {
     try {
       Configuration conf = new YarnConfiguration();
       YarnAPIStorageFactory.setConfiguration(conf);
+      YarnAPIStorageFactory.getConnector().initDTOCache();
       RMStorageFactory.setConfiguration(conf);
+      RMStorageFactory.getConnector().initDTOCache();
       StartupOption startOpt = parseArguments(argv);
       if (startOpt == null) {
         printUsage(System.err);
