@@ -53,9 +53,9 @@ public class TransactionStateManager extends AbstractService{
 
   // FOR EVALUATION
   private FileWriter commitTimeWriter;
-  private boolean writeHeader = true;
+  private FileWriter comNQWriter;
   public final boolean TESTING = false;
-    
+
   public TransactionStateManager(){
     super("TransactionStateManager");
     currentTransactionState = new TransactionStateImpl(
@@ -297,7 +297,8 @@ public class TransactionStateManager extends AbstractService{
 
   // FOR EVALUATION
   private void initDump(String filename) throws IOException {
-    commitTimeWriter = new FileWriter(filename, true);
+    commitTimeWriter = new FileWriter(filename, false);
+    comNQWriter = new FileWriter("/home/antonis/comNQ", false);
 
     StringBuilder sb = new StringBuilder();
     sb.append("commitRPCRemove,commitRMContextInfo,commitCSQueueInfo,commitRMNodeToUpdate,commitRMNodeInfo,"
@@ -311,6 +312,20 @@ public class TransactionStateManager extends AbstractService{
     if (commitTimeWriter != null) {
       commitTimeWriter.flush();
       commitTimeWriter.close();
+    }
+    if (comNQWriter != null) {
+      comNQWriter.flush();
+      comNQWriter.close();
+    }
+  }
+
+  public synchronized void dumpComNQTime(long time, String type) {
+    if (comNQWriter != null) {
+      try {
+        comNQWriter.write(time + "," + type + "\n");
+      } catch (IOException ex) {
+        LOG.error(ex, ex);
+      }
     }
   }
 

@@ -2382,6 +2382,10 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
     if (startCommitTime != null) {
       long commitAndQueueDuration = System.currentTimeMillis() - startCommitTime;
+
+      // FOR TESTING
+      ((TransactionStateImpl) ts).getManager().dumpComNQTime(commitAndQueueDuration, "Aggregated");
+
       if(commitAndQueueDuration>400){
         LOG.info("commit and queue too long " + commitAndQueueDuration);
       }
@@ -2739,10 +2743,15 @@ public static Map<String, List<ResourceRequest>> getAllResourceRequestsFullTrans
 
     if (startCommitTime != null) {
       long commitAndQueueDuration = System.currentTimeMillis() - startCommitTime;
+
+      if (!(ts instanceof AggregatedTransactionState)) {
+        ts.getManager().dumpComNQTime(commitAndQueueDuration, "Single");
+        startCommit.remove(ts);
+      }
+
       if(commitAndQueueDuration>100){
         LOG.info("commit and queue too long " + commitAndQueueDuration);
       }
-      startCommit.remove(ts);
 
       if (ts.getManager() != null) {
         if (commitAndQueueDuration > commitAndQueueThreshold || getQueueLength() > commitQueueMaxLength) {
