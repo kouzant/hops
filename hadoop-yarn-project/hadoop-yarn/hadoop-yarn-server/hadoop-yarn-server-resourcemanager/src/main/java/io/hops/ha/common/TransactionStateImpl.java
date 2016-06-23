@@ -65,6 +65,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.RMContainerImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 
+import java.io.FileWriter;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -162,7 +163,7 @@ public class TransactionStateImpl extends TransactionState {
   //for debug and evaluation
   String rpcType = null;
   NodeId nodeId = null;
-  private TransactionStateManager manager =null;
+  protected TransactionStateManager manager =null;
   
    public TransactionStateImpl(TransactionType type) {
     super(1, false);
@@ -1133,7 +1134,34 @@ public class TransactionStateImpl extends TransactionState {
         .add(new PendingEvent(rmnodeId, type, status, id));
   }
 
+  // FOR EVALUATION
+  public long commitRPCRemove = 0L;
+  public long commitRMContextInfo = 0L;
+  public long commitCSQueueInfo = 0L;
+  public long commitRMNodeToUpdate = 0L;
+  public long commitRMNodeInfo = 0L;
+  public long commitTransactionState = 0L;
+  public long commitFiCaSchedulerNodeInfo = 0L;
+  public long commitFairSchedulerNodeInfo = 0L;
+  public long commitSchedulerApplicationInfo = 0L;
+  public long commitTotalTime = 0L;
 
+
+  public void printCounters(String type) {
+    StringBuilder sb = new StringBuilder();
+
+    sb.append(commitRPCRemove + "," + commitRMContextInfo + "," + commitCSQueueInfo + "," + commitRMNodeToUpdate
+            + "," + commitRMNodeInfo + "," + commitTransactionState + "," + commitFiCaSchedulerNodeInfo
+            + "," + commitFairSchedulerNodeInfo + "," + commitSchedulerApplicationInfo + "," + commitTotalTime);
+    sb.append("," + type);
+    sb.append("\n");
+
+    try {
+      manager.dumpCommitTime(sb.toString());
+    } catch (IOException ex) {
+      LOG.error("Could not write file " + ex.getMessage());
+    }
+  }
   
   private class RPCFinisher implements Runnable {
 

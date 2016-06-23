@@ -17,6 +17,8 @@
 package io.hops.ha.common;
 
 import io.hops.metadata.util.RMUtilities;
+
+import java.io.FileWriter;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
@@ -34,6 +36,7 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.mortbay.util.IO;
 
 public class TransactionStateManager extends AbstractService{
   private static final Log LOG = LogFactory.getLog(TransactionStateManager.class);
@@ -47,7 +50,12 @@ public class TransactionStateManager extends AbstractService{
   private boolean running = false;
   
   Thread excutingThread;
-    
+
+  // FOR EVALUATION
+  private FileWriter commitTimeWriter;
+  private FileWriter comNQWriter;
+  public final boolean TESTING = false;
+
   public TransactionStateManager(){
     super("TransactionStateManager");
     currentTransactionState = new TransactionStateImpl(
@@ -61,6 +69,10 @@ public class TransactionStateManager extends AbstractService{
     batchMaxDuration = conf.getInt(YarnConfiguration.HOPS_BATCH_MAX_DURATION,
             YarnConfiguration.DEFAULT_HOPS_BATCH_MAX_DURATION);
     RMUtilities.setCommitAndQueueLimits(conf);
+
+    if (TESTING) {
+      initDump("/home/antonis/AggrCounters");
+    }
   }
   
   Runnable createThread(final TransactionStateManager tsm) {
@@ -250,7 +262,10 @@ public class TransactionStateManager extends AbstractService{
           LOG.warn("Interrupted Exception while stopping", ie);
         }
       }
-      
+
+      if (TESTING) {
+        closeDump();
+      }
     }
 
     // stop all the components
@@ -278,5 +293,45 @@ public class TransactionStateManager extends AbstractService{
   
   public boolean isRunning(){
     return running;
+  }
+
+  // FOR EVALUATION
+  private void initDump(String filename) throws IOException {
+    commitTimeWriter = new FileWriter(filename, false);
+    comNQWriter = new FileWriter("/home/antonis/comNQ", false);
+
+    StringBuilder sb = new StringBuilder();
+    sb.append("commitRPCRemove,commitRMContextInfo,commitCSQueueInfo,commitRMNodeToUpdate,commitRMNodeInfo,"
+            + "commitTransactionState,commitFiCaSchedulerNodeInfo,commitFairSchedulerNodeInfo,commitSchedulerApplicationInfo,"
+            + "commitTotalTime,type");
+    sb.append("\n");
+    dumpCommitTime(sb.toString());
+  }
+
+  private void closeDump() throws IOException {
+    if (commitTimeWriter != null) {
+      commitTimeWriter.flush();
+      commitTimeWriter.close();
+    }
+    if (comNQWriter != null) {
+      comNQWriter.flush();
+      comNQWriter.close();
+    }
+  }
+
+  public synchronized void dumpComNQTime(long time, String type) {
+    if (comNQWriter != null) {
+      try {
+        comNQWriter.write(time + "," + type + "\n");
+      } catch (IOException ex) {
+        LOG.error(ex, ex);
+      }
+    }
+  }
+
+  public synchronized void dumpCommitTime(String line) throws IOException {
+    if (commitTimeWriter != null) {
+      commitTimeWriter.write(line);
+    }
   }
 }

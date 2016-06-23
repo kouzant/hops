@@ -31,24 +31,11 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
     private static final Log LOG = LogFactory.getLog(AggregatedTransactionState.class);
 
-    public final boolean TESTING = false;
-
     private final Set<RMUtilities.ToBeAggregatedTS> aggregatedTs =
             new HashSet<RMUtilities.ToBeAggregatedTS>();
 
     private final Set<TransactionState> aggregatedSet =
             new HashSet<TransactionState>();
-
-    // FOR EVALUATION
-    public long commitRPCRemove = 0L;
-    public long commitRMContextInfo = 0L;
-    public long commitCSQueueInfo = 0L;
-    public long commitRMNodeToUpdate = 0L;
-    public long commitRMNodeInfo = 0L;
-    public long commitTransactionState = 0L;
-    public long commitFiCaSchedulerNodeInfo = 0L;
-    public long commitFairSchedulerNodeInfo = 0L;
-    public long commitSchedulerApplicationInfo = 0L;
 
     private final String containersToAdd = "ContainersToAdd";
     private final String containersToUpdate = "ContainersToUpdate";
@@ -156,21 +143,20 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void updateCounters(String counterName, int size) {
-        if (!TESTING) {
+        if (!manager.TESTING) {
             return;
         }
         int newSize = counters.get(counterName) + size;
         counters.put(counterName, newSize);
     }
 
-    public void printFileHeader(String fileName) {
+    public void printAggrFileHeader(String fileName) {
         try {
             FileWriter writer = new FileWriter(fileName, true);
             for (String key : counters.keySet()) {
                 writer.write(key + ",");
             }
-            writer.write("commitRPCRemove,commitRMContextInfo,commitCSQueueInfo,commitRMNodeToUpdate,commitRMNodeInfo,"
-                + "commitTransactionState,commitFiCaSchedulerNodeInfo,commitFairSchedulerNodeInfo,commitSchedulerApplicationInfo");
+
             writer.write("\n");
             writer.flush();
             writer.close();
@@ -179,16 +165,13 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         }
     }
 
-    public void printCounters(String fileName) {
+    public void printAggrCounters(String fileName) {
         StringBuilder sb = new StringBuilder();
 
         for (Integer value : counters.values()) {
             sb.append(value).append(",");
         }
 
-        sb.append(commitRPCRemove + "," + commitRMContextInfo + "," + commitCSQueueInfo + "," + commitRMNodeToUpdate
-                + "," + commitRMNodeInfo + "," + commitTransactionState + "," + commitFiCaSchedulerNodeInfo
-                + "," + commitFairSchedulerNodeInfo + "," + commitSchedulerApplicationInfo);
         sb.append("\n");
 
         try {
@@ -204,7 +187,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     public AggregatedTransactionState(TransactionType type, int initialCounter,
             boolean batch, TransactionStateManager manager) {
         super(type, initialCounter, batch, manager);
-        if (TESTING) {
+        if (manager.TESTING) {
             initCounters();
         }
     }
@@ -287,35 +270,35 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateContainersToAdd(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(containersToAdd, ts.toAddContainers.size());
         }
         genericMapAggregate(ts.toAddContainers, toAddContainers);
     }
 
     private void aggregateContainersToUpdate(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(containersToUpdate, ts.toUpdateContainers.size());
         }
         genericMapAggregate(ts.toUpdateContainers, toUpdateContainers);
     }
 
     private void aggregateContainersToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(containersToRemove, ts.toRemoveContainers.size());
         }
         genericMapAggregate(ts.toRemoveContainers, toRemoveContainers);
     }
 
     private void aggregateRMNodesToUpdate(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(RMNodesToUpdate, ts.rmNodesToUpdate.size());
         }
         genericMapAggregate(ts.rmNodesToUpdate, rmNodesToUpdate);
     }
 
     private void aggregateRMNodeInfos(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(RMNodeInfos, ts.rmNodeInfos.size());
 
             for (RMNodeInfo info : ts.rmNodeInfos.values()) {
@@ -363,7 +346,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateFiCaSchedulerNodeInfoToUpdate(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(FicaSchedulerNodeInfoToUpdate, ts.ficaSchedulerNodeInfoToUpdate.size());
         }
         FiCaSchedulerNodeInfoToUpdate fica = null;
@@ -383,14 +366,14 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateFiCaSchedulerNodeInfoToAdd(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(FicaSchedulerNodeInfoToAdd, ts.ficaSchedulerNodeInfoToAdd.size());
         }
         genericMapAggregate(ts.ficaSchedulerNodeInfoToAdd, ficaSchedulerNodeInfoToAdd);
     }
 
     private void aggregateFiCaSchedulerNodeInfoToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(FicaSchedulerNodeInfoToRemove, ts.ficaSchedulerNodeInfoToRemove.size());
         }
         genericMapAggregate(ts.ficaSchedulerNodeInfoToRemove, ficaSchedulerNodeInfoToRemove);
@@ -401,7 +384,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         Map<NodeId, FSSchedulerNode> fsSchedulerNodesToAdd =
                 toAggregate.getFsSchedulerNodesToAdd();
         if (fsSchedulerNodesToAdd != null) {
-            if (TESTING) {
+            if (manager.TESTING) {
                 updateCounters(FsSchedulerNodesToAdd, fsSchedulerNodesToAdd.size());
             }
             genericMapAggregate(fsSchedulerNodesToAdd,
@@ -411,7 +394,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
         Map<NodeId, FSSchedulerNode> fsSchedulerNodesToRemove =
                 toAggregate.getFsSchedulerNodesToRemove();
         if (fsSchedulerNodesToRemove != null) {
-            if (TESTING) {
+            if (manager.TESTING) {
                 updateCounters(FsSchedulerNodesToRemove, fsSchedulerNodesToRemove.size());
             }
             genericMapAggregate(fsSchedulerNodesToRemove,
@@ -420,21 +403,21 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateRMContainersToUpdate(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(RMContainersToUpdate, ts.rmContainersToUpdate.size());
         }
         genericMapAggregate(ts.rmContainersToUpdate, rmContainersToUpdate);
     }
 
     private void aggregateRMContainersToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(RMContainersToRemove, ts.rmContainersToRemove.size());
         }
         genericMapAggregate(ts.rmContainersToRemove, rmContainersToRemove);
     }
 
     private void aggregateCSQueueInfo(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(CSLeafQueueUserInfoToAdd, ts.csQueueInfo.getCSLeafQueuePendingAppToAdd().size());
             updateCounters(CSQueueInfoUsersToRemove, ts.csQueueInfo.getUsersToRemove().size());
             updateCounters(CSLeafQueuePendingAppToAdd, ts.csQueueInfo.getCSLeafQueuePendingAppToAdd().size());
@@ -454,7 +437,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateSchedulerApplicationInfo(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(SchedulerApplicationsToAdd,
                     ts.schedulerApplicationInfo.getSchedulerApplicationsToAdd().size());
             updateCounters(FicaSchedulerAppInfo, ts.schedulerApplicationInfo.getFiCaSchedulerAppInfo().size());
@@ -473,56 +456,56 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateApplicationsToAdd(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(ApplicationsToAdd, ts.applicationsToAdd.size());
         }
         genericMapAggregate(ts.applicationsToAdd, applicationsToAdd);
     }
 
     private void aggregateUpdatedNodeIdToAdd(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(UpdatedNodeIdToAdd, ts.updatedNodeIdToAdd.size());
         }
         genericMapAggregate(ts.updatedNodeIdToAdd, updatedNodeIdToAdd);
     }
 
     private void aggregateUpdatedNodeIdToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(UpdatedNodeIdToRemove, ts.updatedNodeIdToRemove.size());
         }
         genericMapAggregate(ts.updatedNodeIdToRemove, updatedNodeIdToRemove);
     }
 
     private void aggregateApplicationsStateToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(ApplicationsStateToRemove, ts.applicationsStateToRemove.size());
         }
         genericMapAggregate(ts.applicationsStateToRemove, applicationsStateToRemove);
     }
 
     private void aggregateAppAttempts(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(AppAttempts, ts.appAttempts.size());
         }
         genericMapAggregate(ts.appAttempts, appAttempts);
     }
 
     private void aggregateRanNodeToAdd(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(RanNodeToAdd, ts.ranNodeToAdd.size());
         }
         genericMapAggregate(ts.ranNodeToAdd, ranNodeToAdd);
     }
 
     private void aggregateAllocateResponsesToAdd(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(AllocateResponsesToAdd, ts.allocateResponsesToAdd.size());
         }
         genericMapAggregate(ts.allocateResponsesToAdd, allocateResponsesToAdd);
     }
 
     private void aggregateAllocateResponsesToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(AllocateResponsesToRemove, ts.allocateResponsesToRemove.size());
         }
         genericMapAggregate(ts.allocateResponsesToRemove, allocateResponsesToRemove);
@@ -533,21 +516,21 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateJustFinishedContainerToAdd(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(JustFinishedContainerToAdd, ts.justFinishedContainerToAdd.size());
         }
         genericMapAggregate(ts.justFinishedContainerToAdd, justFinishedContainerToAdd);
     }
 
     private void aggregateJustFinishedContainerToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(JustFinishedContainerToRemove, ts.justFinishedContainerToRemove.size());
         }
         genericMapAggregate(ts.justFinishedContainerToRemove, justFinishedContainerToRemove);
     }
 
     private void aggregateRMContextInfo(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(ActiveNodesToAdd, ts.rmcontextInfo.getActiveNodesToAdd().size());
             updateCounters(ActiveNodesToRemove, ts.rmcontextInfo.getActiveNodesToRemove().size());
             updateCounters(InactiveNodesToAdd, ts.rmcontextInfo.getInactiveNodesToAdd().size());
@@ -572,7 +555,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
 
     // Never used in TransactionStateImpl
     private void aggregatePersistedEventsToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(PersistedEventsToRemove, ts.persistedEventsToRemove.size());
         }
         genericCollectionAggregate(ts.persistedEventsToRemove,
@@ -580,7 +563,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateRPCIds(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(RPCids, ts.getRPCIds().size());
         }
 
@@ -598,7 +581,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateAllocRPCToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(AllocRPC, ts.allocRPCToRemove.size());
         }
 
@@ -606,7 +589,7 @@ public class AggregatedTransactionState extends TransactionStateImpl {
     }
 
     private void aggregateHeartbeartRPCsToRemove(TransactionStateImpl ts) {
-        if (TESTING) {
+        if (manager.TESTING) {
             updateCounters(HBRPCs, ts.hbRPCToRemove.size());
         }
 
