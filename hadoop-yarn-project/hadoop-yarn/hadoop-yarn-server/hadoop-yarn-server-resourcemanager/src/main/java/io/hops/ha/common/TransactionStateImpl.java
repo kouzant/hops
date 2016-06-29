@@ -340,7 +340,7 @@ public class TransactionStateImpl extends TransactionState {
             30);
 
     startTime = System.currentTimeMillis();
-    persistGarbageCollectedRPCs();
+    // persistGarbageCollectedRPCs();
     connector.flush();
     RMUtilities.printTimeLog("TS - persistGarbageCollectedRPCs", System.currentTimeMillis() - startTime,
             40);
