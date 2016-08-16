@@ -1498,6 +1498,19 @@ public class UserGroupInformation {
 
     private void setUserGroups(String user, String[] groups) {
       userToGroupsMapping.put(user, Arrays.asList(groups));
+      createHopsUser(user, groups);
+    }
+  }
+
+  private static void createHopsUser(String user){
+    createHopsUser(user, null);
+  }
+
+  private static void createHopsUser(String user, String[] groups){
+    try {
+      UsersGroups.addUserToGroupsTx(user, groups);
+    }catch (IOException ex){
+      throw new RuntimeException(ex);
     }
   }
 
