@@ -141,4 +141,8 @@ public interface RMContext {
   EmbeddedElector getLeaderElectorService();
 
   String getHAZookeeperConnectionState();
+  
+  boolean isLeader();
+  
+  boolean isDistributed();
 }

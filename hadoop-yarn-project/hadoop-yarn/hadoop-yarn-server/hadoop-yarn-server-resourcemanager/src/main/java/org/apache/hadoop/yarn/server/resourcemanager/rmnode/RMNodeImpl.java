@@ -85,6 +85,7 @@ import org.apache.hadoop.yarn.state.StateMachineFactory;
 import org.apache.hadoop.yarn.util.resource.Resources;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.hops.util.DBUtility;
 
 /**
  * This class is used to keep track of all the applications/containers
@@ -102,13 +103,13 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       .getRecordFactory(null);
 
   private final ReadLock readLock;
-  private final WriteLock writeLock;
+  protected final WriteLock writeLock;
 
-  private final ConcurrentLinkedQueue<UpdatedContainerInfo> nodeUpdateQueue;
-  private volatile boolean nextHeartBeat = true;
+  protected final ConcurrentLinkedQueue<UpdatedContainerInfo> nodeUpdateQueue;
+  protected volatile boolean nextHeartBeat = true;
 
-  private final NodeId nodeId;
-  private final RMContext context;
+  protected final NodeId nodeId;
+  protected final RMContext context;
   private final String hostName;
   private final int commandPort;
   private int httpPort;
@@ -131,11 +132,11 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
   private final ContainerAllocationExpirer containerAllocationExpirer;
   /* set of containers that have just launched */
-  private final Set<ContainerId> launchedContainers =
+  protected final Set<ContainerId> launchedContainers =
     new HashSet<ContainerId>();
 
   /* set of containers that need to be cleaned */
-  private final Set<ContainerId> containersToClean = new TreeSet<ContainerId>(
+  protected final Set<ContainerId> containersToClean = new TreeSet<ContainerId>(
       new ContainerIdComparator());
 
   /* set of containers that need to be signaled */
@@ -146,7 +147,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
    * set of containers to notify NM to remove them from its context. Currently,
    * this includes containers that were notified to AM about their completion
    */
-  private final Set<ContainerId> containersToBeRemovedFromNM =
+  protected final Set<ContainerId> containersToBeRemovedFromNM =
       new HashSet<ContainerId>();
 
   /* the list of applications that have finished and need to be purged */
@@ -163,7 +164,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   private final Map<ContainerId, Container> nmReportedIncreasedContainers =
       new HashMap<>();
 
-  private NodeHeartbeatResponse latestNodeHeartBeatResponse = recordFactory
+  protected NodeHeartbeatResponse latestNodeHeartBeatResponse = recordFactory
       .newRecordInstance(NodeHeartbeatResponse.class);
 
   private static final StateMachineFactory<RMNodeImpl,
@@ -696,7 +697,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     }
   }
 
-  private void updateMetricsForDeactivatedNode(NodeState initialState,
+  protected void updateMetricsForDeactivatedNode(NodeState initialState,
                                                NodeState finalState) {
     ClusterMetrics metrics = ClusterMetrics.getMetrics();
 
