@@ -170,8 +170,15 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
         .getAbsolutePath());
 
     writeToHostsFile("");
-    rm = new MockRM(conf);
+//    final DrainDispatcher dispatcher = new DrainDispatcher();
+    rm = new MockRM(conf) {
+      @Override
+      protected Dispatcher createDispatcher() {
+        return new DrainDispatcher();
+      }
+    };
     rm.start();
+    DrainDispatcher dispatcher = (DrainDispatcher) rm.getRMContext().getDispatcher();
 
     MockNM nm1 = rm.registerNode("host1:1234", 5120);
     MockNM nm2 = rm.registerNode("host2:5678", 10240);
@@ -841,6 +848,31 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
   }
 
   @Test
+  public void testDistributedNodeRegistrationSuccess() throws Exception {
+    writeToHostsFile("host2");
+    Configuration conf = new Configuration();
+    conf.set(YarnConfiguration.RM_NODES_INCLUDE_FILE_PATH, hostFile
+        .getAbsolutePath());
+    conf.setBoolean(YarnConfiguration.DISTRIBUTED_RM, true);
+    rm = new MockRM(conf);
+    rm.start();
+
+    ResourceTrackerService resourceTrackerService = rm.getResourceTrackerService();
+    RegisterNodeManagerRequest req = Records.newRecord(
+        RegisterNodeManagerRequest.class);
+    NodeId nodeId = NodeId.newInstance("host2", 1234);
+    Resource capability = BuilderUtils.newResource(1024, 1);
+    req.setResource(capability);
+    req.setNodeId(nodeId);
+    req.setHttpPort(1234);
+    req.setNMVersion(YarnVersionInfo.getVersion());
+    // trying to register a invalid node.
+    RegisterNodeManagerResponse response = resourceTrackerService.registerNodeManager(req);
+    Assert.assertEquals(NodeAction.NORMAL,response.getNodeAction());
+    //check that datas are commited to the database
+  }
+  
+  @Test
   public void testNodeRegistrationVersionLessThanRM() throws Exception {
     writeToHostsFile("host2");
     Configuration conf = new Configuration();
@@ -1104,9 +1136,15 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
           }
         };
       }
+
+      @Override
+      protected Dispatcher createDispatcher() {
+        return new DrainDispatcher();
+      }
     };
     rm.start();
-
+    DrainDispatcher dispatcher = (DrainDispatcher) rm.getRMContext().getDispatcher();
+    
     MockNM nm1 = rm.registerNode("host1:1234", 5120);
     MockNM nm2 = rm.registerNode("host2:5678", 5120);
     nm1.nodeHeartbeat(true);

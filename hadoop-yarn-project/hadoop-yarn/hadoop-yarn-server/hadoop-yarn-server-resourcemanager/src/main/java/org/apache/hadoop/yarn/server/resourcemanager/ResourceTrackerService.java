@@ -85,7 +85,11 @@ import org.apache.hadoop.yarn.util.RackResolver;
 import org.apache.hadoop.yarn.util.YarnVersionInfo;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.hops.metadata.yarn.entity.Load;
+import io.hops.util.DBUtility;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplDist;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplNotDist;
 
 public class ResourceTrackerService extends AbstractService implements
     ResourceTracker {
@@ -115,6 +119,13 @@ public class ResourceTrackerService extends AbstractService implements
   private boolean isDistributedNodeLabelsConf;
   private boolean isDelegatedCentralizedNodeLabelsConf;
   private DynamicResourceConfiguration drConf;
+  private AtomicInteger load = new AtomicInteger(0);
+  
+  static {
+    resync.setNodeAction(NodeAction.RESYNC);
+
+    shutDown.setNodeAction(NodeAction.SHUTDOWN);
+  }
 
   public ResourceTrackerService(RMContext rmContext,
       NodesListManager nodesListManager,
@@ -379,7 +390,7 @@ public class ResourceTrackerService extends AbstractService implements
     //TODO get the class to use from the config file
     RMNode rmNode;
     if (!rmContext.isDistributed()) {
-      rmNode = new RMNodeImpl(nodeId, rmContext, host, cmPort, httpPort,
+      rmNode = new RMNodeImplNotDist(nodeId, rmContext, host, cmPort, httpPort,
               resolve(host), capability, nodeManagerVersion);
     } else {
       rmNode = new RMNodeImplDist(nodeId, rmContext, host, cmPort, httpPort,
@@ -393,6 +404,11 @@ public class ResourceTrackerService extends AbstractService implements
     } else {
       LOG.info("Reconnect from the node at: " + host);
       this.nmLivelinessMonitor.unregister(nodeId);
+      if (this.rmContext.isDistributed()) {
+        load.decrementAndGet();
+        DBUtility.updateLoad(new Load(rmContext.getGroupMembershipService().
+                getHostname(), load.get()));
+      }
       // Reset heartbeat ID since node just restarted.
       oldNode.resetLastNodeHeartBeatResponse();
       this.rmContext
@@ -406,7 +422,11 @@ public class ResourceTrackerService extends AbstractService implements
     // present for any running application.
     this.nmTokenSecretManager.removeNodeKey(nodeId);
     this.nmLivelinessMonitor.register(nodeId);
-    
+    if (this.rmContext.isDistributed()) {
+      load.incrementAndGet();
+      DBUtility.updateLoad(new Load(rmContext.getGroupMembershipService().
+              getHostname(), load.get()));
+    }
     // Handle received container status, this should be processed after new
     // RMNode inserted
     if (!rmContext.isWorkPreservingRecoveryEnabled()) {

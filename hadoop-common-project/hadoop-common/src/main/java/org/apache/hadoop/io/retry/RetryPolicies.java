@@ -706,7 +706,7 @@ public class RetryPolicies {
    * @param cap value at which to cap the base sleep time
    * @return an amount of time to sleep
    */
-  private static long calculateExponentialTime(long time, int retries,
+  public static long calculateExponentialTime(long time, int retries,
       long cap) {
     long baseTime = Math.min(time * (1L << retries), cap);
     return (long) (baseTime * (ThreadLocalRandom.current().nextDouble() + 0.5));

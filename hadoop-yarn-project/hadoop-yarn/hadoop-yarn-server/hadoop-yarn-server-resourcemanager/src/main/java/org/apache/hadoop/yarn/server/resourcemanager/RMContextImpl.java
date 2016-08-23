@@ -52,6 +52,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.RMDelegationTokenS
 import org.apache.hadoop.yarn.util.Clock;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.hops.util.GroupMembershipService;
 
 public class RMContextImpl implements RMContext {
 
@@ -76,6 +77,9 @@ public class RMContextImpl implements RMContext {
 
   private final Object haServiceStateLock = new Object();
 
+  private boolean isDistributed;
+  private GroupMembershipService groupMembershipService;
+  
   /**
    * Default constructor. To be used in conjunction with setter methods for
    * individual fields.
@@ -482,5 +486,31 @@ public class RMContextImpl implements RMContext {
     } else {
       return elector.getZookeeperConnectionState();
     }
+    
+  public void setIsDistributed(boolean isDistributed) {
+    this.isDistributed = isDistributed;
+  }
+
+  @Override
+  public boolean isDistributed() {
+    return isDistributed;
+  }
+
+  @Override
+  public boolean isLeader() {
+    if (!isHAEnabled) {
+      return true;
+    }
+    return groupMembershipService.isLeader();
+  }
+
+  public void setRMGroupMembershipService(
+          GroupMembershipService groupMembershipService) {
+    this.groupMembershipService = groupMembershipService;
+  }
+
+  @Override
+  public GroupMembershipService getGroupMembershipService() {
+    return this.groupMembershipService;
   }
 }
