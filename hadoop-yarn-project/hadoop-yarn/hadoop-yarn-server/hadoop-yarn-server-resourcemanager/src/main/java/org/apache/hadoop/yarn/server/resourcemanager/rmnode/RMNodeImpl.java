@@ -337,7 +337,7 @@ public class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       // create the topology tables
       .installTopology();
 
-  private final StateMachine<NodeState, RMNodeEventType,
+  protected final StateMachine<NodeState, RMNodeEventType,
                              RMNodeEvent> stateMachine;
 
   public RMNodeImpl(NodeId nodeId, RMContext context, String hostName,
