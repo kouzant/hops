@@ -82,4 +82,8 @@ public interface NodeHeartbeatResponse {
 
   List<Container> getContainersToDecrease();
   void addAllContainersToDecrease(Collection<Container> containersToDecrease);
+
+  boolean getNextheartbeat();
+  
+  public void setNextheartbeat(boolean nextHeartbeat);
 }

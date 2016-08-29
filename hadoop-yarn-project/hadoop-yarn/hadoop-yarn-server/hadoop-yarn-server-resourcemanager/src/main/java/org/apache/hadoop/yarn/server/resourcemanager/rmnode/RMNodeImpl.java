@@ -1053,4 +1053,8 @@ public static class RecommissionNodeTransition
   public void setUntrackedTimeStamp(long ts) {
     this.timeStamp = ts;
   }
-}
+  
+  public boolean getNextHeartbeat(){
+    return nextHeartBeat;
+  }
+ }

@@ -682,6 +682,17 @@ public class NodeHeartbeatResponsePBImpl extends
   private SignalContainerRequestProto convertToProtoFormat(
       SignalContainerRequest t) {
     return ((SignalContainerRequestPBImpl)t).getProto();
+  
+  @Override
+  public synchronized boolean getNextheartbeat() {
+    NodeHeartbeatResponseProtoOrBuilder p = viaProto ? proto : builder;
+    return (p.getNextheartbeat());
+  }
+  
+  @Override
+  public void setNextheartbeat(boolean nextHeartbeat) {
+    maybeInitBuilder();
+    builder.setNextheartbeat(nextHeartbeat);
   }
 }
 

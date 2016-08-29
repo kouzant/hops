@@ -83,10 +83,12 @@ message NodeHeartbeatResponseProto {
   optional string diagnostics_message = 8;
   repeated ContainerIdProto containers_to_be_removed_from_nm = 9;
   repeated SystemCredentialsForAppsProto system_credentials_for_apps = 10;
+<<<<<<< 2586f1474eee0d83c6a7e5dfaca65631bcfa1ba3
   optional bool areNodeLabelsAcceptedByRM = 11 [default = false];
   repeated ContainerProto containers_to_decrease = 12;
   repeated SignalContainerRequestProto containers_to_signal = 13;
   optional ResourceProto resource = 14;
+  optional bool nextheartbeat = 15;
 }
 
 message SystemCredentialsForAppsProto {

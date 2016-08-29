@@ -49,7 +49,7 @@ public class ServerRMProxy<T> extends RMProxy<T> {
    * @throws IOException
    */
   public static <T> T createRMProxy(final Configuration configuration,
-      final Class<T> protocol) throws IOException {
+      final Class<T> protocol, boolean toLeader) throws IOException {
     long rmConnectWait =
         configuration.getLong(
             YarnConfiguration.RESOURCEMANAGER_CONNECT_MAX_WAIT_MS,
@@ -68,7 +68,7 @@ public class ServerRMProxy<T> extends RMProxy<T> {
             YarnConfiguration.NM_RESOURCEMANAGER_CONNECT_RETRY_INTERVAL_MS,
                 rmRetryInterval);
     return createRMProxy(configuration, protocol, INSTANCE,
-        nmRmConnectWait, nmRmRetryInterval);
+        nmRmConnectWait, nmRmRetryInterval, toLeader);
   }
 
   @InterfaceAudience.Private

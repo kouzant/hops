@@ -313,6 +313,7 @@ public class ResourceTrackerService extends AbstractService implements
   public RegisterNodeManagerResponse registerNodeManager(
       RegisterNodeManagerRequest request) throws YarnException,
       IOException {
+    LOG.info("receive registration request");
     NodeId nodeId = request.getNodeId();
     String host = nodeId.getHost();
     int cmPort = nodeId.getPort();
@@ -553,6 +554,8 @@ public class ResourceTrackerService extends AbstractService implements
       nodeHeartBeatResponse.setSystemCredentialsForApps(systemCredentials);
     }
 
+    nodeHeartBeatResponse.setNextheartbeat(((RMNodeImpl) rmNode).
+            getNextHeartbeat());
     // 4. Send status to RMNode, saving the latest response.
     RMNodeStatusEvent nodeStatusEvent =
         new RMNodeStatusEvent(nodeId, remoteNodeStatus, nodeHeartBeatResponse);

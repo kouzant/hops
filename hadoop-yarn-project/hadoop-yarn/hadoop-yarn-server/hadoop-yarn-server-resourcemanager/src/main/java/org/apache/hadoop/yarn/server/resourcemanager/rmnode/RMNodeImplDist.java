@@ -435,10 +435,11 @@ public class RMNodeImplDist extends RMNodeImpl {
 //    } else {
 //      rmNode.context.getDispatcher().getEventHandler()
 //              .handle(new NodeAddedSchedulerEvent(rmNode, containers));
+if(rmNode.context.isLeader()){
       rmNode.context.getDispatcher().getEventHandler().handle(
               new NodesListManagerEvent(
                       NodesListManagerEventType.NODE_USABLE, rmNode));
-//    }
+    }
   }
 
   protected NodeState reconnectNodeTransitionInternal(RMNodeImpl rmNode,
@@ -579,9 +580,16 @@ public class RMNodeImplDist extends RMNodeImpl {
 //                .handle(new NodeRemovedSchedulerEvent(rmNode));
 //      }
     }
+    if(rmNode.context.isLeader()){
     rmNode.context.getDispatcher().getEventHandler().handle(
-        new NodesListManagerEvent(
-            NodesListManagerEventType.NODE_UNUSABLE, rmNode));
+            new NodesListManagerEvent(
+                    NodesListManagerEventType.NODE_UNUSABLE, rmNode));
+    }
+    // Deactivate the node
+    rmNode.context.getRMNodes().remove(rmNode.nodeId);
+    LOG.info("Deactivating Node " + rmNode.nodeId + " as it is now "
+            + finalState);
+    rmNode.context.getInactiveRMNodes().put(rmNode.nodeId.getHost(), rmNode);
 
     //Update the metrics
     rmNode.updateMetricsForDeactivatedNode(initialState, finalState);
@@ -612,10 +620,11 @@ public class RMNodeImplDist extends RMNodeImpl {
 //      } else {
 //        rmNode.context.getDispatcher().getEventHandler().handle(
 //                new NodeAddedSchedulerEvent(rmNode));
+if(rmNode.context.isLeader()){
         rmNode.context.getDispatcher().getEventHandler().handle(
                 new NodesListManagerEvent(
                         NodesListManagerEventType.NODE_USABLE, rmNode));
-//      }
+      }
       // ??? how about updating metrics before notifying to ensure that
       // notifiers get update metadata because they will very likely query it
       // upon notification

@@ -498,7 +498,7 @@ public class RMContextImpl implements RMContext {
 
   @Override
   public boolean isLeader() {
-    if (!isHAEnabled) {
+    if (!isHAEnabled && !isDistributed) {
       return true;
     }
     return groupMembershipService.isLeader();
