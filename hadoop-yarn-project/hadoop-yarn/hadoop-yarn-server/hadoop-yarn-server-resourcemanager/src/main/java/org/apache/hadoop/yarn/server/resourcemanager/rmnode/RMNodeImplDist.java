@@ -271,12 +271,8 @@ public class RMNodeImplDist extends RMNodeImpl {
           RMNodeEvent event) {
     rmNode.containersToClean.add(((RMNodeCleanContainerEvent) event).
             getContainerId());
-    try {
-      DBUtility.addContainerToClean(((RMNodeCleanContainerEvent) event).
-              getContainerId(), rmNode.getNodeID());
-    } catch (IOException ex) {
-      LOG.error(ex, ex);
-    }
+    DBUtility.addContainerToClean(((RMNodeCleanContainerEvent) event).
+            getContainerId(), rmNode.getNodeID());
   }
 
   @Override
@@ -285,12 +281,27 @@ public class RMNodeImplDist extends RMNodeImpl {
             = new ArrayList<UpdatedContainerInfo>();
     try {
       UpdatedContainerInfo containerInfo;
+      long startPolling = System.currentTimeMillis();
       while ((containerInfo = nodeUpdateQueue.poll()) != null) {
         latestContainerInfoList.add(containerInfo);
       }
+      long diff = System.currentTimeMillis() - startPolling;
+      if (diff > 2) {
+        LOG.error("<Maregka> polling: " + diff);
+      }
+      long startRemoveUCI = System.currentTimeMillis();
       DBUtility.removeUCI(latestContainerInfoList, this.nodeId.toString());
+      diff = System.currentTimeMillis() - startRemoveUCI;
+      if (diff > 2) {
+        LOG.error("<Maregka> removeUCI: " + diff);
+      }
       this.nextHeartBeat = true;
+      long startNextHB = System.currentTimeMillis();
       DBUtility.addNextHB(this.nextHeartBeat, this.nodeId.toString());
+      diff = System.currentTimeMillis() - startNextHB;
+      if (diff > 2) {
+        LOG.error("<Maregka> addNextHB: " + diff);
+      }
     } catch (IOException ex) {
       LOG.error(ex, ex);
     }

@@ -18,6 +18,7 @@ package io.hops.util;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.hops.exception.StorageException;
 import io.hops.metadata.yarn.dal.*;
+import io.hops.metadata.yarn.entity.Container;
 import io.hops.metadata.yarn.entity.NextHeartbeat;
 import io.hops.metadata.yarn.dal.util.YARNOperationType;
 import io.hops.metadata.yarn.entity.*;
@@ -26,6 +27,11 @@ import io.hops.transaction.handler.AsyncLightWeightRequestHandler;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -122,28 +128,7 @@ public class DBUtility {
     addFinishedApplication.handle();
   }
 
-  public static void addContainerToClean(final ContainerId containerId,
-          final org.apache.hadoop.yarn.api.records.NodeId nodeId) throws
-          IOException {
-    AsyncLightWeightRequestHandler addContainerToClean
-            = new AsyncLightWeightRequestHandler(
-                    YARNOperationType.TEST) {
-      @Override
-      public Object performTask() throws StorageException {
-        connector.beginTransaction();
-        connector.writeLock();
-        ContainerIdToCleanDataAccess ctcDA
-                = (ContainerIdToCleanDataAccess) RMStorageFactory
-                .getDataAccess(ContainerIdToCleanDataAccess.class);
-        ctcDA.add(
-                new io.hops.metadata.yarn.entity.ContainerId(nodeId.toString(),
-                        containerId.toString()));
-        connector.commit();
-        return null;
-      }
-    };
-    addContainerToClean.handle();
-  }
+
 
   public static RMNode processHopRMNodeCompsForScheduler(RMNodeComps hopRMNodeComps, RMContext rmContext)
     throws InvalidProtocolBufferException {
@@ -261,24 +246,116 @@ public class DBUtility {
 
     return rmNode;
   }
-  
-  public static void addNextHB(final boolean nextHB, final String nodeId) throws IOException {
-    AsyncLightWeightRequestHandler addNextHB
-            = new AsyncLightWeightRequestHandler(
-                    YARNOperationType.TEST) {
-      @Override
-      public Object performTask() throws StorageException {
-        connector.beginTransaction();
-        connector.writeLock();
-        NextHeartbeatDataAccess nhbDA
-                = (NextHeartbeatDataAccess) RMStorageFactory
-                .getDataAccess(NextHeartbeatDataAccess.class);
-        nhbDA.update(new NextHeartbeat(nodeId, nextHB));
-        connector.commit();
-        return null;
+
+  private static int numOfNxtHB = 0;
+  private static long lastTimestamp = 0;
+
+  private final static List<io.hops.metadata.yarn.entity.ContainerId> toCommitCidToClean =
+          new ArrayList<>();
+  private final static ReentrantLock toCommitCidCleanLock =
+          new ReentrantLock(true);
+  private static Thread cidToCleanCommitter = null;
+  private final static Semaphore toCommitSemaphore = new Semaphore(0, true);
+  private final static int MIN_NUM_OF_CONTAINERS = 50;
+
+  public static void addContainerToClean(ContainerId containerId,
+          org.apache.hadoop.yarn.api.records.NodeId nodeId) {
+
+    toCommitCidCleanLock.lock();
+    try {
+      toCommitCidToClean.add(new io.hops.metadata.yarn.entity.ContainerId(nodeId.toString(),
+              containerId.toString()));
+      toCommitSemaphore.release();
+    } finally {
+      toCommitCidCleanLock.unlock();
+    }
+
+    if (cidToCleanCommitter == null) {
+      synchronized (DBUtility.class) {
+        if (cidToCleanCommitter == null) {
+          cidToCleanCommitter = new Thread(new ContainerToCleanCommitter());
+          cidToCleanCommitter.setName("cidToCleanCommitter");
+          cidToCleanCommitter.start();
+          LOG.error("HOP :: Started ContainerToClean committer thread");
+        }
       }
-    };
+    }
+  }
+
+  private static class ContainerToCleanCommitter implements Runnable {
+
+    @Override
+    public void run() {
+      while (!Thread.currentThread().isInterrupted()) {
+
+        try {
+          toCommitSemaphore.tryAcquire(MIN_NUM_OF_CONTAINERS,
+                  200, TimeUnit.MILLISECONDS);
+          persistCidToClean();
+        } catch (IOException ex) {
+          LOG.error(ex, ex);
+        } catch (InterruptedException ex) {
+          LOG.error(ex, ex);
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
+  }
+
+  private static void persistCidToClean() throws IOException {
+    toCommitCidCleanLock.lock();
+    final List<io.hops.metadata.yarn.entity.ContainerId> toCommit = new ArrayList<>(toCommitCidToClean);
+    toCommitCidCleanLock.unlock();
+
+    if (!toCommit.isEmpty()) {
+      LightWeightRequestHandler addCidToClean =
+              new LightWeightRequestHandler(YARNOperationType.TEST) {
+                @Override
+                public Object performTask() throws IOException {
+                  connector.beginTransaction();
+                  connector.writeLock();
+
+                  ContainerIdToCleanDataAccess cidToCleanDA = (ContainerIdToCleanDataAccess)
+                          RMStorageFactory.getDataAccess(ContainerIdToCleanDataAccess.class);
+                  cidToCleanDA.addAll(toCommit);
+                  connector.commit();
+                  return null;
+                }
+              };
+
+      addCidToClean.handle();
+      toCommitCidCleanLock.lock();
+      toCommitCidToClean.removeAll(toCommit);
+      toCommitCidCleanLock.unlock();
+    }
+  }
+
+  public static void addNextHB(final boolean nextHB, final String nodeId) throws IOException {
+    AsyncLightWeightRequestHandler addNextHB =
+            new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
+              @Override
+              public Object performTask() throws IOException {
+                connector.beginTransaction();
+                connector.writeLock();
+
+                NextHeartbeatDataAccess nhbDA = (NextHeartbeatDataAccess) RMStorageFactory
+                        .getDataAccess(NextHeartbeatDataAccess.class);
+                nhbDA.update(new NextHeartbeat(nodeId, nextHB));
+                connector.commit();
+                return null;
+              }
+            };
+
     addNextHB.handle();
+    numOfNxtHB++;
+
+    if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
+      if (numOfNxtHB < 6000) {
+        LOG.error("*** <Profiler> nextHeartbeats stored: " + numOfNxtHB + " per second");
+      }
+      numOfNxtHB = 0;
+      lastTimestamp = System.currentTimeMillis();
+    }
   }
 
   public static void removeUCI(List<UpdatedContainerInfo> ContainerInfoList,

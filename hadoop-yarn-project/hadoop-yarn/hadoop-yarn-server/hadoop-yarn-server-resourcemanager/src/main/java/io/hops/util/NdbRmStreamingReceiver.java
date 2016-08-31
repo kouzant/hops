@@ -274,7 +274,9 @@ public class NdbRmStreamingReceiver {
                     .getId() + " : " + hopRMNodeDBObj.getPendingEvent().getId().getNodeId());
         }
         if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
-            LOG.error("***<Profiler> Put " + numOfEvents + " per second");
+            if (numOfEvents < 6000) {
+                LOG.error("***<Profiler> Put " + numOfEvents + " per second");
+            }
             numOfEvents = 0;
             lastTimestamp = System.currentTimeMillis();
         }

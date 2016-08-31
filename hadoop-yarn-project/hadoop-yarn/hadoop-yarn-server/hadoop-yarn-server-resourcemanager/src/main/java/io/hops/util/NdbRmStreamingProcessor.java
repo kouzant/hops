@@ -129,6 +129,7 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
 
         long lastTimestamp = 0;
         int numOfEvents = 0;
+
         @Override
         public void run() {
             while (!Thread.currentThread().isInterrupted()) {
@@ -159,7 +160,9 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
                                 // ContainerStatuses and UpdatedContainerInfo are removed
                                 // in RMNodeImplDist#pullContainerUpdates
                                 if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
-                                    LOG.error("***<Profiler> Processed " + numOfEvents + " per second");
+                                    if (numOfEvents < 6000) {
+                                        LOG.error("***<Profiler> Processed " + numOfEvents + " per second");
+                                    }
                                     numOfEvents = 0;
                                     lastTimestamp = System.currentTimeMillis();
                                 }
