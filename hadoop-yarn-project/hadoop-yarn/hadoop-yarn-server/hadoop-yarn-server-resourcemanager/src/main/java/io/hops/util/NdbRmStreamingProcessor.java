@@ -77,6 +77,7 @@ public class NdbRmStreamingProcessor extends PendingEventRetrieval {
 
         long lastTimestamp = 0;
         int numOfEvents = 0;
+
         @Override
         public void run() {
             while (active) {
