@@ -61,7 +61,7 @@ public class NdbRtStreamingProcessor extends NdbStreamingReceiver {
 
         @Override
         public void run() {
-            while (!Thread.currentThread().isInterrupted()) {
+            while (running) {
                 if (!rmContext.isLeader()) {
                     try {
                         StreamingRTComps streamingRTComps = null;
@@ -124,9 +124,7 @@ public class NdbRtStreamingProcessor extends NdbStreamingReceiver {
                             numOfEvents++;
 
                             if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
-                                if (numOfEvents < 6000) {
-                                    LOG.error("*** <Profiler> Processed " + numOfEvents + " per second");
-                                }
+                                LOG.error("*** <Profiler> Processed " + numOfEvents + " per second");
                                 numOfEvents = 0;
                                 lastTimestamp = System.currentTimeMillis();
                             }

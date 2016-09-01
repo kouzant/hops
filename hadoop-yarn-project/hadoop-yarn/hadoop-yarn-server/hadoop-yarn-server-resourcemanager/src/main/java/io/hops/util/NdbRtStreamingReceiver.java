@@ -189,9 +189,7 @@ public class NdbRtStreamingReceiver {
         numOfEvents++;
 
         if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
-            if (numOfEvents < 6000) {
-                LOG.error("*** <Profiler> Received " + numOfEvents + " per second");
-            }
+            LOG.error("*** <Profiler> Received " + numOfEvents + " per second");
             numOfEvents = 0;
             lastTimestamp = System.currentTimeMillis();
         }
