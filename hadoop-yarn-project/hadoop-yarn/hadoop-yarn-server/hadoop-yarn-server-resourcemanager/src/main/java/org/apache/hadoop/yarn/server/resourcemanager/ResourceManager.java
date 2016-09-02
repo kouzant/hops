@@ -1235,7 +1235,9 @@ LOG.info("+");
     LOG.info("Transitioning to active state");
 
     stopSchedulerServices();
-    resourceTrackingService.stop();
+    if(resourceTrackingService.isInState(STATE.STARTED)){
+      resourceTrackingService.stop();
+    }
     resetDispatcher();
     createAndInitSchedulerServices();
       
