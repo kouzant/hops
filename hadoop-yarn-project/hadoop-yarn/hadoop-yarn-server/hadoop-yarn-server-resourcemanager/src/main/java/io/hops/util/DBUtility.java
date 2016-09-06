@@ -29,10 +29,12 @@ import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import io.hops.transaction.handler.ThreadPool;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.net.NetUtils;
@@ -54,6 +56,8 @@ public class DBUtility {
 
   private static final Log LOG = LogFactory.getLog(DBUtility.class);
 
+  private static AtomicInteger containersToCleanTopC = new AtomicInteger(0);
+
   public static void removeContainersToClean(final Set<ContainerId> containers,
           final org.apache.hadoop.yarn.api.records.NodeId nodeId) throws IOException {
     AsyncLightWeightRequestHandler removeContainerToClean
@@ -74,12 +78,19 @@ public class DBUtility {
         }
         ctcDA.removeAll(containersToClean);
         connector.commit();
+
+        /*for (int i = 0; i < containersToClean.size(); ++i) {
+          containersToCleanTopC.decrementAndGet();
+        }*/
+
         return null;
       }
     };
+    //containersToCleanTopC.addAndGet(containers.size());
     removeContainerToClean.handle();
   }
 
+  private static AtomicInteger finishedAppsRemoveC = new AtomicInteger(0);
   public static void removeFinishedApplications(
           final List<ApplicationId> finishedApplications, final org.apache.hadoop.yarn.api.records.NodeId nodeId)
           throws IOException {
@@ -101,12 +112,15 @@ public class DBUtility {
         }
         faDA.removeAll(finishedApps);
         connector.commit();
+        //finishedAppsRemoveC.decrementAndGet();
         return null;
       }
     };
+    //finishedAppsRemoveC.incrementAndGet();
     removeFinishedApplication.handle();
   }
 
+  private static AtomicInteger finishedAppsAddC = new AtomicInteger(0);
   public static void addFinishedApplication(final ApplicationId appId,
           final org.apache.hadoop.yarn.api.records.NodeId nodeId) throws
           IOException {
@@ -122,9 +136,11 @@ public class DBUtility {
                 .getDataAccess(FinishedApplicationsDataAccess.class);
         faDA.add(new FinishedApplications(nodeId.toString(), appId.toString()));
         connector.commit();
+        //finishedAppsAddC.decrementAndGet();
         return null;
       }
     };
+    //finishedAppsAddC.incrementAndGet();
     addFinishedApplication.handle();
   }
 
@@ -250,10 +266,88 @@ public class DBUtility {
   private static int numOfNxtHB = 0;
   private static long lastTimestamp = 0;
 
-  private final static List<io.hops.metadata.yarn.entity.ContainerId> toCommitCidToClean =
-          new ArrayList<>();
-  private final static ReentrantLock toCommitCidCleanLock =
-          new ReentrantLock(true);
+  private final static ConcurrentLinkedQueue<PendingEvent> pendingEventsToRemove =
+          new ConcurrentLinkedQueue<>();
+  private static Thread pendingEventsCommitter = null;
+  private final static Semaphore pendingEventsSem =
+          new Semaphore(0, true);
+  private final static int MIN_NUM_OF_PENDING_EVENTS = 2000;
+
+  public static void removePendingEvent(String rmNodeId, PendingEvent.Type type,
+          PendingEvent.Status status, int id) {
+
+      pendingEventsToRemove.add(new PendingEvent(rmNodeId, type, status, id));
+      pendingEventsSem.release();
+
+    if (pendingEventsCommitter == null) {
+      synchronized (DBUtility.class) {
+        if (pendingEventsCommitter == null) {
+          pendingEventsCommitter = new Thread(new PendingEventsCommitter());
+          pendingEventsCommitter.setName("RemovePendingEvents");
+          pendingEventsCommitter.start();
+          LOG.error("HOP :: RemovePendingEvents committer thread started");
+        }
+      }
+    }
+  }
+
+  private static class PendingEventsCommitter implements Runnable {
+
+    @Override
+    public void run() {
+      while (!Thread.currentThread().isInterrupted()) {
+        try {
+          pendingEventsSem.tryAcquire(MIN_NUM_OF_PENDING_EVENTS,
+                  500, TimeUnit.MILLISECONDS);
+          commitRemovePendingEvents();
+        } catch (IOException ex) {
+          LOG.error(ex, ex);
+        } catch (InterruptedException ex) {
+          LOG.error(ex, ex);
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
+  }
+
+  private static AtomicInteger pendingEventC = new AtomicInteger(0);
+  private static void commitRemovePendingEvents() throws IOException {
+    final Iterator<PendingEvent> peIt = pendingEventsToRemove.iterator();
+    final List<PendingEvent> toCommit = new ArrayList<>();
+    while (peIt.hasNext()) {
+      toCommit.add(peIt.next());
+    }
+
+    if (!toCommit.isEmpty()) {
+      LightWeightRequestHandler removePendingEvents =
+              new LightWeightRequestHandler(YARNOperationType.TEST) {
+                @Override
+                public Object performTask() throws IOException {
+                  connector.beginTransaction();
+                  connector.writeLock();
+
+                  PendingEventDataAccess peDA = (PendingEventDataAccess) RMStorageFactory
+                          .getDataAccess(PendingEventDataAccess.class);
+                  peDA.removeAll(toCommit);
+                  connector.commit();
+
+                  /*for (int i = 0; i < toCommit.size(); ++i) {
+                    pendingEventC.decrementAndGet();
+                  }*/
+                  return null;
+                }
+              };
+      //pendingEventC.addAndGet(toCommit.size());
+      removePendingEvents.handle();
+
+      pendingEventsToRemove.removeAll(toCommit);
+    }
+  }
+
+
+
+  private final static ConcurrentLinkedQueue<io.hops.metadata.yarn.entity.ContainerId> toCommitCidToClean =
+          new ConcurrentLinkedQueue<>();
   private static Thread cidToCleanCommitter = null;
   private final static Semaphore toCommitSemaphore = new Semaphore(0, true);
   private final static int MIN_NUM_OF_CONTAINERS = 50;
@@ -261,14 +355,9 @@ public class DBUtility {
   public static void addContainerToClean(ContainerId containerId,
           org.apache.hadoop.yarn.api.records.NodeId nodeId) {
 
-    toCommitCidCleanLock.lock();
-    try {
-      toCommitCidToClean.add(new io.hops.metadata.yarn.entity.ContainerId(nodeId.toString(),
-              containerId.toString()));
-      toCommitSemaphore.release();
-    } finally {
-      toCommitCidCleanLock.unlock();
-    }
+    toCommitCidToClean.add(new io.hops.metadata.yarn.entity.ContainerId(nodeId.toString(),
+            containerId.toString()));
+    toCommitSemaphore.release();
 
     if (cidToCleanCommitter == null) {
       synchronized (DBUtility.class) {
@@ -302,10 +391,16 @@ public class DBUtility {
     }
   }
 
+  private static AtomicInteger containersToCleanC = new AtomicInteger(0);
+
   private static void persistCidToClean() throws IOException {
-    toCommitCidCleanLock.lock();
-    final List<io.hops.metadata.yarn.entity.ContainerId> toCommit = new ArrayList<>(toCommitCidToClean);
-    toCommitCidCleanLock.unlock();
+    final Iterator<io.hops.metadata.yarn.entity.ContainerId> cidIt =
+            toCommitCidToClean.iterator();
+    final List<io.hops.metadata.yarn.entity.ContainerId> toCommit =
+            new ArrayList<>();
+    while (cidIt.hasNext()) {
+      toCommit.add(cidIt.next());
+    }
 
     if (!toCommit.isEmpty()) {
       LightWeightRequestHandler addCidToClean =
@@ -319,17 +414,21 @@ public class DBUtility {
                           RMStorageFactory.getDataAccess(ContainerIdToCleanDataAccess.class);
                   cidToCleanDA.addAll(toCommit);
                   connector.commit();
+
+                  /*for (int i = 0; i < toCommit.size(); ++i) {
+                    containersToCleanC.decrementAndGet();
+                  }*/
                   return null;
                 }
               };
 
+      //containersToCleanC.addAndGet(toCommit.size());
       addCidToClean.handle();
-      toCommitCidCleanLock.lock();
       toCommitCidToClean.removeAll(toCommit);
-      toCommitCidCleanLock.unlock();
     }
   }
 
+  private static AtomicInteger nextBHC = new AtomicInteger(0);
   public static void addNextHB(final boolean nextHB, final String nodeId) throws IOException {
     AsyncLightWeightRequestHandler addNextHB =
             new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
@@ -342,12 +441,14 @@ public class DBUtility {
                         .getDataAccess(NextHeartbeatDataAccess.class);
                 nhbDA.update(new NextHeartbeat(nodeId, nextHB));
                 connector.commit();
+                //nextBHC.decrementAndGet();
                 return null;
               }
             };
 
+    //nextBHC.incrementAndGet();
     addNextHB.handle();
-    numOfNxtHB++;
+    /*numOfNxtHB++;
 
     if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
       if (numOfNxtHB < 6000) {
@@ -355,9 +456,11 @@ public class DBUtility {
       }
       numOfNxtHB = 0;
       lastTimestamp = System.currentTimeMillis();
-    }
+    }*/
   }
 
+  private static AtomicInteger removeUCIC = new AtomicInteger(0);
+  private static AtomicInteger removeConStatC = new AtomicInteger(0);
   public static void removeUCI(List<UpdatedContainerInfo> ContainerInfoList,
           String nodeId) throws IOException {
     final List<io.hops.metadata.yarn.entity.UpdatedContainerInfo> uciToRemove
@@ -417,10 +520,19 @@ public class DBUtility {
                 .getDataAccess(ContainerStatusDataAccess.class);
         csDA.removeAll(containerStatusToRemove);
         connector.commit();
+
+        /*for (int i = 0; i < uciToRemove.size(); ++i) {
+          removeUCIC.decrementAndGet();
+        }
+        for (int i = 0; i< containerStatusToRemove.size(); ++i) {
+          removeConStatC.decrementAndGet();
+        }*/
         return null;
       }
     };
     removeUCIHandler.handle();
+    //removeUCIC.addAndGet(uciToRemove.size());
+    //removeConStatC.addAndGet(containerStatusToRemove.size());
   }
   
   public static Map<String, Load> getAllLoads() throws IOException {
@@ -459,28 +571,6 @@ public class DBUtility {
     updateLoadHandler.handle();
   }
 
-  public static void removePendingEvent(String rmNodeId, PendingEvent.Type type,
-          PendingEvent.Status status, int id) throws IOException {
-
-    final PendingEvent pendingEvent = new PendingEvent(rmNodeId, type, status, id);
-
-    AsyncLightWeightRequestHandler removePendingEvents = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
-      @Override
-      public Object performTask() throws IOException {
-        connector.beginTransaction();
-        connector.writeLock();
-
-        PendingEventDataAccess pendingEventDAO = (PendingEventDataAccess) YarnAPIStorageFactory
-                .getDataAccess(PendingEventDataAccess.class);
-        pendingEventDAO.removePendingEvent(pendingEvent);
-        connector.commit();
-
-        return null;
-      }
-    };
-    removePendingEvents.handle();
-  }
-
   public static void InitializeDB() throws IOException {
     LightWeightRequestHandler setRMDTMasterKeyHandler
             = new LightWeightRequestHandler(YARNOperationType.TEST) {
@@ -492,5 +582,46 @@ public class DBUtility {
       }
     };
     setRMDTMasterKeyHandler.handle();
+  }
+
+  private static volatile Thread printer = null;
+  public static void startPrinter() {
+
+    if (printer == null) {
+      synchronized (DBUtility.class) {
+        if (printer == null) {
+          printer = new Thread(new PendingOperationsPrinter());
+          printer.start();
+        }
+      }
+    }
+
+  }
+
+  private static class PendingOperationsPrinter implements Runnable {
+
+    @Override
+    public void run() {
+      while (true) {
+        LOG.error("====== Number of Pending Operations ========");
+        LOG.error("> containersToCleanTop: " + containersToCleanTopC.get());
+        LOG.error("> containersToClean: " + containersToCleanC.get());
+        LOG.error("> finishedAppsRemove: " + finishedAppsRemoveC.get());
+        LOG.error("> finishedAppsAdd: " + finishedAppsAddC.get());
+        LOG.error("> nextHeartbeat: " + nextBHC.get());
+        LOG.error("> removeUCI: " + removeUCIC.get());
+        LOG.error("> removeContainerStatus: " + removeConStatC.get());
+        LOG.error("> removePendingEvents: " + pendingEventC.get());
+        // Change Thread pool at metadata-dal to ThreadPoolExecutor with max keepAliveTime
+        //LOG.error("> Thread-pool queue size: " + ThreadPool.getInstance().getCommitThreadPool().getQueue().size() +
+        //      " (" + ThreadPool.getInstance().getCommitThreadPool().getActiveCount() + ")");
+
+        try {
+          TimeUnit.SECONDS.sleep(1);
+        } catch (InterruptedException ex) {
+          LOG.error(ex, ex);
+        }
+      }
+    }
   }
 }

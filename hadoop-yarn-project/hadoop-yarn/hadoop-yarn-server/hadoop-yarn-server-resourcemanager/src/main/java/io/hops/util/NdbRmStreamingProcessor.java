@@ -28,7 +28,8 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
     public NdbRmStreamingProcessor(RMContext rmContext) {
         super(rmContext, "RM Event retriever");
         setRetrievingRunnable(new RetrievingThread());
-        exec = Executors.newCachedThreadPool();
+        //DBUtility.startPrinter();
+        exec = Executors.newFixedThreadPool(5);
     }
 
     public void printHopsRMNodeComps(RMNodeComps hopRMNodeNDBCompObject) {
@@ -89,6 +90,9 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
         }
     }
 
+    private int nodeUpdateEvents = 0;
+    private long nuLastTimestamp = 0;
+
     private void triggerEvent(final RMNode rmNode, PendingEvent pendingEvent) {
         if (LOG.isDebugEnabled()) {
             LOG.debug("NodeUpdate event_pending event trigger event: " +
@@ -97,12 +101,12 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
         }
 
         // TODO Maybe we should put back Hops Global Thread pool
-        exec.submit(new Runnable() {
+        /*exec.submit(new Runnable() {
             @Override
             public void run() {
                 NetUtils.normalizeHostName(rmNode.getHostName());
             }
-        });
+        });*/
 
         if (pendingEvent.getType().equals(PendingEvent.Type.NODE_ADDED)) {
             LOG.debug("HOP :: PendingEventRetrieval event NodeAdded: " + pendingEvent);
@@ -118,6 +122,15 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
                         rmNode.getNodeID() + " pending event: " + pendingEvent.getId().getEventId());
                 rmContext.getDispatcher().getEventHandler().handle(
                         new NodeUpdateSchedulerEvent(rmNode));
+
+                /*nodeUpdateEvents++;
+
+                if ((System.currentTimeMillis() - nuLastTimestamp) >= 1000) {
+                    LOG.error(">>> Dispatch " + nodeUpdateEvents + " NODE_UPDATE events per second (" +
+                            NdbRmStreamingReceiver.receivedEvents.size() + ")");
+                    nodeUpdateEvents = 0;
+                    nuLastTimestamp = System.currentTimeMillis();
+                }*/
             } else if (pendingEvent.getStatus().equals(PendingEvent.Status.SCHEDULER_NOT_FINISHED_PROCESSING)) {
                 LOG.debug("NodeUpdate event - event_scheduler - NOT_finished_processing RMNode: " +
                         rmNode.getNodeID() + " pending event: " + pendingEvent.getId().getEventId());
@@ -149,30 +162,46 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
                                 LOG.debug("HOP :: RetrievingThread RMNode: " + rmNode);
 
                                 if (rmNode != null) {
+                                    long start = System.currentTimeMillis();
                                     updateRMContext(rmNode);
+                                    long diff = System.currentTimeMillis() - start;
+                                    if (diff > 5) {
+                                        LOG.error("<Profiler> updateRMContext too long: " + diff);
+                                    }
+                                    start = System.currentTimeMillis();
                                     triggerEvent(rmNode, hopRMNodeCompObj.getPendingEvent());
+                                    diff = System.currentTimeMillis() - start;
+                                    if (diff > 5) {
+                                        LOG.error("<Profiler> triggerEvent too long: " + diff);
+                                    }
                                 }
 
+                                long start = System.currentTimeMillis();
                                 DBUtility.removePendingEvent(hopRMNodeCompObj.getHopRMNode().getNodeId(),
                                         hopRMNodeCompObj.getPendingEvent().getType(),
                                         hopRMNodeCompObj.getPendingEvent().getStatus(),
                                         hopRMNodeCompObj.getPendingEvent().getId().getEventId());
+                                long diff = System.currentTimeMillis() - start;
+
+                                if (diff > 5) {
+                                    LOG.error("<Profiler> removePendingEvent too long " + diff);
+                                }
                                 // ContainerStatuses and UpdatedContainerInfo are removed
                                 // in RMNodeImplDist#pullContainerUpdates
                                 if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
-                                    if (numOfEvents < 6000) {
-                                        LOG.error("***<Profiler> Processed " + numOfEvents + " per second");
-                                    }
+                                    LOG.error("***<Profiler> Processed " + numOfEvents + " per second");
                                     numOfEvents = 0;
                                     lastTimestamp = System.currentTimeMillis();
                                 }
                                 numOfEvents++;
                             } catch (InvalidProtocolBufferException ex) {
                                 LOG.error("HOP :: Error retrieving RMNode: " + ex, ex);
-                            } catch (IOException ex) {
-                                LOG.error("HOP :: Error removing from DB: " + ex, ex);
                             }
+                        } else {
+                            LOG.error("HOP :: Not distributed setup");
                         }
+                    } else {
+                        LOG.error("HOP :: RMNodeCompObj is NULL");
                     }
                     // TODO process containers for the ContainerLogs service
                 } catch (InterruptedException ex) {

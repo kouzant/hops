@@ -273,15 +273,16 @@ public class NdbRmStreamingReceiver {
             LOG.debug("<Receiver> Put event in the queue: " + hopRMNodeDBObj.getPendingEvent()
                     .getId() + " : " + hopRMNodeDBObj.getPendingEvent().getId().getNodeId());
         }
+        receivedEvents.put(hopRMNodeDBObj);
+
+        /*numOfEvents++;
         if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
             if (numOfEvents < 6000) {
                 LOG.error("***<Profiler> Put " + numOfEvents + " per second");
             }
             numOfEvents = 0;
             lastTimestamp = System.currentTimeMillis();
-        }
-        receivedEvents.put(hopRMNodeDBObj);
-        numOfEvents++;
+        }*/
     }
 
     // These two methods will be used by the multi-threaded version of C++ library

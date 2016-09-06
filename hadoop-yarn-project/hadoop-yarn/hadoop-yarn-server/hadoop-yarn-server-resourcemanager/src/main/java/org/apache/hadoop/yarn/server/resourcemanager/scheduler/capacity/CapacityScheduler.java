@@ -1176,6 +1176,9 @@ public class CapacityScheduler extends
   
   }
 
+  private int nodeUpdate = 0;
+  private long lastTimestamp = 0;
+
   @Override
   public void handle(SchedulerEvent event) {
     switch(event.getType()) {
@@ -1222,6 +1225,13 @@ public class CapacityScheduler extends
       if (!scheduleAsynchronously) {
         allocateContainersToNode(getNode(node.getNodeID()));
       }
+
+      /*nodeUpdate++;
+      if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
+        LOG.error(">>> CapacityScheduler handled " + nodeUpdate + " NODE_UPDATE events per second");
+        nodeUpdate = 0;
+        lastTimestamp = System.currentTimeMillis();
+      }*/
     }
     break;
     case APP_ADDED:

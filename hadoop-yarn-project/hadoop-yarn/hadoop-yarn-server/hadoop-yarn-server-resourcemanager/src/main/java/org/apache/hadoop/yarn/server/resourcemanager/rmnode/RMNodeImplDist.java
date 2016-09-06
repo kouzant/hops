@@ -76,6 +76,9 @@ public class RMNodeImplDist extends RMNodeImpl {
             getLastHealthReportTime());
   }
 
+  private int numOfEvents = 0;
+  private long lastTimestamp = 0;
+
   protected NodeState statusUpdateWhenHealthyTransitionInternal(
           RMNodeImpl rmNode, RMNodeEvent event) {
     RMNodeStatusEvent statusEvent = (RMNodeStatusEvent) event;
@@ -118,6 +121,7 @@ public class RMNodeImplDist extends RMNodeImpl {
     if (rmNode.nextHeartBeat) {
       rmNode.nextHeartBeat = false;
       toCommit.addNextHeartBeat(rmNode.nextHeartBeat);
+
 //      if (rmNode.context.isDistributed() && !rmNode.context.isLeader()) {
         //Add NodeUpdatedSchedulerEvent to TransactionState
         toCommit.addPendingEvent(PendingEvent.Type.NODE_UPDATED,
@@ -126,7 +130,8 @@ public class RMNodeImplDist extends RMNodeImpl {
 //        rmNode.context.getDispatcher().getEventHandler().handle(
 //                new NodeUpdateSchedulerEvent(rmNode));
 //      }
-    } else if (rmNode.context.isDistributed() 
+
+    } else if (rmNode.context.isDistributed()
 //            && !rmNode.context.isLeader()
             ) {
 
@@ -271,8 +276,13 @@ public class RMNodeImplDist extends RMNodeImpl {
           RMNodeEvent event) {
     rmNode.containersToClean.add(((RMNodeCleanContainerEvent) event).
             getContainerId());
+    long start = System.currentTimeMillis();
     DBUtility.addContainerToClean(((RMNodeCleanContainerEvent) event).
             getContainerId(), rmNode.getNodeID());
+    long diff = System.currentTimeMillis() - start;
+    if (diff > 2) {
+      LOG.error("<Profiler> addContainerToClean too long " + diff);
+    }
   }
 
   @Override
@@ -281,26 +291,21 @@ public class RMNodeImplDist extends RMNodeImpl {
             = new ArrayList<UpdatedContainerInfo>();
     try {
       UpdatedContainerInfo containerInfo;
-      long startPolling = System.currentTimeMillis();
       while ((containerInfo = nodeUpdateQueue.poll()) != null) {
         latestContainerInfoList.add(containerInfo);
       }
-      long diff = System.currentTimeMillis() - startPolling;
-      if (diff > 2) {
-        LOG.error("<Maregka> polling: " + diff);
-      }
       long startRemoveUCI = System.currentTimeMillis();
       DBUtility.removeUCI(latestContainerInfoList, this.nodeId.toString());
-      diff = System.currentTimeMillis() - startRemoveUCI;
-      if (diff > 2) {
-        LOG.error("<Maregka> removeUCI: " + diff);
+      long removeUCIdiff = System.currentTimeMillis() - startRemoveUCI;
+      if (removeUCIdiff > 5) {
+        LOG.error("<Profiler> removeUCI too long " + removeUCIdiff);
       }
       this.nextHeartBeat = true;
-      long startNextHB = System.currentTimeMillis();
+      long startnextHB = System.currentTimeMillis();
       DBUtility.addNextHB(this.nextHeartBeat, this.nodeId.toString());
-      diff = System.currentTimeMillis() - startNextHB;
-      if (diff > 2) {
-        LOG.error("<Maregka> addNextHB: " + diff);
+      long nextHBdiff = System.currentTimeMillis() - startnextHB;
+      if (nextHBdiff > 5) {
+        LOG.error("<Profiler> addNextHB too long " + nextHBdiff);
       }
     } catch (IOException ex) {
       LOG.error(ex, ex);
@@ -559,10 +564,20 @@ if(rmNode.context.isLeader()){
   public void handle(RMNodeEvent event) {
     LOG.debug("Processing " + event.getNodeId() + " of type " + event.getType());
     try {
+      long startLock = System.currentTimeMillis();
       writeLock.lock();
+      long lockDiff = System.currentTimeMillis() - startLock;
+      if (lockDiff > 5) {
+        LOG.error(">>>>>>>>>>>> Too long to take the LOCK " + lockDiff + " <<<<<<<<<<<<<<<<");
+      }
       NodeState oldState = getState();
       try {
+        long startTrans = System.currentTimeMillis();
         stateMachine.doTransition(event.getType(), event);
+        long transDiff = System.currentTimeMillis() - startTrans;
+        if (transDiff > 10) {
+          LOG.error(">>>> Transition " + event.getType().name() + " too long: " + transDiff);
+        }
       } catch (InvalidStateTransitonException e) {
         LOG.error("Can't handle this event at current state", e);
         LOG.error("Invalid event " + event.getType() + " on Node  "
@@ -576,7 +591,12 @@ if(rmNode.context.isLeader()){
                 getLastHealthReportTime());
       }
       try {
+        long startCommit = System.currentTimeMillis();
         toCommit.commit();
+        long commitDiff = System.currentTimeMillis() - startCommit;
+        if (commitDiff > 10) {
+          LOG.error(">>>>>>>>>>> Too long to COMMIT " + commitDiff + " <<<<<<<<<<<< - async: " + toCommit.async);
+        }
         toCommit = new ToCommitHB(this.nodeId.toString());
       } catch (IOException ex) {
         LOG.error(ex, ex);

@@ -312,7 +312,7 @@ YARN_OPTS="$YARN_OPTS -Dyarn.log.dir=$YARN_LOG_DIR"
 YARN_OPTS="$YARN_OPTS -Dhadoop.log.file=$YARN_LOGFILE"
 YARN_OPTS="$YARN_OPTS -Dyarn.log.file=$YARN_LOGFILE"
 YARN_OPTS="$YARN_OPTS -Dyarn.home.dir=$HADOOP_YARN_HOME"
-YARN_OPTS="$YARN_OPTS -Dcom.sun.management.jmxremote.port=13355 -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false"
+#YARN_OPTS="$YARN_OPTS -Dcom.sun.management.jmxremote.port=13355 -Dcom.sun.management.jmxremote.ssl=false -Dcom.sun.management.jmxremote.authenticate=false"
 
 if $cygwin; then
   HADOOP_HOME=$(cygpath -w "$HADOOP_PREFIX" 2>/dev/null)

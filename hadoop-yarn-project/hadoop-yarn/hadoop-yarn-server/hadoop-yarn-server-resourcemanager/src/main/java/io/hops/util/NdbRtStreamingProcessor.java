@@ -74,11 +74,18 @@ public class NdbRtStreamingProcessor extends NdbStreamingReceiver {
                             }
 
                             if (streamingRTComps.getNodeIds() != null) {
+                                int nodesSize = streamingRTComps.getNodeIds().size();
+                                if (nodesSize > 1) {
+                                    LOG.error(
+                                            ">>> StreamingRTCOmps nodes list size: " + nodesSize);
+                                }
                                 for (String streamingRTCompsNodeId : streamingRTComps.getNodeIds()) {
+                                    long totalStart = System.currentTimeMillis();
                                     NodeId nodeId = ConverterUtils.toNodeId(streamingRTCompsNodeId);
                                     rmNode = rmContext.getRMNodes().get(nodeId);
 
                                     if (rmNode != null) {
+                                        long start = System.currentTimeMillis();
                                         if (streamingRTComps
                                                 .getContainersToCleanByNodeId(streamingRTCompsNodeId) != null) {
                                             ((RMNodeImplDist) rmNode).setContainersToCleanUp(
@@ -97,28 +104,61 @@ public class NdbRtStreamingProcessor extends NdbStreamingReceiver {
                                             ((RMNodeImplDist) rmNode).setNextHeartbeat(streamingRTComps
                                                     .isNextHeartbeatForNodeId(streamingRTCompsNodeId));
                                         }
+                                        long diff = System.currentTimeMillis() - start;
+                                        if (diff > 10) {
+                                            LOG.error(">>> Updating RMNode too long: " + diff);
+                                        }
+                                    } else {
+                                        LOG.error(">>> RMNode is NULL");
+                                    }
+
+                                    long totalDiff = System.currentTimeMillis() - totalStart;
+                                    if (totalDiff > 20) {
+                                        LOG.error(">>> Processing RMNode too long: " + totalDiff);
                                     }
                                 }
+                            } else {
+                                LOG.error(">>> StreamingRTComps NodesList if fucking NULL!!!");
                             }
 
                             if (streamingRTComps.getCurrentNMMasterKey() != null) {
+                                long start = System.currentTimeMillis();
                                 ((NMTokenSecretManagerInRMDist) rmContext.getNMTokenSecretManager())
                                         .setCurrentMasterKey(streamingRTComps.getCurrentNMMasterKey());
+                                long diff = System.currentTimeMillis() - start;
+                                if (diff > 5) {
+                                    LOG.error(">>> Updating NM Current Master Key too long: " + diff);
+                                }
                             }
 
                             if (streamingRTComps.getNextNMMasterKey() != null) {
+                                long start = System.currentTimeMillis();
                                 ((NMTokenSecretManagerInRMDist) rmContext.getNMTokenSecretManager())
                                         .setNextMasterKey(streamingRTComps.getNextNMMasterKey());
+                                long diff = System.currentTimeMillis() - start;
+                                if (diff > 5) {
+                                    LOG.error(">> Updating NM Next Master Key too long: " + diff);
+                                }
                             }
 
                             if (streamingRTComps.getCurrentRMContainerMasterKey() != null) {
+                                long start = System.currentTimeMillis();
                                 ((RMContainerTokenSecretManagerDist) rmContext.getContainerTokenSecretManager())
                                         .setCurrentMasterKey(streamingRTComps.getCurrentRMContainerMasterKey());
+                                long diff = System.currentTimeMillis();
+                                if (diff > 5) {
+                                    LOG.error(">>> Updating Container Master Key too long: " + diff);
+                                }
                             }
 
                             if (streamingRTComps.getNextRMContainerMasterKey() != null) {
+                                long start = System.currentTimeMillis();
                                 ((RMContainerTokenSecretManagerDist) rmContext.getContainerTokenSecretManager())
                                         .setNextMasterKey(streamingRTComps.getNextRMContainerMasterKey());
+                                long diff = System.currentTimeMillis() - start;
+                                if (diff > 5) {
+                                    LOG.error(">>> Updating Container Next Master Key too long: " + diff);
+                                }
                             }
 
                             numOfEvents++;
@@ -128,6 +168,8 @@ public class NdbRtStreamingProcessor extends NdbStreamingReceiver {
                                 numOfEvents = 0;
                                 lastTimestamp = System.currentTimeMillis();
                             }
+                        } else {
+                            LOG.error(">>> StreamingRTComps is fuckin NULL!!!");
                         }
                     } catch (InterruptedException ex) {
                         LOG.error(ex, ex);

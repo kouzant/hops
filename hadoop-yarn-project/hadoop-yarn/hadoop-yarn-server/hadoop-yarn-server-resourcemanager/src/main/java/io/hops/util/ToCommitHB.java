@@ -129,6 +129,8 @@ public class ToCommitHB {
   public void addNextHeartBeat(boolean nextHeartBeat){
     this.nextHeartBeat = new NextHeartbeat(nodeId, nextHeartBeat);
   }
+
+  public boolean async = false;
   
   public void commit() throws IOException {
     if (pendingEventType == null) {
@@ -139,6 +141,9 @@ public class ToCommitHB {
     RequestHandler handler = null;
 
     if (pendingEvent.getType().equals(PendingEvent.Type.NODE_ADDED)) {
+
+      async = false;
+
       handler = new LightWeightRequestHandler(
               YARNOperationType.TEST) {
         @Override
@@ -190,6 +195,9 @@ public class ToCommitHB {
         }
       };
     } else {
+
+      async = true;
+
       handler = new AsyncLightWeightRequestHandler(
               YARNOperationType.TEST) {
         @Override
