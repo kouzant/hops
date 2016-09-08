@@ -29,6 +29,7 @@ import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantLock;
@@ -55,6 +56,9 @@ import io.hops.transaction.handler.LightWeightRequestHandler;
 public class DBUtility {
 
   private static final Log LOG = LogFactory.getLog(DBUtility.class);
+
+  public static final AtomicInteger rtPe = new AtomicInteger(0);
+  public static AtomicBoolean bla = new AtomicBoolean(true);
 
   private static AtomicInteger containersToCleanTopC = new AtomicInteger(0);
 
@@ -112,11 +116,14 @@ public class DBUtility {
         }
         faDA.removeAll(finishedApps);
         connector.commit();
-        //finishedAppsRemoveC.decrementAndGet();
+
+        for (int i = 0; i < finishedApplications.size(); ++i) {
+          finishedAppsRemoveC.decrementAndGet();
+        }
         return null;
       }
     };
-    //finishedAppsRemoveC.incrementAndGet();
+    finishedAppsRemoveC.addAndGet(finishedApplications.size());
     removeFinishedApplication.handle();
   }
 
@@ -136,11 +143,11 @@ public class DBUtility {
                 .getDataAccess(FinishedApplicationsDataAccess.class);
         faDA.add(new FinishedApplications(nodeId.toString(), appId.toString()));
         connector.commit();
-        //finishedAppsAddC.decrementAndGet();
+        finishedAppsAddC.decrementAndGet();
         return null;
       }
     };
-    //finishedAppsAddC.incrementAndGet();
+    finishedAppsAddC.incrementAndGet();
     addFinishedApplication.handle();
   }
 
@@ -272,12 +279,14 @@ public class DBUtility {
   private final static Semaphore pendingEventsSem =
           new Semaphore(0, true);
   private final static int MIN_NUM_OF_PENDING_EVENTS = 2000;
+  private static AtomicInteger pendingEventC = new AtomicInteger(0);
 
   public static void removePendingEvent(String rmNodeId, PendingEvent.Type type,
           PendingEvent.Status status, int id) {
 
-      pendingEventsToRemove.add(new PendingEvent(rmNodeId, type, status, id));
-      pendingEventsSem.release();
+    pendingEventsToRemove.add(new PendingEvent(rmNodeId, type, status, id));
+    pendingEventC.incrementAndGet();
+    pendingEventsSem.release();
 
     if (pendingEventsCommitter == null) {
       synchronized (DBUtility.class) {
@@ -310,7 +319,6 @@ public class DBUtility {
     }
   }
 
-  private static AtomicInteger pendingEventC = new AtomicInteger(0);
   private static void commitRemovePendingEvents() throws IOException {
     final Iterator<PendingEvent> peIt = pendingEventsToRemove.iterator();
     final List<PendingEvent> toCommit = new ArrayList<>();
@@ -319,8 +327,8 @@ public class DBUtility {
     }
 
     if (!toCommit.isEmpty()) {
-      LightWeightRequestHandler removePendingEvents =
-              new LightWeightRequestHandler(YARNOperationType.TEST) {
+      AsyncLightWeightRequestHandler removePendingEvents =
+              new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
                 @Override
                 public Object performTask() throws IOException {
                   connector.beginTransaction();
@@ -331,13 +339,12 @@ public class DBUtility {
                   peDA.removeAll(toCommit);
                   connector.commit();
 
-                  /*for (int i = 0; i < toCommit.size(); ++i) {
+                  for (int i = 0; i < toCommit.size(); ++i) {
                     pendingEventC.decrementAndGet();
-                  }*/
+                  }
                   return null;
                 }
               };
-      //pendingEventC.addAndGet(toCommit.size());
       removePendingEvents.handle();
 
       pendingEventsToRemove.removeAll(toCommit);
@@ -441,12 +448,12 @@ public class DBUtility {
                         .getDataAccess(NextHeartbeatDataAccess.class);
                 nhbDA.update(new NextHeartbeat(nodeId, nextHB));
                 connector.commit();
-                //nextBHC.decrementAndGet();
+                nextBHC.decrementAndGet();
                 return null;
               }
             };
 
-    //nextBHC.incrementAndGet();
+    nextBHC.incrementAndGet();
     addNextHB.handle();
     /*numOfNxtHB++;
 
@@ -604,14 +611,14 @@ public class DBUtility {
     public void run() {
       while (true) {
         LOG.error("====== Number of Pending Operations ========");
-        LOG.error("> containersToCleanTop: " + containersToCleanTopC.get());
-        LOG.error("> containersToClean: " + containersToCleanC.get());
+        //LOG.error("> containersToCleanTop: " + containersToCleanTopC.get());
+        //LOG.error("> containersToClean: " + containersToCleanC.get());
         LOG.error("> finishedAppsRemove: " + finishedAppsRemoveC.get());
         LOG.error("> finishedAppsAdd: " + finishedAppsAddC.get());
         LOG.error("> nextHeartbeat: " + nextBHC.get());
-        LOG.error("> removeUCI: " + removeUCIC.get());
-        LOG.error("> removeContainerStatus: " + removeConStatC.get());
-        LOG.error("> removePendingEvents: " + pendingEventC.get());
+        //LOG.error("> removeUCI: " + removeUCIC.get());
+        //LOG.error("> removeContainerStatus: " + removeConStatC.get());
+        LOG.error("> removePendingEvents: " + pendingEventC.get() + " queue size: " + pendingEventsToRemove.size());
         // Change Thread pool at metadata-dal to ThreadPoolExecutor with max keepAliveTime
         //LOG.error("> Thread-pool queue size: " + ThreadPool.getInstance().getCommitThreadPool().getQueue().size() +
         //      " (" + ThreadPool.getInstance().getCommitThreadPool().getActiveCount() + ")");

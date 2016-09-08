@@ -145,7 +145,7 @@ public class NdbRtStreamingProcessor extends NdbStreamingReceiver {
                                 long start = System.currentTimeMillis();
                                 ((RMContainerTokenSecretManagerDist) rmContext.getContainerTokenSecretManager())
                                         .setCurrentMasterKey(streamingRTComps.getCurrentRMContainerMasterKey());
-                                long diff = System.currentTimeMillis();
+                                long diff = System.currentTimeMillis() - start;
                                 if (diff > 5) {
                                     LOG.error(">>> Updating Container Master Key too long: " + diff);
                                 }
@@ -167,6 +167,7 @@ public class NdbRtStreamingProcessor extends NdbStreamingReceiver {
                                 LOG.error("*** <Profiler> Processed " + numOfEvents + " per second");
                                 numOfEvents = 0;
                                 lastTimestamp = System.currentTimeMillis();
+                                LOG.error(">>> Persisted Pending Events per second: " + DBUtility.rtPe.getAndSet(0));
                             }
                         } else {
                             LOG.error(">>> StreamingRTComps is fuckin NULL!!!");

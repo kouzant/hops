@@ -275,14 +275,16 @@ public class NdbRmStreamingReceiver {
         }
         receivedEvents.put(hopRMNodeDBObj);
 
-        /*numOfEvents++;
+        numOfEvents++;
         if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
-            if (numOfEvents < 6000) {
-                LOG.error("***<Profiler> Put " + numOfEvents + " per second");
-            }
+            LOG.error("***<Profiler> Receiver Put " + numOfEvents + " per second");
             numOfEvents = 0;
             lastTimestamp = System.currentTimeMillis();
-        }*/
+        }
+        if (hopRMNode.getNodeId().equals("node5894.smile.com:67") && DBUtility.bla.get() && hopPendingEvent.getId().getEventId() > 1509888) {
+            LOG.error("************** Received pending event for node" + hopRMNode.getNodeId() + " at: " + System.currentTimeMillis() + "<" + hopPendingEvent.getId().getEventId() + ">");
+            DBUtility.bla.set(false);
+        }
     }
 
     // These two methods will be used by the multi-threaded version of C++ library
