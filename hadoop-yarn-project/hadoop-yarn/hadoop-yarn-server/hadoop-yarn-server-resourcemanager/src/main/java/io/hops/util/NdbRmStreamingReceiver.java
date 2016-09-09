@@ -296,6 +296,10 @@ public class NdbRmStreamingReceiver {
     }
 
     public void onEventMethodMultiThread(RMNodeComps hopCompObj) throws InterruptedException {
+        if (hopCompObj.getHopRMNode().getNodeId().equals("node5894.smile.com:67") && DBUtility.bla.get() && hopCompObj.getPendingEvent().getId().getEventId() > 1509888) {
+            LOG.error("************** Received pending event for node" + hopRMNode.getNodeId() + " at: " + System.currentTimeMillis() + "<" + hopPendingEvent.getId().getEventId() + ">");
+            DBUtility.bla.set(false);
+        }
         receivedEvents.put(hopCompObj);
     }
 
