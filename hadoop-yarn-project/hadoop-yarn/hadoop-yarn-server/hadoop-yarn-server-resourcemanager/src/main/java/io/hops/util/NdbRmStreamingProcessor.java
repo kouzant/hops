@@ -101,12 +101,12 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
         }
 
         // TODO Maybe we should put back Hops Global Thread pool
-        /*exec.submit(new Runnable() {
+        exec.submit(new Runnable() {
             @Override
             public void run() {
                 NetUtils.normalizeHostName(rmNode.getHostName());
             }
-        });*/
+        });
 
         if (pendingEvent.getType().equals(PendingEvent.Type.NODE_ADDED)) {
             LOG.debug("HOP :: PendingEventRetrieval event NodeAdded: " + pendingEvent);
@@ -140,8 +140,8 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
 
     private class RetrievingThread implements Runnable {
 
-        long lastTimestamp = 0;
-        int numOfEvents = 0;
+        //long lastTimestamp = 0;
+        //int numOfEvents = 0;
 
         @Override
         public void run() {
@@ -162,43 +162,43 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
                                 LOG.debug("HOP :: RetrievingThread RMNode: " + rmNode);
 
                                 if (rmNode != null) {
-                                    long start = System.currentTimeMillis();
+                                    //long start = System.currentTimeMillis();
                                     updateRMContext(rmNode);
-                                    long diff = System.currentTimeMillis() - start;
+                                    /*long diff = System.currentTimeMillis() - start;
                                     if (diff > 5) {
                                         LOG.error("<Profiler> updateRMContext too long: " + diff);
                                     }
-                                    start = System.currentTimeMillis();
+                                    start = System.currentTimeMillis();*/
                                     triggerEvent(rmNode, hopRMNodeCompObj.getPendingEvent());
-                                    diff = System.currentTimeMillis() - start;
+                                    /*diff = System.currentTimeMillis() - start;
                                     if (diff > 5) {
                                         LOG.error("<Profiler> triggerEvent too long: " + diff);
-                                    }
+                                    }*/
                                 }
 
-                                long start = System.currentTimeMillis();
+                                //long start = System.currentTimeMillis();
                                 DBUtility.removePendingEvent(hopRMNodeCompObj.getHopRMNode().getNodeId(),
                                         hopRMNodeCompObj.getPendingEvent().getType(),
                                         hopRMNodeCompObj.getPendingEvent().getStatus(),
                                         hopRMNodeCompObj.getPendingEvent().getId().getEventId());
-                                long diff = System.currentTimeMillis() - start;
+                                /*long diff = System.currentTimeMillis() - start;
 
                                 if (diff > 5) {
                                     LOG.error("<Profiler> removePendingEvent too long " + diff);
-                                }
+                                }*/
                                 // ContainerStatuses and UpdatedContainerInfo are removed
                                 // in RMNodeImplDist#pullContainerUpdates
-                                if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
+                                /*if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
                                     LOG.error("***<Profiler> Processed " + numOfEvents + " per second");
                                     numOfEvents = 0;
                                     lastTimestamp = System.currentTimeMillis();
                                 }
-                                numOfEvents++;
+                                numOfEvents++;*/
                             } catch (InvalidProtocolBufferException ex) {
                                 LOG.error("HOP :: Error retrieving RMNode: " + ex, ex);
                             }
                         } else {
-                            LOG.error("HOP :: Not distributed setup");
+                            LOG.warn("HOP :: Not distributed setup");
                         }
                     } else {
                         LOG.error("HOP :: RMNodeCompObj is NULL");

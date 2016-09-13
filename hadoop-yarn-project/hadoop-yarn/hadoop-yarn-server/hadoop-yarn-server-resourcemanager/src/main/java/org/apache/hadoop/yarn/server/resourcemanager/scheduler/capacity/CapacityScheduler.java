@@ -1176,8 +1176,8 @@ public class CapacityScheduler extends
   
   }
 
-  private int nodeUpdate = 0;
-  private long lastTimestamp = 0;
+  //private int nodeUpdate = 0;
+  //private long lastTimestamp = 0;
 
   @Override
   public void handle(SchedulerEvent event) {
@@ -1223,6 +1223,10 @@ public class CapacityScheduler extends
       RMNode node = nodeUpdatedEvent.getRMNode();
       nodeUpdate(node);
       if (!scheduleAsynchronously) {
+        FiCaSchedulerNode ficaNode = getNode(node.getNodeID());
+        if (ficaNode == null) {
+          LOG.error("Could not find node: " + node.getNodeID());
+        }
         allocateContainersToNode(getNode(node.getNodeID()));
       }
 

@@ -76,8 +76,8 @@ public class RMNodeImplDist extends RMNodeImpl {
             getLastHealthReportTime());
   }
 
-  private int numOfEvents = 0;
-  private long lastTimestamp = 0;
+  //private int numOfEvents = 0;
+  //private long lastTimestamp = 0;
 
   protected NodeState statusUpdateWhenHealthyTransitionInternal(
           RMNodeImpl rmNode, RMNodeEvent event) {
@@ -99,26 +99,31 @@ public class RMNodeImplDist extends RMNodeImpl {
 //      if (rmNode.context.isDistributed() && !rmNode.context.isLeader()) {
         //Add NodeRemovedSchedulerEvent to TransactionState
         LOG.debug("HOP :: Added Pending event to TransactionState");
-      long start = System.currentTimeMillis();
+      //long start = System.currentTimeMillis();
+
         toCommit.addPendingEvent(PendingEvent.Type.NODE_REMOVED,
                 PendingEvent.Status.NEW);
-      long diff = System.currentTimeMillis() - start;
+
+      /*long diff = System.currentTimeMillis() - start;
       if (diff > 5) {
         LOG.error(">>>> Add pending event 1 too long " + diff);
-      }
+      }*/
 //      } else {
 //        rmNode.context.getDispatcher().getEventHandler().handle(
 //                new NodeRemovedSchedulerEvent(rmNode));
-      start = System.currentTimeMillis();
+
+      //start = System.currentTimeMillis();
+
       if(rmNode.context.isLeader()){
         rmNode.context.getDispatcher().getEventHandler().handle(
                 new NodesListManagerEvent(
                         NodesListManagerEventType.NODE_UNUSABLE, rmNode));
       }
-      diff = System.currentTimeMillis() - start;
+
+      /*diff = System.currentTimeMillis() - start;
       if (diff > 5) {
         LOG.error(">>>> NodeListManager too long " + diff);
-      }
+      }*/
 
       // Update metrics
       rmNode.updateMetricsForDeactivatedNode(rmNode.getState(),
@@ -126,32 +131,39 @@ public class RMNodeImplDist extends RMNodeImpl {
       return NodeState.UNHEALTHY;
     }
 
-    long start = System.currentTimeMillis();
+    //long start = System.currentTimeMillis();
+
     ((RMNodeImplDist) rmNode).handleContainerStatus(statusEvent.
             getContainers());
-    long diff = System.currentTimeMillis() - start;
+
+    /*long diff = System.currentTimeMillis() - start;
     if (diff > 5) {
       LOG.error(">>>> HandleContainerStatus too long " + diff);
-    }
+    }*/
 
     if (rmNode.nextHeartBeat) {
       rmNode.nextHeartBeat = false;
-      start = System.currentTimeMillis();
+
+      //start = System.currentTimeMillis();
+
       toCommit.addNextHeartBeat(rmNode.nextHeartBeat);
-      diff = System.currentTimeMillis() - start;
+
+      /*diff = System.currentTimeMillis() - start;
       if (diff > 5) {
         LOG.error(">>>>> Adding NextHeartbeat too long " + diff);
-      }
+      }*/
 
 //      if (rmNode.context.isDistributed() && !rmNode.context.isLeader()) {
         //Add NodeUpdatedSchedulerEvent to TransactionState
-      start = System.currentTimeMillis();
+
+      //start = System.currentTimeMillis();
         toCommit.addPendingEvent(PendingEvent.Type.NODE_UPDATED,
                 PendingEvent.Status.SCHEDULER_FINISHED_PROCESSING);
-      diff = System.currentTimeMillis() - start;
+
+      /*diff = System.currentTimeMillis() - start;
       if (diff > 5) {
         LOG.error(">>>> Adding pending event 2 too long " + diff);
-      }
+      }*/
 //      } else {
 //        rmNode.context.getDispatcher().getEventHandler().handle(
 //                new NodeUpdateSchedulerEvent(rmNode));
@@ -161,35 +173,42 @@ public class RMNodeImplDist extends RMNodeImpl {
 //            && !rmNode.context.isLeader()
             ) {
 
-      start = System.currentTimeMillis();
+      //start = System.currentTimeMillis();
+
       toCommit.addPendingEvent(PendingEvent.Type.NODE_UPDATED,
               PendingEvent.Status.SCHEDULER_NOT_FINISHED_PROCESSING);
-      diff = System.currentTimeMillis() - start;
+
+      /*diff = System.currentTimeMillis() - start;
       if (diff > 5) {
         LOG.error(">>>> Adding pending event 3 too long " + diff);
-      }
+      }*/
     }
 
     // Update DTRenewer in secure mode to keep these apps alive. Today this is
     // needed for log-aggregation to finish long after the apps are gone.
-    start = System.currentTimeMillis();
+
+    //start = System.currentTimeMillis();
+
     if (UserGroupInformation.isSecurityEnabled()) {
       rmNode.context.getDelegationTokenRenewer().updateKeepAliveApplications(
               statusEvent.getKeepAliveAppIds());
     }
-    diff = System.currentTimeMillis() - start;
+
+    /*diff = System.currentTimeMillis() - start;
     if (diff > 5) {
       LOG.error(">>>>> UpdateKeepAliveApplications too long " + diff);
-    }
+    }*/
 
-    start = System.currentTimeMillis();
+    //start = System.currentTimeMillis();
+
     toCommit.addRMNode(hostName, commandPort, httpPort, totalCapability,
             nodeManagerVersion, getState(), getHealthReport(),
             getLastHealthReportTime());
-    diff = System.currentTimeMillis() - start;
+
+    /*diff = System.currentTimeMillis() - start;
     if (diff > 5) {
       LOG.error(">>>>> Adding RMNode too long " + diff);
-    }
+    }*/
     return NodeState.RUNNING;
 
   }
@@ -318,13 +337,16 @@ public class RMNodeImplDist extends RMNodeImpl {
           RMNodeEvent event) {
     rmNode.containersToClean.add(((RMNodeCleanContainerEvent) event).
             getContainerId());
-    long start = System.currentTimeMillis();
+
+    //long start = System.currentTimeMillis();
+
     DBUtility.addContainerToClean(((RMNodeCleanContainerEvent) event).
             getContainerId(), rmNode.getNodeID());
-    long diff = System.currentTimeMillis() - start;
+
+    /*long diff = System.currentTimeMillis() - start;
     if (diff > 2) {
       LOG.error("<Profiler> addContainerToClean too long " + diff);
-    }
+    }*/
   }
 
   @Override
@@ -336,19 +358,26 @@ public class RMNodeImplDist extends RMNodeImpl {
       while ((containerInfo = nodeUpdateQueue.poll()) != null) {
         latestContainerInfoList.add(containerInfo);
       }
-      long startRemoveUCI = System.currentTimeMillis();
+
+      //long startRemoveUCI = System.currentTimeMillis();
+
       DBUtility.removeUCI(latestContainerInfoList, this.nodeId.toString());
-      long removeUCIdiff = System.currentTimeMillis() - startRemoveUCI;
+
+      /*long removeUCIdiff = System.currentTimeMillis() - startRemoveUCI;
       if (removeUCIdiff > 5) {
         LOG.error("<Profiler> removeUCI too long " + removeUCIdiff);
-      }
+      }*/
+
       this.nextHeartBeat = true;
-      long startnextHB = System.currentTimeMillis();
+
+      //long startnextHB = System.currentTimeMillis();
+
       DBUtility.addNextHB(this.nextHeartBeat, this.nodeId.toString());
-      long nextHBdiff = System.currentTimeMillis() - startnextHB;
+
+      /*long nextHBdiff = System.currentTimeMillis() - startnextHB;
       if (nextHBdiff > 5) {
         LOG.error("<Profiler> addNextHB too long " + nextHBdiff);
-      }
+      }*/
     } catch (IOException ex) {
       LOG.error(ex, ex);
     }
@@ -606,20 +635,25 @@ if(rmNode.context.isLeader()){
   public void handle(RMNodeEvent event) {
     LOG.debug("Processing " + event.getNodeId() + " of type " + event.getType());
     try {
-      long startLock = System.currentTimeMillis();
+      //long startLock = System.currentTimeMillis();
+
       writeLock.lock();
-      long lockDiff = System.currentTimeMillis() - startLock;
+
+      /*long lockDiff = System.currentTimeMillis() - startLock;
       if (lockDiff > 5) {
         LOG.error(">>>>>>>>>>>> Too long to take the LOCK " + lockDiff + " <<<<<<<<<<<<<<<<");
-      }
+      }*/
+
       NodeState oldState = getState();
       try {
-        long startTrans = System.currentTimeMillis();
+        //long startTrans = System.currentTimeMillis();
+
         stateMachine.doTransition(event.getType(), event);
-        long transDiff = System.currentTimeMillis() - startTrans;
+
+        /*long transDiff = System.currentTimeMillis() - startTrans;
         if (transDiff > 10) {
           LOG.error(">>>> State: " + stateMachine.getCurrentState().name() + " Transition " + event.getType().name() + " too long: " + transDiff);
-        }
+        }*/
       } catch (InvalidStateTransitonException e) {
         LOG.error("Can't handle this event at current state", e);
         LOG.error("Invalid event " + event.getType() + " on Node  "
@@ -633,12 +667,15 @@ if(rmNode.context.isLeader()){
                 getLastHealthReportTime());
       }
       try {
-        long startCommit = System.currentTimeMillis();
+        //long startCommit = System.currentTimeMillis();
+
         toCommit.commit();
-        long commitDiff = System.currentTimeMillis() - startCommit;
+
+        /*long commitDiff = System.currentTimeMillis() - startCommit;
         if (commitDiff > 10) {
           LOG.error(">>>>>>>>>>> Too long to COMMIT " + commitDiff + " <<<<<<<<<<<< - async: " + toCommit.async);
-        }
+        }*/
+
         toCommit = new ToCommitHB(this.nodeId.toString());
       } catch (IOException ex) {
         LOG.error(ex, ex);

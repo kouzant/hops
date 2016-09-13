@@ -57,10 +57,11 @@ public class DBUtility {
 
   private static final Log LOG = LogFactory.getLog(DBUtility.class);
 
-  public static final AtomicInteger rtPe = new AtomicInteger(0);
-  public static AtomicBoolean bla = new AtomicBoolean(true);
+  // For profiling
+  //public static final AtomicInteger rtPe = new AtomicInteger(0);
+  //public static AtomicBoolean bla = new AtomicBoolean(true);
 
-  private static AtomicInteger containersToCleanTopC = new AtomicInteger(0);
+  //private static AtomicInteger containersToCleanTopC = new AtomicInteger(0);
 
   public static void removeContainersToClean(final Set<ContainerId> containers,
           final org.apache.hadoop.yarn.api.records.NodeId nodeId) throws IOException {
@@ -91,10 +92,11 @@ public class DBUtility {
       }
     };
     //containersToCleanTopC.addAndGet(containers.size());
+
     removeContainerToClean.handle();
   }
 
-  private static AtomicInteger finishedAppsRemoveC = new AtomicInteger(0);
+  //private static AtomicInteger finishedAppsRemoveC = new AtomicInteger(0);
   public static void removeFinishedApplications(
           final List<ApplicationId> finishedApplications, final org.apache.hadoop.yarn.api.records.NodeId nodeId)
           throws IOException {
@@ -117,17 +119,18 @@ public class DBUtility {
         faDA.removeAll(finishedApps);
         connector.commit();
 
-        for (int i = 0; i < finishedApplications.size(); ++i) {
+        /*for (int i = 0; i < finishedApplications.size(); ++i) {
           finishedAppsRemoveC.decrementAndGet();
-        }
+        }*/
         return null;
       }
     };
-    finishedAppsRemoveC.addAndGet(finishedApplications.size());
+    //finishedAppsRemoveC.addAndGet(finishedApplications.size());
+
     removeFinishedApplication.handle();
   }
 
-  private static AtomicInteger finishedAppsAddC = new AtomicInteger(0);
+  //private static AtomicInteger finishedAppsAddC = new AtomicInteger(0);
   public static void addFinishedApplication(final ApplicationId appId,
           final org.apache.hadoop.yarn.api.records.NodeId nodeId) throws
           IOException {
@@ -143,11 +146,13 @@ public class DBUtility {
                 .getDataAccess(FinishedApplicationsDataAccess.class);
         faDA.add(new FinishedApplications(nodeId.toString(), appId.toString()));
         connector.commit();
-        finishedAppsAddC.decrementAndGet();
+
+        //finishedAppsAddC.decrementAndGet();
         return null;
       }
     };
-    finishedAppsAddC.incrementAndGet();
+    //finishedAppsAddC.incrementAndGet();
+
     addFinishedApplication.handle();
   }
 
@@ -270,8 +275,8 @@ public class DBUtility {
     return rmNode;
   }
 
-  private static int numOfNxtHB = 0;
-  private static long lastTimestamp = 0;
+  //private static int numOfNxtHB = 0;
+  //private static long lastTimestamp = 0;
 
   private final static ConcurrentLinkedQueue<PendingEvent> pendingEventsToRemove =
           new ConcurrentLinkedQueue<>();
@@ -279,13 +284,13 @@ public class DBUtility {
   private final static Semaphore pendingEventsSem =
           new Semaphore(0, true);
   private final static int MIN_NUM_OF_PENDING_EVENTS = 2000;
-  private static AtomicInteger pendingEventC = new AtomicInteger(0);
+  //private static AtomicInteger pendingEventC = new AtomicInteger(0);
 
   public static void removePendingEvent(String rmNodeId, PendingEvent.Type type,
           PendingEvent.Status status, int id) {
 
     pendingEventsToRemove.add(new PendingEvent(rmNodeId, type, status, id));
-    pendingEventC.incrementAndGet();
+    //pendingEventC.incrementAndGet();
     pendingEventsSem.release();
 
     if (pendingEventsCommitter == null) {
@@ -339,9 +344,9 @@ public class DBUtility {
                   peDA.removeAll(toCommit);
                   connector.commit();
 
-                  for (int i = 0; i < toCommit.size(); ++i) {
+                  /*for (int i = 0; i < toCommit.size(); ++i) {
                     pendingEventC.decrementAndGet();
-                  }
+                  }*/
                   return null;
                 }
               };
@@ -398,7 +403,7 @@ public class DBUtility {
     }
   }
 
-  private static AtomicInteger containersToCleanC = new AtomicInteger(0);
+  //private static AtomicInteger containersToCleanC = new AtomicInteger(0);
 
   private static void persistCidToClean() throws IOException {
     final Iterator<io.hops.metadata.yarn.entity.ContainerId> cidIt =
@@ -430,12 +435,13 @@ public class DBUtility {
               };
 
       //containersToCleanC.addAndGet(toCommit.size());
+
       addCidToClean.handle();
       toCommitCidToClean.removeAll(toCommit);
     }
   }
 
-  private static AtomicInteger nextBHC = new AtomicInteger(0);
+  //private static AtomicInteger nextBHC = new AtomicInteger(0);
   public static void addNextHB(final boolean nextHB, final String nodeId) throws IOException {
     AsyncLightWeightRequestHandler addNextHB =
             new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
@@ -448,26 +454,24 @@ public class DBUtility {
                         .getDataAccess(NextHeartbeatDataAccess.class);
                 nhbDA.update(new NextHeartbeat(nodeId, nextHB));
                 connector.commit();
-                nextBHC.decrementAndGet();
+                //nextBHC.decrementAndGet();
                 return null;
               }
             };
 
-    nextBHC.incrementAndGet();
+    //nextBHC.incrementAndGet();
     addNextHB.handle();
-    /*numOfNxtHB++;
+    //numOfNxtHB++;
 
-    if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
-      if (numOfNxtHB < 6000) {
-        LOG.error("*** <Profiler> nextHeartbeats stored: " + numOfNxtHB + " per second");
-      }
+    /*if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
+      LOG.error("*** <Profiler> nextHeartbeats stored: " + numOfNxtHB + " per second");
       numOfNxtHB = 0;
       lastTimestamp = System.currentTimeMillis();
     }*/
   }
 
-  private static AtomicInteger removeUCIC = new AtomicInteger(0);
-  private static AtomicInteger removeConStatC = new AtomicInteger(0);
+  //private static AtomicInteger removeUCIC = new AtomicInteger(0);
+  //private static AtomicInteger removeConStatC = new AtomicInteger(0);
   public static void removeUCI(List<UpdatedContainerInfo> ContainerInfoList,
           String nodeId) throws IOException {
     final List<io.hops.metadata.yarn.entity.UpdatedContainerInfo> uciToRemove
@@ -561,7 +565,7 @@ public class DBUtility {
   }
   
   public static void updateLoad(final Load load) throws IOException {
-    AsyncLightWeightRequestHandler updateLoadHandler = new AsyncLightWeightRequestHandler(
+    LightWeightRequestHandler updateLoadHandler = new LightWeightRequestHandler(
             YARNOperationType.TEST) {
 
       @Override
@@ -610,15 +614,17 @@ public class DBUtility {
     @Override
     public void run() {
       while (true) {
-        LOG.error("====== Number of Pending Operations ========");
-        //LOG.error("> containersToCleanTop: " + containersToCleanTopC.get());
-        //LOG.error("> containersToClean: " + containersToCleanC.get());
+        /*LOG.error("====== Number of Pending Operations ========");
+        LOG.error("> containersToCleanTop: " + containersToCleanTopC.get());
+        LOG.error("> containersToClean: " + containersToCleanC.get());
         LOG.error("> finishedAppsRemove: " + finishedAppsRemoveC.get());
         LOG.error("> finishedAppsAdd: " + finishedAppsAddC.get());
         LOG.error("> nextHeartbeat: " + nextBHC.get());
-        //LOG.error("> removeUCI: " + removeUCIC.get());
-        //LOG.error("> removeContainerStatus: " + removeConStatC.get());
-        LOG.error("> removePendingEvents: " + pendingEventC.get() + " queue size: " + pendingEventsToRemove.size());
+        LOG.error("> removeUCI: " + removeUCIC.get());
+        LOG.error("> removeContainerStatus: " + removeConStatC.get());
+        LOG.error("> removePendingEvents: " + pendingEventC.get() + " queue size: " + pendingEventsToRemove.size());*/
+
+
         // Change Thread pool at metadata-dal to ThreadPoolExecutor with max keepAliveTime
         //LOG.error("> Thread-pool queue size: " + ThreadPool.getInstance().getCommitThreadPool().getQueue().size() +
         //      " (" + ThreadPool.getInstance().getCommitThreadPool().getActiveCount() + ")");

@@ -257,8 +257,8 @@ public class NdbRmStreamingReceiver {
         hopContainerStatusList.add(containerStatus);
     }
 
-    int numOfEvents = 0;
-    long lastTimestamp = 0;
+    //int numOfEvents = 0;
+    //long lastTimestamp = 0;
 
     // This will be called by the C++ library
     public void onEventMethod() throws InterruptedException {
@@ -275,7 +275,7 @@ public class NdbRmStreamingReceiver {
         }
         receivedEvents.put(hopRMNodeDBObj);
 
-        numOfEvents++;
+        /*numOfEvents++;
         if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
             LOG.error("***<Profiler> Receiver Put " + numOfEvents + " per second");
             numOfEvents = 0;
@@ -284,7 +284,7 @@ public class NdbRmStreamingReceiver {
         if (hopRMNode.getNodeId().equals("node5894.smile.com:67") && DBUtility.bla.get() && hopPendingEvent.getId().getEventId() > 1509888) {
             LOG.error("************** Received pending event for node" + hopRMNode.getNodeId() + " at: " + System.currentTimeMillis() + "<" + hopPendingEvent.getId().getEventId() + ">");
             DBUtility.bla.set(false);
-        }
+        }*/
     }
 
     // These two methods will be used by the multi-threaded version of C++ library
@@ -296,10 +296,10 @@ public class NdbRmStreamingReceiver {
     }
 
     public void onEventMethodMultiThread(RMNodeComps hopCompObj) throws InterruptedException {
-        if (hopCompObj.getHopRMNode().getNodeId().equals("node5894.smile.com:67") && DBUtility.bla.get() && hopCompObj.getPendingEvent().getId().getEventId() > 1509888) {
+        /*if (hopCompObj.getHopRMNode().getNodeId().equals("node5894.smile.com:67") && DBUtility.bla.get() && hopCompObj.getPendingEvent().getId().getEventId() > 1509888) {
             LOG.error("************** Received pending event for node" + hopRMNode.getNodeId() + " at: " + System.currentTimeMillis() + "<" + hopPendingEvent.getId().getEventId() + ">");
             DBUtility.bla.set(false);
-        }
+        }*/
         receivedEvents.put(hopCompObj);
     }
 

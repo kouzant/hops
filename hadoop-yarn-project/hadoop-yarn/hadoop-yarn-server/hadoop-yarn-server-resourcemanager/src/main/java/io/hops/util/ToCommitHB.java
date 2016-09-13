@@ -142,8 +142,6 @@ public class ToCommitHB {
 
     if (pendingEvent.getType().equals(PendingEvent.Type.NODE_ADDED)) {
 
-      async = false;
-
       handler = new LightWeightRequestHandler(
               YARNOperationType.TEST) {
         @Override
@@ -195,8 +193,6 @@ public class ToCommitHB {
         }
       };
     } else {
-
-      async = true;
 
       handler = new AsyncLightWeightRequestHandler(
               YARNOperationType.TEST) {
@@ -251,10 +247,10 @@ public class ToCommitHB {
 
     }
     handler.handle();
-    if (rmNode.getNodeId().equals("node5894.smile.com:67") && pendingEventId > 1509888 && DBUtility.bla.get()) {
+    /*if (rmNode.getNodeId().equals("node5894.smile.com:67") && pendingEventId > 1509888 && DBUtility.bla.get()) {
       LOG.error("******************* Persisted pending event for node " + rmNode.getNodeId() + " at: " + System.currentTimeMillis() + "<" + pendingEventId + ">");
       DBUtility.bla.set(false);
     }
-    DBUtility.rtPe.incrementAndGet();
+    DBUtility.rtPe.incrementAndGet();*/
     }
 }
