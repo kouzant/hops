@@ -58,8 +58,8 @@ public class DBUtility {
   private static final Log LOG = LogFactory.getLog(DBUtility.class);
 
   // For profiling
-  //public static final AtomicInteger rtPe = new AtomicInteger(0);
-  //public static AtomicBoolean bla = new AtomicBoolean(true);
+  public static final AtomicInteger rtPe = new AtomicInteger(0);
+  public static AtomicBoolean bla = new AtomicBoolean(true);
 
   //private static AtomicInteger containersToCleanTopC = new AtomicInteger(0);
 
@@ -283,7 +283,7 @@ public class DBUtility {
   private static Thread pendingEventsCommitter = null;
   private final static Semaphore pendingEventsSem =
           new Semaphore(0, true);
-  private final static int MIN_NUM_OF_PENDING_EVENTS = 2000;
+  private final static int MIN_NUM_OF_PENDING_EVENTS = 200;
   //private static AtomicInteger pendingEventC = new AtomicInteger(0);
 
   public static void removePendingEvent(String rmNodeId, PendingEvent.Type type,

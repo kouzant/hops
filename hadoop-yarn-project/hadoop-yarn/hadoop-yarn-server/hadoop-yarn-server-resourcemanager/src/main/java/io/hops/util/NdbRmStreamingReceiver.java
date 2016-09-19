@@ -8,6 +8,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by antonis on 8/23/16.
@@ -257,8 +258,8 @@ public class NdbRmStreamingReceiver {
         hopContainerStatusList.add(containerStatus);
     }
 
-    //int numOfEvents = 0;
-    //long lastTimestamp = 0;
+    int numOfEvents = 0;
+    long lastTimestamp = 0;
 
     // This will be called by the C++ library
     public void onEventMethod() throws InterruptedException {
@@ -296,10 +297,11 @@ public class NdbRmStreamingReceiver {
     }
 
     public void onEventMethodMultiThread(RMNodeComps hopCompObj) throws InterruptedException {
-        /*if (hopCompObj.getHopRMNode().getNodeId().equals("node5894.smile.com:67") && DBUtility.bla.get() && hopCompObj.getPendingEvent().getId().getEventId() > 1509888) {
+        NdbRmStreamingProcessor.receivedEvents.incrementAndGet();
+        if (DBUtility.bla.get() && hopCompObj.getHopRMNode().getNodeId().equals("node57309.smile.com:43") && hopCompObj.getPendingEvent().getId().getEventId() > 1809888) {
             LOG.error("************** Received pending event for node" + hopRMNode.getNodeId() + " at: " + System.currentTimeMillis() + "<" + hopPendingEvent.getId().getEventId() + ">");
             DBUtility.bla.set(false);
-        }*/
+        }
         receivedEvents.put(hopCompObj);
     }
 

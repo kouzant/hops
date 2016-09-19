@@ -154,9 +154,9 @@ public class NdbRtStreamingProcessor extends NdbStreamingReceiver {
                                 }*/
                             }
 
-                            //numOfEvents++;
+                            /*numOfEvents++;
 
-                            /*if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
+                            if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
                                 LOG.error("*** <Profiler> Processed " + numOfEvents + " per second");
                                 numOfEvents = 0;
                                 lastTimestamp = System.currentTimeMillis();

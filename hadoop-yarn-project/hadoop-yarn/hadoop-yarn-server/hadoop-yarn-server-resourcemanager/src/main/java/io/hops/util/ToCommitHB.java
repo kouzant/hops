@@ -247,10 +247,10 @@ public class ToCommitHB {
 
     }
     handler.handle();
-    /*if (rmNode.getNodeId().equals("node5894.smile.com:67") && pendingEventId > 1509888 && DBUtility.bla.get()) {
+    if (DBUtility.bla.get() && rmNode.getNodeId().equals("node57309.smile.com:43") && pendingEventId > 1809888) {
       LOG.error("******************* Persisted pending event for node " + rmNode.getNodeId() + " at: " + System.currentTimeMillis() + "<" + pendingEventId + ">");
       DBUtility.bla.set(false);
     }
-    DBUtility.rtPe.incrementAndGet();*/
+    //DBUtility.rtPe.incrementAndGet();
     }
 }

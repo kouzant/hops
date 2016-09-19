@@ -17,6 +17,7 @@ import java.io.IOException;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * Created by antonis on 8/23/16.
@@ -31,6 +32,8 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
         //DBUtility.startPrinter();
         exec = Executors.newFixedThreadPool(5);
     }
+
+    public static final AtomicInteger receivedEvents = new AtomicInteger(0);
 
     public void printHopsRMNodeComps(RMNodeComps hopRMNodeNDBCompObject) {
 
@@ -126,8 +129,7 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
                 /*nodeUpdateEvents++;
 
                 if ((System.currentTimeMillis() - nuLastTimestamp) >= 1000) {
-                    LOG.error(">>> Dispatch " + nodeUpdateEvents + " NODE_UPDATE events per second (" +
-                            NdbRmStreamingReceiver.receivedEvents.size() + ")");
+                    LOG.error(">>> Dispatch " + nodeUpdateEvents + " <" + receivedEvents.get() + "> NODE_UPDATE events per second");
                     nodeUpdateEvents = 0;
                     nuLastTimestamp = System.currentTimeMillis();
                 }*/
@@ -140,8 +142,8 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
 
     private class RetrievingThread implements Runnable {
 
-        //long lastTimestamp = 0;
-        //int numOfEvents = 0;
+        long lastTimestamp = 0;
+        int numOfEvents = 0;
 
         @Override
         public void run() {
@@ -188,8 +190,11 @@ public class NdbRmStreamingProcessor extends NdbStreamingReceiver {
                                 }*/
                                 // ContainerStatuses and UpdatedContainerInfo are removed
                                 // in RMNodeImplDist#pullContainerUpdates
+
                                 /*if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
-                                    LOG.error("***<Profiler> Processed " + numOfEvents + " per second");
+                                    LOG.error("***<Profiler> Processed " + numOfEvents + " per second and received: "
+                                            + receivedEvents.getAndSet(0)
+                                            + " QSize: " + NdbRmStreamingReceiver.receivedEvents.size());
                                     numOfEvents = 0;
                                     lastTimestamp = System.currentTimeMillis();
                                 }

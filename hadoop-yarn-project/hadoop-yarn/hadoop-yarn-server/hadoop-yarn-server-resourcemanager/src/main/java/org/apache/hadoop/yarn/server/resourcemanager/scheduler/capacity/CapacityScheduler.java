@@ -18,19 +18,11 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
+import java.io.FileWriter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Comparator;
-import java.util.EnumSet;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.Map.Entry;
-import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -61,6 +53,7 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
 import org.apache.hadoop.yarn.proto.YarnServiceProtos.SchedulerResourceTypes;
@@ -127,7 +120,7 @@ public class CapacityScheduler extends
 
   private static final Log LOG = LogFactory.getLog(CapacityScheduler.class);
   private YarnAuthorizationProvider authorizer;
- 
+
   private CSQueue root;
   // timeout to join when we stop this service
   protected final long THREAD_JOIN_TIMEOUT_MS = 1000;
@@ -337,6 +330,7 @@ public class CapacityScheduler extends
   @Override
   public void serviceStart() throws Exception {
     startSchedulerThreads();
+    //fw = new FileWriter("/home/antonis/node_update_handle", false);
     super.serviceStart();
   }
 
@@ -347,8 +341,37 @@ public class CapacityScheduler extends
         asyncSchedulerThread.interrupt();
         asyncSchedulerThread.join(THREAD_JOIN_TIMEOUT_MS);
       }
+      /*calculateMetrics();
+      if (fw != null) {
+        fw.flush();
+        fw.close();
+      }*/
     }
     super.serviceStop();
+  }
+
+  // HOP :: For evaluation
+  private void calculateMetrics() {
+    long size = nodeUpdateTime.size();
+    Iterator<Long> listIt = nodeUpdateTime.iterator();
+    long sum = 0;
+    long stdevSum = 0;
+    while (listIt.hasNext()) {
+      sum += listIt.next();
+    }
+
+    if (size > 0) {
+      double avg = sum / size;
+
+      listIt = nodeUpdateTime.iterator();
+
+      while (listIt.hasNext()) {
+        stdevSum += Math.pow(listIt.next() - avg, 2);
+      }
+
+      LOG.error(">>> NODE_UPDATE handle avg time: " + avg);
+      LOG.error(">>> NODE_UPDATE handle stdev: " + Math.sqrt(stdevSum / size));
+    }
   }
 
   @Override
@@ -1176,11 +1199,14 @@ public class CapacityScheduler extends
   
   }
 
-  //private int nodeUpdate = 0;
-  //private long lastTimestamp = 0;
+  private int nodeUpdate = 0;
+  private long lastTimestamp = 0;
+  private final LinkedList<Long> nodeUpdateTime = new LinkedList<>();
+  private FileWriter fw;
 
   @Override
   public void handle(SchedulerEvent event) {
+    long start = System.currentTimeMillis();
     switch(event.getType()) {
     case NODE_ADDED:
     {
@@ -1188,12 +1214,20 @@ public class CapacityScheduler extends
       addNode(nodeAddedEvent.getAddedRMNode());
       recoverContainersOnNode(nodeAddedEvent.getContainerReports(),
         nodeAddedEvent.getAddedRMNode());
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity NODE_ADDED too long: " + diff);
+      }
     }
     break;
     case NODE_REMOVED:
     {
       NodeRemovedSchedulerEvent nodeRemovedEvent = (NodeRemovedSchedulerEvent)event;
       removeNode(nodeRemovedEvent.getRemovedRMNode());
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity NODE_REMOVED too long: " + diff);
+      }
     }
     break;
     case NODE_RESOURCE_UPDATE:
@@ -1202,6 +1236,10 @@ public class CapacityScheduler extends
           (NodeResourceUpdateSchedulerEvent)event;
       updateNodeAndQueueResource(nodeResourceUpdatedEvent.getRMNode(),
         nodeResourceUpdatedEvent.getResourceOption());
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity NODE_RESOURCE_UPDATE too long: " + diff);
+      }
     }
     break;
     case NODE_LABELS_UPDATE:
@@ -1214,6 +1252,10 @@ public class CapacityScheduler extends
         NodeId id = entry.getKey();
         Set<String> labels = entry.getValue();
         updateLabelsOnNode(id, labels);
+      }
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity NODE_LABELS_UPDATE too long: " + diff);
       }
     }
     break;
@@ -1229,6 +1271,16 @@ public class CapacityScheduler extends
         }
         allocateContainersToNode(getNode(node.getNodeID()));
       }
+
+      /*long diff = System.currentTimeMillis() - start;
+      if (diff > 40) {
+        try {
+          fw.write(diff + "\n");
+        } catch (IOException ex) {
+          LOG.error(ex, ex);
+        }
+        nodeUpdateTime.push(diff);
+      }*/
 
       /*nodeUpdate++;
       if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
@@ -1254,6 +1306,10 @@ public class CapacityScheduler extends
               appAddedEvent.getUser());
         }
       }
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity APP_ADDED too long: " + diff);
+      }
     }
     break;
     case APP_REMOVED:
@@ -1261,6 +1317,10 @@ public class CapacityScheduler extends
       AppRemovedSchedulerEvent appRemovedEvent = (AppRemovedSchedulerEvent)event;
       doneApplication(appRemovedEvent.getApplicationID(),
         appRemovedEvent.getFinalState());
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity APP_REMOVED too long: " + diff);
+      }
     }
     break;
     case APP_ATTEMPT_ADDED:
@@ -1270,6 +1330,10 @@ public class CapacityScheduler extends
       addApplicationAttempt(appAttemptAddedEvent.getApplicationAttemptId(),
         appAttemptAddedEvent.getTransferStateFromPreviousAttempt(),
         appAttemptAddedEvent.getIsAttemptRecovering());
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity APP_ATTEMPT_ADDED too long: " + diff);
+      }
     }
     break;
     case APP_ATTEMPT_REMOVED:
@@ -1279,6 +1343,10 @@ public class CapacityScheduler extends
       doneApplicationAttempt(appAttemptRemovedEvent.getApplicationAttemptID(),
         appAttemptRemovedEvent.getFinalAttemptState(),
         appAttemptRemovedEvent.getKeepContainersAcrossAppAttempts());
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity APP_ATTEMPT_REMOVED too long: " + diff);
+      }
     }
     break;
     case CONTAINER_EXPIRED:
@@ -1291,6 +1359,10 @@ public class CapacityScheduler extends
               containerId, 
               SchedulerUtils.EXPIRED_CONTAINER), 
           RMContainerEventType.EXPIRE);
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity CONTAINER_EXPIRED too long: " + diff);
+      }
     }
     break;
     case DROP_RESERVATION:
@@ -1298,6 +1370,10 @@ public class CapacityScheduler extends
       ContainerPreemptEvent dropReservationEvent = (ContainerPreemptEvent)event;
       RMContainer container = dropReservationEvent.getContainer();
       dropContainerReservation(container);
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity DROP_RESERVATION too long: " + diff);
+      }
     }
     break;
     case PREEMPT_CONTAINER:
@@ -1307,6 +1383,10 @@ public class CapacityScheduler extends
       ApplicationAttemptId aid = preemptContainerEvent.getAppId();
       RMContainer containerToBePreempted = preemptContainerEvent.getContainer();
       preemptContainer(aid, containerToBePreempted);
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity PREEMPT_CONTAINER too long: " + diff);
+      }
     }
     break;
     case KILL_CONTAINER:
@@ -1314,6 +1394,10 @@ public class CapacityScheduler extends
       ContainerPreemptEvent killContainerEvent = (ContainerPreemptEvent)event;
       RMContainer containerToBeKilled = killContainerEvent.getContainer();
       killContainer(containerToBeKilled);
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity KILL_CONTAINER too long: " + diff);
+      }
     }
     break;
     case CONTAINER_RESCHEDULED:
@@ -1322,6 +1406,10 @@ public class CapacityScheduler extends
           (ContainerRescheduledEvent) event;
       RMContainer container = containerRescheduledEvent.getContainer();
       recoverResourceRequestForContainer(container);
+      long diff = System.currentTimeMillis() - start;
+      if (diff > 100) {
+        LOG.error(">>> Capacity CONTAINER_RESCHEDULED too long: " + diff);
+      }
     }
     break;
     default:

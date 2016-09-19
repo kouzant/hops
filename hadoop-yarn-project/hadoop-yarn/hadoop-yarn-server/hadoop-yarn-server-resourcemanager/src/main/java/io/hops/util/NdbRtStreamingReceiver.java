@@ -175,8 +175,8 @@ public class NdbRtStreamingReceiver {
         }
     }
 
-    //int numOfEvents = 0;
-    //long lastTimestamp = 0;
+    int numOfEvents = 0;
+    long lastTimestamp = 0;
 
     public void onEventMethod() throws InterruptedException {
         StreamingRTComps streamingRTComps = new StreamingRTComps(
@@ -256,6 +256,13 @@ public class NdbRtStreamingReceiver {
 
     public void onEventMethodMultiThread(StreamingRTComps streamingRTComps) throws InterruptedException {
         receivedRTEvents.put(streamingRTComps);
+        /*numOfEvents++;
+
+        if ((System.currentTimeMillis() - lastTimestamp) >= 1000) {
+            LOG.error("*** <Profiler> Received " + numOfEvents + " per second");
+            numOfEvents = 0;
+            lastTimestamp = System.currentTimeMillis();
+        }*/
     }
 
     public void resetObjects() {
