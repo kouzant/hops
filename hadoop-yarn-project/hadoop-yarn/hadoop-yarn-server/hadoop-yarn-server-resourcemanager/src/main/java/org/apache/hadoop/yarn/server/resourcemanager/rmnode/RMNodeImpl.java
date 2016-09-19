@@ -702,6 +702,21 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   }
 
   protected abstract void addNodeTransitionInternal(RMNodeImpl rmNode, RMNodeEvent event);
+
+  protected static List<NMContainerStatus> updateNewNodeMetricsAndContainers(
+          RMNodeImpl rmNode, RMNodeStartedEvent startEvent) {
+    List<NMContainerStatus> containers;
+    ClusterMetrics.getMetrics().incrNumActiveNodes();
+    containers = startEvent.getNMContainerStatuses();
+    if (containers != null && !containers.isEmpty()) {
+      for (NMContainerStatus container : containers) {
+        if (container.getContainerState() == ContainerState.RUNNING) {
+          rmNode.launchedContainers.add(container.getContainerId());
+        }
+      }
+    }
+    return containers;
+  }
   
   protected abstract void reconnectNodeTransitionInternal(RMNodeImpl rmNode, RMNodeEvent event);
   

@@ -185,13 +185,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
         .getAbsolutePath());
 
     writeToHostsFile("");
-//    final DrainDispatcher dispatcher = new DrainDispatcher();
-    rm = new MockRM(conf) {
-      @Override
-      protected Dispatcher createDispatcher() {
-        return new DrainDispatcher();
-      }
-    };
+    rm = new MockRM(conf);
     rm.start();
     DrainDispatcher dispatcher = (DrainDispatcher) rm.getRMContext().getDispatcher();
 
@@ -199,6 +193,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     MockNM nm2 = rm.registerNode("host2:5678", 10240);
     MockNM nm3 = rm.registerNode("localhost:4433", 1024);
 
+    rm.drainEvents();
 
     int metricCount = ClusterMetrics.getMetrics().getNumDecommisionedNMs();
     NodeHeartbeatResponse nodeHeartbeat = nm1.nodeHeartbeat(true);
@@ -230,6 +225,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     rm.getNodesListManager().refreshNodes(conf);
 
     nm3 = rm.registerNode("localhost:4433", 1024);
+    rm.drainEvents();
     nodeHeartbeat = nm3.nodeHeartbeat(true);
     rm.drainEvents();
     Assert.assertTrue(NodeAction.NORMAL.equals(nodeHeartbeat.getNodeAction()));
@@ -1240,11 +1236,6 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
           }
         };
       }
-
-      @Override
-      protected Dispatcher createDispatcher() {
-        return new DrainDispatcher();
-      }
     };
     rm.start();
     DrainDispatcher dispatcher = (DrainDispatcher) rm.getRMContext().getDispatcher();
@@ -1278,6 +1269,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     
     // unhealthy node changed back to healthy
     nm2 = rm.registerNode("host2:5678", 5120);
+    rm.drainEvents();
     response = nm2.nodeHeartbeat(true);
     response = nm2.nodeHeartbeat(true);
     rm.drainEvents();
@@ -1285,6 +1277,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
 
     // reconnect of node with changed capability
     nm1 = rm.registerNode("host2:5678", 10240);
+    rm.drainEvents();
     response = nm1.nodeHeartbeat(true);
     rm.drainEvents();
     Assert.assertTrue(NodeAction.NORMAL.equals(response.getNodeAction()));
@@ -1294,6 +1287,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     List<ApplicationId> runningApps = new ArrayList<ApplicationId>();
     runningApps.add(ApplicationId.newInstance(1, 0));
     nm1 = rm.registerNode("host2:5678", 15360, 2, runningApps);
+    rm.drainEvents();
     response = nm1.nodeHeartbeat(true);
     rm.drainEvents();
     Assert.assertTrue(NodeAction.NORMAL.equals(response.getNodeAction()));
@@ -1303,6 +1297,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     nm1 = new MockNM("host1:1234", 5120, rm.getResourceTrackerService());
     nm1.setHttpPort(3);
     nm1.registerNode();
+    rm.drainEvents();
     response = nm1.nodeHeartbeat(true);
     response = nm1.nodeHeartbeat(true);
     rm.drainEvents();
