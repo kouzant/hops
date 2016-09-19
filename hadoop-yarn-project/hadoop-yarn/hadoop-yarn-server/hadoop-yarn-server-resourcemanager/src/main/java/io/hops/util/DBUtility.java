@@ -18,6 +18,7 @@ package io.hops.util;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.hops.exception.StorageException;
 import io.hops.metadata.yarn.dal.*;
+import io.hops.metadata.yarn.entity.Container;
 import io.hops.metadata.yarn.entity.NextHeartbeat;
 import io.hops.metadata.yarn.dal.util.YARNOperationType;
 import io.hops.metadata.yarn.entity.*;
@@ -25,7 +26,15 @@ import io.hops.transaction.handler.AsyncLightWeightRequestHandler;
 import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.locks.ReadWriteLock;
+import java.util.concurrent.locks.ReentrantLock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import io.hops.transaction.handler.ThreadPool;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.net.NetUtils;
@@ -51,7 +60,7 @@ public class DBUtility {
     long start = System.currentTimeMillis();
     AsyncLightWeightRequestHandler removeContainerToClean
             = new AsyncLightWeightRequestHandler(
-                    YARNOperationType.TEST) {
+            YARNOperationType.TEST) {
       @Override
       public Object performTask() throws StorageException {
         connector.beginTransaction();
@@ -70,6 +79,7 @@ public class DBUtility {
         return null;
       }
     };
+
     removeContainerToClean.handle();
     long duration = System.currentTimeMillis() - start;
     if(duration>10){
@@ -83,7 +93,7 @@ public class DBUtility {
     long start = System.currentTimeMillis();
     AsyncLightWeightRequestHandler removeFinishedApplication
             = new AsyncLightWeightRequestHandler(
-                    YARNOperationType.TEST) {
+            YARNOperationType.TEST) {
       @Override
       public Object performTask() throws StorageException {
         connector.beginTransaction();
@@ -99,9 +109,11 @@ public class DBUtility {
         }
         faDA.removeAll(finishedApps);
         connector.commit();
+
         return null;
       }
     };
+
     removeFinishedApplication.handle();
     long duration = System.currentTimeMillis() - start;
     if(duration>10){
@@ -115,7 +127,7 @@ public class DBUtility {
     long start = System.currentTimeMillis();
     AsyncLightWeightRequestHandler addFinishedApplication
             = new AsyncLightWeightRequestHandler(
-                    YARNOperationType.TEST) {
+            YARNOperationType.TEST) {
       @Override
       public Object performTask() throws StorageException {
         connector.beginTransaction();
@@ -125,9 +137,11 @@ public class DBUtility {
                 .getDataAccess(FinishedApplicationsDataAccess.class);
         faDA.add(new FinishedApplications(nodeId.toString(), appId.toString()));
         connector.commit();
+
         return null;
       }
     };
+
     addFinishedApplication.handle();
     long duration = System.currentTimeMillis() - start;
     if(duration>10){
@@ -164,7 +178,7 @@ public class DBUtility {
   }
 
   public static RMNode processHopRMNodeCompsForScheduler(RMNodeComps hopRMNodeComps, RMContext rmContext)
-    throws InvalidProtocolBufferException {
+          throws InvalidProtocolBufferException {
     org.apache.hadoop.yarn.api.records.NodeId nodeId;
     RMNode rmNode = null;
     if (hopRMNodeComps != null) {
@@ -180,7 +194,7 @@ public class DBUtility {
         Resource resource = null;
         if (hopRMNodeComps.getHopResource() != null) {
           resource = Resource.newInstance(hopRMNodeComps.getHopResource().getMemory(),
-                          hopRMNodeComps.getHopResource().getVirtualCores());
+                  hopRMNodeComps.getHopResource().getVirtualCores());
         } else {
           LOG.error("ResourceOption should not be null");
           resource = Resource.newInstance(0, 0);
@@ -279,6 +293,16 @@ public class DBUtility {
 
     return rmNode;
   }
+      @Override
+      public Object performTask() throws StorageException {
+        connector.beginTransaction();
+        connector.writeLock();
+        NextHeartbeatDataAccess nhbDA
+                = (NextHeartbeatDataAccess) RMStorageFactory
+                .getDataAccess(NextHeartbeatDataAccess.class);
+        nhbDA.update(new NextHeartbeat(nodeId, nextHB));
+        connector.commit();
+        return null;
   
   public static void addNextHB(final boolean nextHB, final String nodeId) throws IOException {
            long start = System.currentTimeMillis();
@@ -295,8 +319,9 @@ public class DBUtility {
         nhbDA.update(new NextHeartbeat(nodeId, nextHB));
         connector.commit();
         return null;
-      }
-    };
+              }
+            };
+
     addNextHB.handle();
     long duration = System.currentTimeMillis() - start;
     if(duration>10){
@@ -319,8 +344,8 @@ public class DBUtility {
                 .getNewlyLaunchedContainers()) {
           io.hops.metadata.yarn.entity.UpdatedContainerInfo hopUCI
                   = new io.hops.metadata.yarn.entity.UpdatedContainerInfo(nodeId,
-                          containerStatus.getContainerId().toString(), uci.
-                          getUciId());
+                  containerStatus.getContainerId().toString(), uci.
+                  getUciId());
           uciToRemove.add(hopUCI);
 
           ContainerStatus hopConStatus = new ContainerStatus(containerStatus.
@@ -336,8 +361,8 @@ public class DBUtility {
                 .getCompletedContainers()) {
           io.hops.metadata.yarn.entity.UpdatedContainerInfo hopUCI
                   = new io.hops.metadata.yarn.entity.UpdatedContainerInfo(nodeId,
-                          containerStatus.getContainerId().toString(), uci.
-                          getUciId());
+                  containerStatus.getContainerId().toString(), uci.
+                  getUciId());
           uciToRemove.add(hopUCI);
           ContainerStatus hopConStatus = new ContainerStatus(containerStatus.
                   getContainerId().toString(), nodeId, ContainerStatus.Type.UCI,
@@ -349,7 +374,7 @@ public class DBUtility {
 
     AsyncLightWeightRequestHandler removeUCIHandler
             = new AsyncLightWeightRequestHandler(
-                    YARNOperationType.TEST) {
+            YARNOperationType.TEST) {
       @Override
       public Object performTask() throws StorageException {
         connector.beginTransaction();
@@ -373,7 +398,7 @@ public class DBUtility {
       LOG.error("too long " + duration);
     }
   }
-  
+
   public static Map<String, Load> getAllLoads() throws IOException {
     LightWeightRequestHandler getLoadHandler = new LightWeightRequestHandler(
             YARNOperationType.TEST) {
@@ -391,7 +416,7 @@ public class DBUtility {
     };
     return (Map<String, Load>) getLoadHandler.handle();
   }
-  
+
   public static void updateLoad(final Load load) throws IOException {
     AsyncLightWeightRequestHandler updateLoadHandler = new AsyncLightWeightRequestHandler(
             YARNOperationType.TEST) {
