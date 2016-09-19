@@ -174,8 +174,8 @@ public class SLSRunner implements AMNMCommonObject {
 
     // runner configuration
     conf = new Configuration();
-    YarnAPIStorageFactory.setConfiguration(conf);
-    RMStorageFactory.setConfiguration(conf);
+    //YarnAPIStorageFactory.setConfiguration(conf);
+    //RMStorageFactory.setConfiguration(conf);
     conf.addResource("sls-runner.xml");
     // runner
     int poolSize = conf.getInt(SLSConfiguration.NM_RUNNER_POOL_SIZE,
@@ -299,8 +299,8 @@ public class SLSRunner implements AMNMCommonObject {
     LOG.info(
             "HOP :: Load simulator is starting resource manager in distributed mode ######################### ");
 
-    YarnAPIStorageFactory.setConfiguration(rmConf);
-    RMStorageFactory.setConfiguration(rmConf);
+    //YarnAPIStorageFactory.setConfiguration(rmConf);
+    //RMStorageFactory.setConfiguration(rmConf);
 
     String schedulerClass = rmConf.get(YarnConfiguration.RM_SCHEDULER);
     rmConf.set(SLSConfiguration.RM_SCHEDULER, schedulerClass);
@@ -783,7 +783,7 @@ public class SLSRunner implements AMNMCommonObject {
 
     try {
       
-      LightWeightRequestHandler logsHandler
+      /*LightWeightRequestHandler logsHandler
               = new LightWeightRequestHandler(
                       YARNOperationType.TEST) {
                         @Override
@@ -806,16 +806,16 @@ public class SLSRunner implements AMNMCommonObject {
               long totalQuota=0;
       for(YarnProjectsQuota quota: hopContainersLogs.values()){
         totalQuota+=quota.getTotalUsedQuota();
-      }
-      long quotaDifNodeManagers = totalQuota-totalClusterUsageFromStart;
-      float quotaErrorNodeManagers = (float) quotaDifNodeManagers/totalClusterUsageFromStart;
+      }*/
+      //long quotaDifNodeManagers = totalQuota-totalClusterUsageFromStart;
+      //float quotaErrorNodeManagers = (float) quotaDifNodeManagers/totalClusterUsageFromStart;
       
       long totalClusterUsageAm = 0;
       for(AMSimulator am: amMap.values()){
         totalClusterUsageAm = totalClusterUsageAm + (am.getTotalContainersDuration()/1000);
       }
-      long quotaDifAm = totalQuota-totalClusterUsageAm;
-      float quotaErrorAm = (float) quotaDifAm/totalClusterUsageAm;
+      //long quotaDifAm = totalQuota-totalClusterUsageAm;
+      //float quotaErrorAm = (float) quotaDifAm/totalClusterUsageAm;
       
       File file = new File("simulationsDuration");
       if (!file.exists()) {
@@ -828,8 +828,9 @@ public class SLSRunner implements AMNMCommonObject {
               + scHBRatio + /*" (" + scHbDetail + ")" +*/ "\t"
               + avgApplicationWaitTime + "\t"
               + avgContainerAllocationWaitTime + "\t" + avgContainerStartTime
-              + "\t" + nbContainers + "\t" + avgClusterUsage + "\t" + 
-               quotaErrorNodeManagers + "\t" + quotaErrorAm + "\n");
+              + "\t" + nbContainers + "\t" + avgClusterUsage + "\t"
+              //+ quotaErrorNodeManagers + "\t" + quotaErrorAm
+              + "\n");
       bufferWritter.close();
 
       file = new File("clusterUsageDetail");
