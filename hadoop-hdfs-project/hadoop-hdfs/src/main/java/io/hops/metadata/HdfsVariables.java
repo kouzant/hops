@@ -241,7 +241,8 @@ public class HdfsVariables {
           @Override
           public Object handle(VariableDataAccess<Variable, Variable.Finder> vd)
               throws StorageException {
-            vd.setVariable(new LongVariable(Variable.Finder.BrLbMaxBlkPerTU, value));
+            vd.setVariable(new LongVariable(Variable.Finder.BrLbMaxBlkPerTW, value));
+            LOG.debug("Set block report max blocks per time window is : "+ value);
             return null;
           }
         });
@@ -249,9 +250,9 @@ public class HdfsVariables {
     }.handle();
   }
 
-  public static long getBrLbMasBlkPerMin() throws IOException {
+  public static long getBrLbMaxBlkPerTW() throws IOException {
     return (Long) new LightWeightRequestHandler(
-            HDFSOperationType.GET_BR_LB_MAX_BLKS_PER_TU) {
+            HDFSOperationType.GET_BR_LB_MAX_BLKS_PER_TW) {
       @Override
       public Object performTask() throws IOException {
         return handleVariableWithReadLock(new Handler() {
@@ -259,7 +260,7 @@ public class HdfsVariables {
           public Object handle(VariableDataAccess<Variable, Variable.Finder> vd)
               throws StorageException {
             LongVariable var =
-                (LongVariable) vd.getVariable(Variable.Finder.BrLbMaxBlkPerTU);
+                (LongVariable) vd.getVariable(Variable.Finder.BrLbMaxBlkPerTW);
             return var.getValue();
           }
         });
