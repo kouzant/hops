@@ -59,6 +59,7 @@ import org.apache.hadoop.util.ReflectionUtils;
 import org.apache.hadoop.util.Time;
 
 import com.google.protobuf.BlockingService;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 
 /** A simple RPC mechanism.
  *
@@ -700,6 +701,18 @@ public class RPC {
         CommonConfigurationKeys.IPC_CLIENT_RPC_TIMEOUT_DEFAULT);
   }
 
+  /**
+   * Get the RPC time from configuration;
+   * If not set in the configuration, return the default value.
+   *
+   * @param conf Configuration
+   * @return the RPC timeout (ms)
+   */
+  public static int getRpcTimeout(Configuration conf) {
+    return conf.getInt(CommonConfigurationKeys.IPC_CLIENT_RPC_TIMEOUT_KEY,
+        CommonConfigurationKeys.IPC_CLIENT_RPC_TIMEOUT_DEFAULT);
+  }
+  
   /**
    * Class to construct instances of RPC server with specific options.
    */
