@@ -372,7 +372,7 @@ public class TestTaskImpl {
   }
     
   /**
-   * {@link TaskState#KILL_WAIT}
+   * {@link TaskStateInternal#KILL_WAIT}
    */
   private void assertTaskKillWaitState() {
     assertEquals(TaskStateInternal.KILL_WAIT, mockTask.getInternalState());
