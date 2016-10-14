@@ -83,6 +83,10 @@ public interface RMContext {
   NMTokenSecretManagerInRM getNMTokenSecretManager();
 
   ResourceScheduler getScheduler();
+  
+  ContainersLogsService getContainersLogsService();
+  
+  QuotaService getQuotaService();
 
   NodesListManager getNodesListManager();
 

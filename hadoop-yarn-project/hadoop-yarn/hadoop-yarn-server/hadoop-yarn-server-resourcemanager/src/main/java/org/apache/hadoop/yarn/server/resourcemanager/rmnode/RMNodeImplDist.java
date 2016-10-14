@@ -150,12 +150,15 @@ public class RMNodeImplDist extends RMNodeImpl {
 
   }
 
+  @Override
   protected void handleContainerStatus(List<ContainerStatus> containerStatuses) {
     // Filter the map to only obtain just launched containers and finished
     // containers.
     List<ContainerStatus> newlyLaunchedContainers
             = new ArrayList<ContainerStatus>();
     List<ContainerStatus> completedContainers = new ArrayList<ContainerStatus>();
+    List<io.hops.metadata.yarn.entity.ContainerStatus> containerToLog
+            = new ArrayList<>();
     int numRemoteRunningContainers = 0;
     for (ContainerStatus remoteContainer : containerStatuses) {
       ContainerId containerId = remoteContainer.getContainerId();
@@ -205,6 +208,11 @@ public class RMNodeImplDist extends RMNodeImpl {
         containerAllocationExpirer.unregister(
             new AllocationExpirationInfo(containerId));
       }
+      containerToLog.add(new io.hops.metadata.yarn.entity.ContainerStatus(
+              remoteContainer.getContainerId().toString(), remoteContainer.
+              getState().name(), remoteContainer.getDiagnostics(),
+              remoteContainer.getExitStatus(), nodeId.toString()));
+    }
     }
     completedContainers.addAll(findLostContainers(
           numRemoteRunningContainers, containerStatuses));
@@ -215,6 +223,9 @@ public class RMNodeImplDist extends RMNodeImpl {
               completedContainers);
       toCommit.addNodeUpdateQueue(uci);
     }
+    if(context.getContainersLogsService()!=null && !containerToLog.isEmpty()){
+      context.getContainersLogsService().insertEvent(containerToLog);
+    }
   }
 
   @Override
@@ -224,7 +235,7 @@ public class RMNodeImplDist extends RMNodeImpl {
 
     try {
       response.addAllContainersToCleanup(
-              new ArrayList<ContainerId>(this.containersToClean));
+              new ArrayList<>(this.containersToClean));
       response.addAllApplicationsToCleanup(this.finishedApplications);
       response.addContainersToBeRemovedFromNM(
               new ArrayList<ContainerId>(this.containersToBeRemovedFromNM));

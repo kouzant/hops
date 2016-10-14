@@ -90,6 +90,8 @@ public class RMActiveServiceContext {
   private ClientRMService clientRMService;
   private RMDelegationTokenSecretManager rmDelegationTokenSecretManager;
   private ResourceScheduler scheduler;
+  private ContainersLogsService containersLogsService;
+  private QuotaService quotaService;
   private ReservationSystem reservationSystem;
   private NodesListManager nodesListManager;
   private ResourceTrackerService resourceTrackerService;
@@ -239,6 +241,18 @@ public class RMActiveServiceContext {
 
   @Private
   @Unstable
+  public ContainersLogsService getContainersLogsService() {
+    return containersLogsService;
+  }
+
+  @Private
+  @Unstable
+  public QuotaService getQuotaService() {
+    return quotaService;
+  }
+
+  @Private
+  @Unstable
   public ReservationSystem getReservationSystem() {
     return this.reservationSystem;
   }
@@ -312,6 +326,18 @@ public class RMActiveServiceContext {
     this.scheduler = scheduler;
   }
 
+  @Private
+  @Unstable
+  void setContainersLogsService(ContainersLogsService containersLogsService) {
+    this.containersLogsService = containersLogsService;
+  }
+  
+  @Private
+  @Unstable
+  void setQuotaService(QuotaService quotaService) {
+    this.quotaService = quotaService;
+  }
+  
   @Private
   @Unstable
   void setReservationSystem(ReservationSystem reservationSystem) {
