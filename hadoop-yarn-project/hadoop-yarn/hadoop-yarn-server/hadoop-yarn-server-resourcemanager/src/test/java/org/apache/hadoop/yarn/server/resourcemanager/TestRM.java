@@ -92,8 +92,11 @@ public class TestRM extends ParameterizedSchedulerTestBase {
   }
 
   @Before
-  public void setup() {
+  public void setup() throws IOException {
     conf = getConf();
+    YarnAPIStorageFactory.setConfiguration(conf);
+    RMStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
   }
 
   @After
