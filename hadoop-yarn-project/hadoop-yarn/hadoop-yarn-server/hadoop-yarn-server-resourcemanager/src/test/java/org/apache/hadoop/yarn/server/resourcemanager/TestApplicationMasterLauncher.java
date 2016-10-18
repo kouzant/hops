@@ -25,6 +25,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -73,6 +76,7 @@ import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 import static org.mockito.Matchers.any;
@@ -212,6 +216,16 @@ public class TestApplicationMasterLauncher {
     rm.stop();
   }
 
+  private Configuration conf;
+
+  @Before
+  public void setUp() throws Exception {
+    conf = new Configuration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  }
+
   @Test
   public void testRetriesOnFailures() throws Exception {
     final ContainerManagementProtocol mockProxy =
@@ -220,10 +234,9 @@ public class TestApplicationMasterLauncher {
         mock(StartContainersResponse.class);
     when(mockProxy.startContainers(any(StartContainersRequest.class)))
         .thenThrow(new NMNotYetReadyException("foo")).thenReturn(mockResponse);
-    Configuration conf = new Configuration();
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
     conf.setInt(YarnConfiguration.CLIENT_NM_CONNECT_RETRY_INTERVAL_MS, 1);
-    final DrainDispatcher dispatcher = new DrainDispatcher();
+    //final DrainDispatcher dispatcher = new DrainDispatcher();
     MockRM rm = new MockRMWithCustomAMLauncher(conf, null) {
       @Override
       protected ApplicationMasterLauncher createAMLauncher() {
@@ -248,12 +261,13 @@ public class TestApplicationMasterLauncher {
         };
       }
 
-      @Override
+      /*@Override
       protected Dispatcher createDispatcher() {
-        return dispatcher;
-      }
+        return new DrainDispatcher();
+      }*/
     };
     rm.start();
+
     MockNM nm1 = rm.registerNode("127.0.0.1:1234", 5120);
 
     RMApp app = rm.submitApp(2000);
@@ -262,7 +276,8 @@ public class TestApplicationMasterLauncher {
 
     // kick the scheduling
     nm1.nodeHeartbeat(true);
-    dispatcher.await();
+    //dispatcher.await();
+    ((DrainDispatcher) rm.getRmDispatcher()).await();
 
     rm.waitForState(appAttemptId, RMAppAttemptState.LAUNCHED, 500);
   }

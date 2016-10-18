@@ -31,6 +31,9 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
@@ -108,6 +111,10 @@ public class TestRMAdminService {
     fs.delete(tmpDir, true);
     fs.mkdirs(workingPath);
     fs.mkdirs(tmpDir);
+
+    RMStorageFactory.setConfiguration(configuration);
+    YarnAPIStorageFactory.setConfiguration(configuration);
+    DBUtility.InitializeDB();
 
     // reset the groups to what it default test settings
     MockUnixGroupsMapping.resetGroups();
@@ -782,8 +789,13 @@ public class TestRMAdminService {
     }
     Configuration conf1 = new Configuration(configuration);
     conf1.set(YarnConfiguration.RM_HA_ID, "rm1");
+    conf1.set(YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS,
+            "localhost:8034");
+
     Configuration conf2 = new Configuration(configuration);
     conf2.set(YarnConfiguration.RM_HA_ID, "rm2");
+    conf2.set(YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS,
+            "localhost:8035");
 
     // upload default configurations
     uploadDefaultConfiguration();
