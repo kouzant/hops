@@ -283,6 +283,9 @@ public class TestZKRMStateStore extends RMStateStoreTestBase {
     // Start RM with HA enabled
     Configuration conf = createHARMConf("rm1,rm2", "rm1", 1234);
     conf.setBoolean(YarnConfiguration.AUTO_FAILOVER_ENABLED, false);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     ResourceManager rm = new MockRM(conf);
     rm.start();
     rm.getRMContext().getRMAdminService().transitionToActive(req);
