@@ -25,6 +25,9 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ApplicationResourceUsageReport;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
@@ -66,6 +69,11 @@ public class TestCapacitySchedulerNodeLabelUpdate {
     conf = new YarnConfiguration();
     conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
       ResourceScheduler.class);
+
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+
     mgr = new NullRMNodeLabelsManager();
     mgr.init(conf);
   }

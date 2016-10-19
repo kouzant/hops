@@ -2667,6 +2667,9 @@ public class TestLeafQueue {
   @Test
   public void testConcurrentAccess() throws Exception {
     YarnConfiguration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     MockRM rm = new MockRM();
     rm.init(conf);
     rm.start();
