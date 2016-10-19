@@ -103,15 +103,26 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import com.google.common.base.Supplier;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.FileSystemRMStateStore;
 
 @SuppressWarnings({"rawtypes", "unchecked"})
 @RunWith(value = Parameterized.class)
 public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase {
-
+  private static final org.apache.commons.logging.Log LOG = LogFactory.getLog(
+          TestWorkPreservingRMRestart.class);
+ 
   private YarnConfiguration conf;
   MockRM rm1 = null;
   MockRM rm2 = null;
-
+  private FileSystem fs;
+  private Path tmpDir;
+  
   public TestWorkPreservingRMRestart(SchedulerType type) {
     super(type);
   }
@@ -123,7 +134,13 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     conf = getConf();
     UserGroupInformation.setConfiguration(conf);
     conf.set(YarnConfiguration.RECOVERY_ENABLED, "true");
-    conf.set(YarnConfiguration.RM_STORE, MemoryRMStateStore.class.getName());
+    conf.set(YarnConfiguration.RM_STORE, FileSystemRMStateStore.class.getName());
+    fs = FileSystem.get(conf);
+    tmpDir = new Path(new File("target", this.getClass().getSimpleName()
+        + "-tmpDir").getAbsolutePath());
+    fs.delete(tmpDir, true);
+    fs.mkdirs(tmpDir);
+    conf.set(YarnConfiguration.FS_RM_STATE_STORE_URI,tmpDir.toString());
     conf.setBoolean(YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_ENABLED, true);
     conf.setLong(YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS, 0);
     conf.setBoolean(YarnConfiguration.DISTRIBUTED_RM, false);
@@ -136,7 +153,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   }
 
   @After
-  public void tearDown() {
+  public void tearDown() throws IOException {
     if (rm1 != null) {
       rm1.stop();
     }
@@ -144,6 +161,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
       rm2.stop();
     }
     conf = null;
+    fs.delete(tmpDir, true);
   }
 
   // Test common scheduler state including SchedulerAttempt, SchedulerNode,
@@ -163,9 +181,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     int containerMemory = 1024;
     Resource containerResource = Resource.newInstance(containerMemory, 1);
 
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -177,7 +193,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     rm1.clearQueueMetrics(app1);
 
     // Re-start RM
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
     // recover app
@@ -600,9 +616,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     CapacitySchedulerConfiguration csConf =
         new CapacitySchedulerConfiguration(conf);
     setupQueueConfiguration(csConf);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(csConf);
-    rm1 = new MockRM(csConf, memStore);
+    rm1 = new MockRM(csConf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -626,7 +640,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     csConf.set("yarn.scheduler.capacity.root.Default.QueueB.state", "STOPPED");
 
     // Re-start RM
-    rm2 = new MockRM(csConf, memStore);
+    rm2 = new MockRM(csConf);
     rm2.start();
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
     nm2.setResourceTrackerService(rm2.getResourceTrackerService());
@@ -703,10 +717,10 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
 
   private void verifyAppRecoveryWithWrongQueueConfig(
       CapacitySchedulerConfiguration csConf, RMApp app, String diagnostics,
-      MemoryRMStateStore memStore, RMState state) throws Exception {
+      RMState state) throws Exception {
     // Restart RM with fail-fast as false. App should be killed.
     csConf.setBoolean(YarnConfiguration.RM_FAIL_FAST, false);
-    rm2 = new MockRM(csConf, memStore);
+    rm2 = new MockRM(csConf);
     rm2.start();
     // Wait for app to be killed.
     rm2.waitForState(app.getApplicationId(), RMAppState.KILLED);
@@ -726,14 +740,18 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
           mock(ApplicationSubmissionContext.class);
       when(appState.getApplicationSubmissionContext()).thenReturn(ctxt);
       when(ctxt.getApplicationId()).thenReturn(entry.getKey());
-      memStore.removeApplicationStateInternal(appState);
-      memStore.storeApplicationStateInternal(
+      ((FileSystemRMStateStore)rm2.getRMContext().getStateStore()).removeApplicationStateInternal(appState);
+      ((FileSystemRMStateStore)rm2.getRMContext().getStateStore()).storeApplicationStateInternal(
           entry.getKey(), entry.getValue());
+      for(ApplicationAttemptStateData attemptState: entry.getValue().attempts.values()){
+        ((FileSystemRMStateStore)rm2.getRMContext().getStateStore()).storeApplicationAttemptStateInternal(attemptState.getAttemptId(),
+                      attemptState);
+      }
     }
 
     // Now restart RM with fail-fast as true. QueueException should be thrown.
     csConf.setBoolean(YarnConfiguration.RM_FAIL_FAST, true);
-    MockRM rm = new MockRM(csConf, memStore);
+    MockRM rm = new MockRM(csConf);
     try {
       rm.start();
       Assert.fail("QueueException must have been thrown");
@@ -761,9 +779,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     CapacitySchedulerConfiguration csConf =
         new CapacitySchedulerConfiguration(conf);
     setupQueueConfiguration(csConf);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(csConf);
-    rm1 = new MockRM(csConf, memStore);
+    rm1 = new MockRM(csConf);
     rm1.start();
     MockNM nm =
         new MockNM("127.1.1.1:4321", 8192, rm1.getResourceTrackerService());
@@ -776,7 +792,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
         getYarnApplicationState(), YarnApplicationState.RUNNING);
 
     // Take a copy of state store so that it can be reset to this state.
-    RMState state = memStore.loadState();
+    RMState state = rm1.getRMContext().getStateStore().loadState();
 
     // Change scheduler config with child queues added to QueueB.
     csConf = new CapacitySchedulerConfiguration(conf);
@@ -784,7 +800,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
 
     String diags = "Application killed on recovery as it was submitted to " +
         "queue QueueB which is no longer a leaf queue after restart.";
-    verifyAppRecoveryWithWrongQueueConfig(csConf, app, diags, memStore, state);
+    verifyAppRecoveryWithWrongQueueConfig(csConf, app, diags, state);
   }
 
   //Test behavior of an app if queue is removed during recovery. Test case does
@@ -796,7 +812,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   //   false and once with fail fast as true.
   //3. Verify that app was killed if fail fast is false.
   //4. Verify that QueueException was thrown if fail fast is true.
-  @Test (timeout = 30000)
+  @Test (timeout = 300000)
   public void testCapacitySchedulerQueueRemovedRecovery() throws Exception {
     if (getSchedulerType() != SchedulerType.CAPACITY) {
       return;
@@ -807,9 +823,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     CapacitySchedulerConfiguration csConf =
         new CapacitySchedulerConfiguration(conf);
     setupQueueConfiguration(csConf);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(csConf);
-    rm1 = new MockRM(csConf, memStore);
+    rm1 = new MockRM(csConf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -838,7 +852,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     rm1.clearQueueMetrics(app2);
 
     // Take a copy of state store so that it can be reset to this state.
-    RMState state = memStore.loadState();
+    RMState state = rm1.getRMContext().getStateStore().loadState();
 
     // Set new configuration with QueueB removed.
     csConf = new CapacitySchedulerConfiguration(conf);
@@ -846,7 +860,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
 
     String diags = "Application killed on recovery as it was submitted to " +
         "queue QueueB which no longer exists after restart.";
-    verifyAppRecoveryWithWrongQueueConfig(csConf, app2, diags, memStore, state);
+    verifyAppRecoveryWithWrongQueueConfig(csConf, app2, diags, state);
   }
 
   private void checkParentQueue(ParentQueue parentQueue, int numContainers,
@@ -861,10 +875,8 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   // should not recover the containers that belong to the failed AM.
   @Test(timeout = 20000)
   public void testAMfailedBetweenRMRestart() throws Exception {
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
     conf.setLong(YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS, 0);
-    memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -872,7 +884,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     RMApp app1 = rm1.submitApp(200);
     MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
 
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
 
@@ -915,9 +927,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   // recover containers for completed apps.
   @Test(timeout = 20000)
   public void testContainersNotRecoveredForCompletedApps() throws Exception {
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -926,7 +936,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
     MockRM.finishAMAndVerifyAppState(app1, rm1, nm1, am1);
 
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
     NMContainerStatus runningContainer =
@@ -953,11 +963,9 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   @Test (timeout = 600000)
   public void testAppReregisterOnRMWorkPreservingRestart() throws Exception {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
 
     // start RM
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
@@ -971,7 +979,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     am0.registerAppAttempt();
 
     // start new RM
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
     rm2.waitForState(app0.getApplicationId(), RMAppState.ACCEPTED);
     rm2.waitForState(am0.getApplicationAttemptId(), RMAppAttemptState.LAUNCHED);
@@ -986,9 +994,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   
   @Test (timeout = 30000)
   public void testAMContainerStatusWithRMRestart() throws Exception {  
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -1003,7 +1009,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
         attempt0.getMasterContainer().getId()).isAMContainer());
 
     // Re-start RM
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
 
@@ -1022,9 +1028,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   @Test (timeout = 20000)
   public void testRecoverSchedulerAppAndAttemptSynchronously() throws Exception {
     // start RM
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
@@ -1034,7 +1038,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     RMApp app0 = rm1.submitApp(200);
     MockAM am0 = MockRM.launchAndRegisterAM(app0, rm1, nm1);
 
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
     // scheduler app/attempt is immediately available after RM is re-started.
@@ -1055,19 +1059,17 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   // container should not be recovered.
   @Test (timeout = 50000)
   public void testReleasedContainerNotRecovered() throws Exception {
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
+    rm1.start();
     MockNM nm1 = new MockNM("h1:1234", 15120, rm1.getResourceTrackerService());
     nm1.registerNode();
-    rm1.start();
-
+    
     RMApp app1 = rm1.submitApp(1024);
     final MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
 
     // Re-start RM
     conf.setInt(YarnConfiguration.RM_NM_EXPIRY_INTERVAL_MS, 8000);
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
     rm2.waitForState(app1.getApplicationId(), RMAppState.ACCEPTED);
@@ -1135,13 +1137,13 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     SchedulerApplicationAttempt attempt =
         scheduler.getApplicationAttempt(attemptId);
     while (attempt == null) {
-      System.out.println("Wait for scheduler attempt " + attemptId
+      LOG.info("Wait for scheduler attempt " + attemptId
           + " to be created");
       Thread.sleep(200);
       attempt = scheduler.getApplicationAttempt(attemptId);
     }
     while (attempt.getLiveContainers().size() < num) {
-      System.out.println("Wait for " + num
+      LOG.info("Wait for " + num
           + " containers to recover. currently: "
           + attempt.getLiveContainers().size());
       Thread.sleep(200);
@@ -1153,9 +1155,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
       throws Exception {
     conf.setLong(
       YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS, 4000);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -1164,7 +1164,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
 
     // Restart RM
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
     nm1.registerNode();
@@ -1207,11 +1207,9 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   public void testRetriedFinishApplicationMasterRequest()
       throws Exception {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
 
     // start RM
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
@@ -1231,9 +1229,9 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
 
 
     // start new RM
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     rm2.start();
-
+    
     am0.setAMRMProtocol(rm2.getApplicationMasterService(), rm2.getRMContext());
     am0.unregisterAppAttempt(false);
   }
@@ -1244,9 +1242,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
       "kerberos");
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
     UserGroupInformation.setConfiguration(conf);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
-    MockRM rm1 = new TestSecurityMockRM(conf, memStore);
+    MockRM rm1 = new TestSecurityMockRM(conf, null);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -1254,7 +1250,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     RMApp app1 = rm1.submitApp(200);
     MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
 
-    MockRM rm2 = new TestSecurityMockRM(conf, memStore) {
+    MockRM rm2 = new TestSecurityMockRM(conf, null) {
       protected DelegationTokenRenewer createDelegationTokenRenewer() {
         return new DelegationTokenRenewer() {
           @Override
@@ -1291,9 +1287,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
    */
   @Test (timeout = 30000)
   public void testAppFailToValidateResourceRequestOnRecovery() throws Exception{
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -1306,7 +1300,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     conf.setInt(YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_MB, 50);
     conf.setInt(YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_MB, 100);
 
-    rm2 = new MockRM(conf, memStore);
+    rm2 = new MockRM(conf);
     nm1.setResourceTrackerService(rm2.getResourceTrackerService());
     rm2.start();
   }
@@ -1377,7 +1371,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   // RM should start correctly.
   @Test (timeout = 20000)
   public void testAppStateSavedButAttemptStateNotSaved() throws Exception {
-    MemoryRMStateStore memStore = new MemoryRMStateStore() {
+    FileSystemRMStateStore memStore = new FileSystemRMStateStore(){
       @Override public synchronized void updateApplicationAttemptStateInternal(
           ApplicationAttemptId appAttemptId,
           ApplicationAttemptStateData attemptState) {
@@ -1386,8 +1380,10 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
       }
     };
     memStore.init(conf);
-    rm1 = new MockRM(conf, memStore);
+    rm1 = new MockRM(conf);
     rm1.start();
+    rm1.setRMStateStore(memStore);
+    memStore.start();
 
     MockNM nm1 = new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -1396,8 +1392,8 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     MockAM am1 = MockRM.launchAndRegisterAM(app1, rm1, nm1);
     MockRM.finishAMAndVerifyAppState(app1, rm1, nm1, am1);
 
-    ApplicationStateData appSavedState =
-        memStore.getState().getApplicationState().get(app1.getApplicationId());
+    ApplicationStateData appSavedState = 
+        memStore.loadState().getApplicationState().get(app1.getApplicationId());
 
     // check that app state is  saved.
     assertEquals(RMAppState.FINISHED, appSavedState.getState());
