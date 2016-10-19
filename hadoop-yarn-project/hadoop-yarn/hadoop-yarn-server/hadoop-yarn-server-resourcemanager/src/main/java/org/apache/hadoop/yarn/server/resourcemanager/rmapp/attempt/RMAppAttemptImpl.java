@@ -1309,7 +1309,8 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
           getFinishTime(), resUsage.getMemorySeconds(),
           resUsage.getVcoreSeconds(),
           this.attemptMetrics.getPreemptedMemory(),
-          this.attemptMetrics.getPreemptedVcore());
+          this.attemptMetrics.getPreemptedVcore(),
+          getTrackingUrl());
     LOG.info("Updating application attempt " + applicationAttemptId
         + " with final state: " + targetedFinalState + ", and exit status: "
         + exitStatus);

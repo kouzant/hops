@@ -41,7 +41,7 @@ public abstract class ApplicationAttemptStateData {
       String finalTrackingUrl, String diagnostics,
       FinalApplicationStatus amUnregisteredFinalStatus, int exitStatus,
       long finishTime, long memorySeconds, long vcoreSeconds,
-      long preemptedMemorySeconds, long preemptedVcoreSeconds) {
+      long preemptedMemorySeconds, long preemptedVcoreSeconds, String trackingUrl) {
     ApplicationAttemptStateData attemptStateData =
         Records.newRecord(ApplicationAttemptStateData.class);
     attemptStateData.setAttemptId(attemptId);
@@ -58,6 +58,7 @@ public abstract class ApplicationAttemptStateData {
     attemptStateData.setVcoreSeconds(vcoreSeconds);
     attemptStateData.setPreemptedMemorySeconds(preemptedMemorySeconds);
     attemptStateData.setPreemptedVcoreSeconds(preemptedVcoreSeconds);
+    attemptStateData.setTrackingUrl(trackingUrl);
     return attemptStateData;
   }
 
@@ -65,11 +66,11 @@ public abstract class ApplicationAttemptStateData {
       ApplicationAttemptId attemptId, Container masterContainer,
       Credentials attemptTokens, long startTime, long memorySeconds,
       long vcoreSeconds, long preemptedMemorySeconds,
-      long preemptedVcoreSeconds) {
+      long preemptedVcoreSeconds, String trackingUrl) {
     return newInstance(attemptId, masterContainer, attemptTokens,
         startTime, null, "N/A", "", null, ContainerExitStatus.INVALID, 0,
         memorySeconds, vcoreSeconds,
-        preemptedMemorySeconds, preemptedVcoreSeconds);
+        preemptedMemorySeconds, preemptedVcoreSeconds, trackingUrl);
     }
 
 
@@ -127,6 +128,22 @@ public abstract class ApplicationAttemptStateData {
    * @param url
    */
   public abstract void setFinalTrackingUrl(String url);
+  
+  /**
+   * Set the tracking Url of the AM.
+   * @param url
+   */
+  public abstract void setTrackingUrl(String url);
+  
+  /**
+   * Get the original not-proxied <em>tracking url</em> for the
+   * application. This is intended to only be used by the proxy itself.
+   * 
+   * @return the original not-proxied <em>tracking url</em> for the
+   *         application
+   */
+  public abstract String getTrackingUrl();
+  
   /**
    * Get the <em>diagnositic information</em> of the attempt 
    * @return <em>diagnositic information</em> of the attempt

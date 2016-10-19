@@ -794,8 +794,8 @@ public abstract class RMStateStore extends AbstractService {
             resUsage.getMemorySeconds(),
             resUsage.getVcoreSeconds(),
             attempMetrics.getPreemptedMemory(),
-            attempMetrics.getPreemptedVcore()
-            );
+            attempMetrics.getPreemptedVcore(),
+            appAttempt.getTrackingUrl());
 
     dispatcher.getEventHandler().handle(
       new RMStateStoreAppAttemptEvent(attemptState));

@@ -415,8 +415,8 @@ public class TestZKRMStateStore extends RMStateStoreTestBase {
       ApplicationAttemptStateData.newInstance(attemptId, container,
             store.getCredentialsFromAppAttempt(mockAttempt),
             startTime, RMAppAttemptState.FINISHED, "testUrl", 
-            "test", FinalApplicationStatus.SUCCEEDED, 100, 
-            finishTime, 0, 0, 0, 0);
+            "test", FinalApplicationStatus.SUCCEEDED, 100,
+            finishTime, 0, 0, 0, 0, "myTrackingUrl");
     store.updateApplicationAttemptState(newAttemptState);
     assertEquals("RMStateStore should have been in fenced state",
             true, store.isFencedState());
