@@ -243,6 +243,10 @@ public class MiniYARNCluster extends CompositeService {
     failoverTimeout = conf.getInt(YarnConfiguration.RM_ZK_TIMEOUT_MS,
         YarnConfiguration.DEFAULT_RM_ZK_TIMEOUT_MS);
 
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    //DBUtility.InitializeDB();
+
     if (useRpc && !useFixedPorts) {
       throw new YarnRuntimeException("Invalid configuration!" +
           " Minicluster can use rpc only when configured to use fixed ports");
@@ -303,14 +307,16 @@ public class MiniYARNCluster extends CompositeService {
     conf.set(YarnConfiguration.RM_ADMIN_ADDRESS, hostname + ":0");
     conf.set(YarnConfiguration.RM_SCHEDULER_ADDRESS, hostname + ":0");
     conf.set(YarnConfiguration.RM_RESOURCE_TRACKER_ADDRESS, hostname + ":0");
+    conf.set(YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS, "localhost:0");
     WebAppUtils.setRMWebAppHostnameAndPort(conf, hostname, 0);
   }
 
   private void setHARMConfigurationWithEphemeralPorts(final int index, Configuration conf) {
     String hostname = MiniYARNCluster.getHostname();
-    for (String confKey : YarnConfiguration.getServiceAddressConfKeys(conf)) {
-      conf.set(HAUtil.addSuffix(confKey, rmIds[index]), hostname + ":0");
-    }
+      for (String confKey : YarnConfiguration.getServiceAddressConfKeys(conf)) {
+        conf.set(HAUtil.addSuffix(confKey, rmIds[index]), hostname + ":0");
+      }
+    conf.set(YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS, "localhost:0");
   }
 
   private synchronized void initResourceManager(int index, Configuration conf) {
