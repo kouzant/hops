@@ -163,6 +163,9 @@ public class SLSRunner {
     rmConf.set(YarnConfiguration.RM_SCHEDULER,
             ResourceSchedulerWrapper.class.getName());
     rmConf.set(SLSConfiguration.METRICS_OUTPUT_DIR, metricsOutputDir);
+    RMStorageFactory.setConfiguration(rmConf);
+    YarnAPIStorageFactory.setConfiguration(rmConf);
+    DBUtility.InitializeDB();
     rm = new ResourceManager();
     rm.init(rmConf);
     rm.start();
