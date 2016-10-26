@@ -153,7 +153,11 @@ public abstract class HadoopTestCase {
     }
     else {
       //noinspection deprecation
-      mrCluster = new MiniMRCluster(taskTrackers, fileSystem.getUri().toString(), 1);
+      boolean formatDB=true;
+      if(!localFS){
+        formatDB=false;
+      }
+      mrCluster = new MiniMRCluster(taskTrackers, fileSystem.getUri().toString(), 1, formatDB);
     }
   }
 

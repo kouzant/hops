@@ -81,7 +81,7 @@ public class TestMerge {
           .numDataNodes(NUM_HADOOP_DATA_NODES).build();
       fileSystem = dfsCluster.getFileSystem();
       mrCluster = MiniMRClientClusterFactory.create(this.getClass(),
-                                                 NUM_HADOOP_DATA_NODES, conf);
+                                                 NUM_HADOOP_DATA_NODES, conf, false);
       // Generate input.
       createInput(fileSystem);
       // Run the test.
