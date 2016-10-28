@@ -810,6 +810,14 @@ public class AdminService extends CompositeService implements
 
   private void checkRMStatus(String user, String operation, String msg)
       throws StandbyException {
+    int retry=0;
+    while(!isRMActive() && retry < 10){
+      try {
+        Thread.sleep(100);
+      } catch (InterruptedException ex) {
+        LOG.warn(ex);
+      }
+    }
     if (!isRMActive()) {
       RMAuditLogger.logFailure(user, operation, "",
           "AdminService", "ResourceManager is not active. Can not " + msg);
