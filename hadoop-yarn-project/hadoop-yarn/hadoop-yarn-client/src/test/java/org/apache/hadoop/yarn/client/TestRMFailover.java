@@ -68,6 +68,28 @@ public class TestRMFailover extends ClientBaseWithFixes {
   private MiniYARNCluster cluster;
   private ApplicationId fakeAppId;
 
+
+  private void setConfForRM(String rmId, String prefix, String value) {
+    conf.set(HAUtil.addSuffix(prefix, rmId), value);
+  }
+
+  private void setRpcAddressForRM(String rmId, int base) {
+    setConfForRM(rmId, YarnConfiguration.RM_ADDRESS, "0.0.0.0:" +
+        (base + YarnConfiguration.DEFAULT_RM_PORT));
+    setConfForRM(rmId, YarnConfiguration.RM_SCHEDULER_ADDRESS, "0.0.0.0:" +
+        (base + YarnConfiguration.DEFAULT_RM_SCHEDULER_PORT));
+    setConfForRM(rmId, YarnConfiguration.RM_ADMIN_ADDRESS, "0.0.0.0:" +
+        (base + YarnConfiguration.DEFAULT_RM_ADMIN_PORT));
+    setConfForRM(rmId, YarnConfiguration.RM_RESOURCE_TRACKER_ADDRESS, "0.0.0.0:" +
+        (base + YarnConfiguration.DEFAULT_RM_RESOURCE_TRACKER_PORT));
+    setConfForRM(rmId, YarnConfiguration.RM_WEBAPP_ADDRESS, "0.0.0.0:" +
+        (base + YarnConfiguration.DEFAULT_RM_WEBAPP_PORT));
+    setConfForRM(rmId, YarnConfiguration.RM_WEBAPP_HTTPS_ADDRESS, "0.0.0.0:" +
+        (base + YarnConfiguration.DEFAULT_RM_WEBAPP_HTTPS_PORT));
+    setConfForRM(rmId, YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS, "0.0.0.0:" +
+            (base + YarnConfiguration.DEFAULT_RM_GROUP_MEMBERSHIP_PORT));
+  }
+
   @Before
   public void setup() throws IOException {
     fakeAppId = ApplicationId.newInstance(System.currentTimeMillis(), 0);
@@ -142,14 +164,19 @@ public class TestRMFailover extends ClientBaseWithFixes {
     conf.setBoolean(YarnConfiguration.AUTO_FAILOVER_ENABLED, false);
     cluster.init(conf);
     cluster.start();
+    LOG.info("Checkpoint 1");
     assertFalse("RM never turned active", -1 == cluster.getActiveRMIndex());
     verifyConnections();
 
+    LOG.info("Checkpoint 2");
     explicitFailover();
+    LOG.info("Checkpoint 3");
     verifyConnections();
-
+    LOG.info("Checkpoint 4");
     explicitFailover();
+    LOG.info("Checkpoint 5");
     verifyConnections();
+    LOG.info("Checkpoint 6");
   }
 
   @Test
