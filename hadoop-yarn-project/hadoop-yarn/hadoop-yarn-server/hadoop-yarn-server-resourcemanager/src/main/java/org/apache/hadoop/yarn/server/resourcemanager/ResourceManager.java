@@ -1251,7 +1251,8 @@ LOG.info("+");
       LOG.info("Already in active state");
       return;
     }
-    LOG.info("Transitioning to active state");
+
+    LOG.info("Transitioning to active state " + groupMembershipService.getRMId());
 
     stopSchedulerServices();
     if(resourceTrackingService.isInState(STATE.STARTED)){
@@ -1279,7 +1280,7 @@ LOG.info("+");
 //    }
 
     rmContext.setHAServiceState(HAServiceProtocol.HAServiceState.ACTIVE);
-    LOG.info("Transitioned to active state");
+    LOG.info("Transitioned to active state " + groupMembershipService.getRMId());
     }finally{
       LOG.info("unlocked resourceTrackingServiceStart");
       resourceTrackingServiceStartStopLock.unlock();
@@ -1297,7 +1298,7 @@ LOG.info("+");
       return;
     }
 
-    LOG.info("Transitioning to standby state");
+    LOG.info("Transitioning to standby state " + groupMembershipService.getRMId());
     HAServiceState state = rmContext.getHAServiceState();
     rmContext.setHAServiceState(HAServiceProtocol.HAServiceState.STANDBY);
     if (state == HAServiceProtocol.HAServiceState.ACTIVE) {
@@ -1308,7 +1309,7 @@ LOG.info("+");
       }
       reinitialize(initialize);
     }
-    LOG.info("Transitioned to standby state");
+    LOG.info("Transitioned to standby state " + groupMembershipService.getRMId());
     }finally{
       LOG.info("unlocked resourceTrackingServiceStart");
       resourceTrackingServiceStartStopLock.unlock();
