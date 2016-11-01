@@ -124,6 +124,8 @@ public class AdminService extends CompositeService implements
   @VisibleForTesting
   boolean isCentralizedNodeLabelConfiguration = true;
 
+  private Configuration conf;
+  
   public AdminService(ResourceManager rm, RMContext rmContext) {
     super(AdminService.class.getName());
     this.rm = rm;
@@ -132,6 +134,7 @@ public class AdminService extends CompositeService implements
 
   @Override
   public void serviceInit(Configuration conf) throws Exception {
+	this.conf =conf;
     autoFailoverEnabled =
         rmContext.isHAEnabled() && HAUtil.isAutomaticFailoverEnabled(conf);
 
@@ -302,6 +305,7 @@ public class AdminService extends CompositeService implements
     UserGroupInformation user = checkAccess("transitionToActive");
     checkHaStateChange(reqInfo);
     try {
+      conf.set(YarnConfiguration.RM_HA_ID, rmId);
       rm.transitionToActive();
     } catch (Exception e) {
       RMAuditLogger.logFailure(user.getShortUserName(), "transitionToActive",
