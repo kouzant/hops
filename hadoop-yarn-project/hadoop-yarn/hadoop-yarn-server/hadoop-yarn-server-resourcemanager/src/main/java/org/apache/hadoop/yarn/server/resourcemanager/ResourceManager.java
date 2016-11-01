@@ -1252,7 +1252,7 @@ LOG.info("+");
       return;
     }
 
-    LOG.info("Transitioning to active state <" + getBindAddress(this.conf).getPort() + ">");
+    LOG.info("Transitioning to active state " + HAUtil.getRMHAId(conf));
 
     stopSchedulerServices();
     if(resourceTrackingService.isInState(STATE.STARTED)){
@@ -1280,7 +1280,7 @@ LOG.info("+");
 //    }
 
     rmContext.setHAServiceState(HAServiceProtocol.HAServiceState.ACTIVE);
-    LOG.info("Transitioned to active state <" + getBindAddress(this.conf).getPort() + ">");
+    LOG.info("Transitioned to active state " + HAUtil.getRMHAId(conf));
     }finally{
       LOG.info("unlocked resourceTrackingServiceStart");
       resourceTrackingServiceStartStopLock.unlock();
@@ -1298,6 +1298,7 @@ LOG.info("+");
       return;
     }
 
+    LOG.info("Transitioning to standby state " + HAUtil.getRMHAId(conf));
     HAServiceState state = rmContext.getHAServiceState();
       LOG.info("Transitioning to standby state <" + + getBindAddress(this.conf).getPort() + "> " + state.toString());
     rmContext.setHAServiceState(HAServiceProtocol.HAServiceState.STANDBY);
@@ -1309,7 +1310,7 @@ LOG.info("+");
       }
       reinitialize(initialize);
     }
-      LOG.info("Transitioned to StandBy state <" + + getBindAddress(this.conf).getPort() + ">");
+    LOG.info("Transitioned to standby state " + HAUtil.getRMHAId(conf));
     }finally{
       LOG.info("unlocked resourceTrackingServiceStart");
       resourceTrackingServiceStartStopLock.unlock();
