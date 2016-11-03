@@ -561,7 +561,7 @@ public class TestJobHistoryEventHandler {
     conf.setBoolean(YarnConfiguration.TIMELINE_SERVICE_ENABLED, true);
     long currentTime = System.currentTimeMillis();
     try (MiniYARNCluster yarnCluster = new MiniYARNCluster(
-        TestJobHistoryEventHandler.class.getSimpleName(), 1, 1, 1, 1)) {
+        TestJobHistoryEventHandler.class.getSimpleName(), 1, 1, 1, 1, false, false)) {
       yarnCluster.init(conf);
       yarnCluster.start();
       Configuration confJHEH = new YarnConfiguration(conf);
