@@ -102,8 +102,12 @@ public class TestContainerMetrics {
     metrics.recordStateChangeDurations(anyLaunchDuration,
         anyLocalizationDuration);
 
-    Thread.sleep(110);
-    metrics.getMetrics(collector, true);
+    int nbTry=0;
+    do {
+      Thread.sleep(110);
+      metrics.getMetrics(collector, true);
+      nbTry++;
+    } while (nbTry < 10 && collector.getRecords().size() != 1);
     assertEquals(ERR, 1, collector.getRecords().size());
     MetricsRecord record = collector.getRecords().get(0);
 
