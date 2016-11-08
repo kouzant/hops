@@ -23,6 +23,7 @@ import org.apache.hadoop.fs.Path;
 import org.junit.After;
 import org.junit.Before;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.Map;
 import java.util.Properties;
@@ -54,6 +55,15 @@ public abstract class ClusterMapReduceTestCase {
   @Before
   public void setUp() throws Exception {
     startCluster(true, null);
+  }
+
+  protected void purgeOutputDir() throws IOException {
+    try {
+      dfsCluster.getFileSystem().getFileStatus(getOutputDir());
+      dfsCluster.getFileSystem().delete(getOutputDir(), true);
+    } catch (FileNotFoundException ex) {
+      // Ignore, output dir does not exist
+    }
   }
 
   /**
