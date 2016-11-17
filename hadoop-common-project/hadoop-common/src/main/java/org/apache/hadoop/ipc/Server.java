@@ -23,11 +23,7 @@ import static org.apache.hadoop.ipc.RpcConstants.CONNECTION_CONTEXT_CALL_ID;
 import static org.apache.hadoop.ipc.RpcConstants.CURRENT_VERSION;
 import static org.apache.hadoop.ipc.RpcConstants.PING_CALL_ID;
 
-import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
-import java.io.DataInputStream;
-import java.io.DataOutputStream;
-import java.io.IOException;
+import java.io.*;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.net.BindException;
 import java.net.InetAddress;
@@ -46,7 +42,11 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
+import java.security.KeyStore;
+import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedExceptionAction;
+import java.security.SecureRandom;
+import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -59,11 +59,10 @@ import java.util.Map;
 import java.util.Set;
 import java.util.Timer;
 import java.util.TimerTask;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.net.ssl.*;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
@@ -744,19 +743,35 @@ public abstract class Server {
         channel.configureBlocking(false);
         channel.socket().setTcpNoDelay(tcpNoDelay);
         channel.socket().setKeepAlive(true);
-        
-        Reader reader = getReader();
-        Connection c = connectionManager.register(channel);
-        // If the connectionManager can't take it, close the connection.
-        if (c == null) {
+
+        // TODO: DO the SSL handshake here
+        SSLEngine sslEngine = sslCtx.createSSLEngine();
+        sslEngine.setUseClientMode(false);
+        // TODO: Probably later
+        //sslEngine.setNeedClientAuth(true);
+        sslEngine.beginHandshake();
+
+        Connection c = connectionManager.register(channel, sslEngine);
+        if (c != null) {
+          if (c.doHandshake()) {
+            Reader reader = getReader();
+
+            key.attach(c);  // so closeCurrentConnection can get the object
+            reader.addConnection(c);
+          } else {
+            // If SSL handshake failed, remove from connection manager and close the connection
+            connectionManager.close(c);
+            if (channel.isOpen()) {
+              IOUtils.cleanup(null, channel);
+            }
+          }
+        } else {
+          // If the connectionManager can't take it, close the connection.
           if (channel.isOpen()) {
             IOUtils.cleanup(null, channel);
           }
-          continue;
         }
-        key.attach(c);  // so closeCurrentConnection can get the object
-        reader.addConnection(c);
-      }
+    }
     }
 
     void doRead(SelectionKey key) throws InterruptedException {
@@ -1161,8 +1176,25 @@ public abstract class Server {
     
     private boolean sentNegotiate = false;
     private boolean useWrap = false;
-    
+
+
+    // For SSL encryption
+    private SSLEngine sslEngine;
+    // Server plaintext yet data
+    private ByteBuffer serverAppData;
+    // Server encrypted data
+    private ByteBuffer serverNetData;
+    // Client decrypted data
+    private ByteBuffer clientAppData;
+    // Client encrypted data
+    private ByteBuffer clientNetData;
+
     public Connection(SocketChannel channel, long lastContact) {
+      this(channel, lastContact, null);
+    }
+
+    public Connection(SocketChannel channel, long lastContact, SSLEngine sslEngine) {
+      this.sslEngine = sslEngine;
       this.channel = channel;
       this.lastContact = lastContact;
       this.data = null;
@@ -1186,7 +1218,159 @@ public abstract class Server {
                    socketSendBufferSize);
         }
       }
+      serverNetData = ByteBuffer.allocate(this.sslEngine.getSession().getPacketBufferSize());
+      serverAppData = ByteBuffer.allocate(this.sslEngine.getSession().getApplicationBufferSize());
+      clientNetData = ByteBuffer.allocate(this.sslEngine.getSession().getPacketBufferSize());
+      clientAppData = ByteBuffer.allocate(this.sslEngine.getSession().getApplicationBufferSize());
     }   
+
+    public boolean doHandshake() throws IOException {
+      LOG.info("Starting SSL handshake...");
+
+      SSLEngineResult result;
+      SSLEngineResult.HandshakeStatus handshakeStatus;
+      ByteBuffer serverAppData = ByteBuffer.allocate(this.sslEngine.getSession().getApplicationBufferSize());
+      ByteBuffer clientAppData = ByteBuffer.allocate(this.sslEngine.getSession().getApplicationBufferSize());
+      serverNetData.clear();
+      clientNetData.clear();
+
+      handshakeStatus = sslEngine.getHandshakeStatus();
+      while (handshakeStatus != SSLEngineResult.HandshakeStatus.FINISHED
+              && handshakeStatus != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
+        switch (handshakeStatus) {
+          case NEED_UNWRAP:
+            if (channel.read(clientNetData) < 0) {
+              if (sslEngine.isInboundDone() && sslEngine.isOutboundDone()) {
+                return false;
+              }
+              try {
+                sslEngine.closeInbound();
+              } catch (SSLException ex) {
+                LOG.error(ex, ex);
+              }
+              sslEngine.closeOutbound();
+
+              handshakeStatus = sslEngine.getHandshakeStatus();
+              break;
+            }
+            clientNetData.flip();
+            try {
+              result = sslEngine.unwrap(clientNetData, clientAppData);
+              clientNetData.compact();
+              handshakeStatus = sslEngine.getHandshakeStatus();
+            } catch (SSLException ex) {
+              LOG.error(ex, ex);
+              sslEngine.closeOutbound();
+              handshakeStatus = sslEngine.getHandshakeStatus();
+              break;
+            }
+            switch (result.getStatus()) {
+              case OK:
+                break;
+              case BUFFER_OVERFLOW:
+                clientAppData = enlargeApplicationBuffer(clientAppData);
+                break;
+              case BUFFER_UNDERFLOW:
+                clientNetData = handleBufferUnderflow(clientNetData);
+                break;
+              case CLOSED:
+                if (sslEngine.isOutboundDone()) {
+                  return false;
+                } else {
+                  sslEngine.closeOutbound();
+                  handshakeStatus = sslEngine.getHandshakeStatus();
+                  break;
+                }
+              default:
+                throw new IllegalStateException("Invalid SSL status: " + result.getStatus());
+            }
+            break;
+          case NEED_WRAP:
+            serverNetData.clear();
+            try {
+              result = sslEngine.wrap(serverAppData, serverNetData);
+              handshakeStatus = result.getHandshakeStatus();
+            } catch (SSLException ex) {
+              LOG.error(ex, ex);
+              sslEngine.closeOutbound();
+              handshakeStatus = sslEngine.getHandshakeStatus();
+              break;
+            }
+            switch (result.getStatus()) {
+              case OK:
+                serverNetData.flip();
+                while (serverNetData.hasRemaining()) {
+                  channel.write(serverNetData);
+                }
+                break;
+              case BUFFER_OVERFLOW:
+                serverNetData = enlargePacketBuffer(serverNetData);
+                break;
+              case BUFFER_UNDERFLOW:
+                throw new SSLException("Buffer underflow while wrapping");
+              case CLOSED:
+                try {
+                  serverNetData.flip();
+                  while (serverNetData.hasRemaining()) {
+                    channel.write(serverNetData);
+                  }
+                  clientNetData.clear();
+                } catch (Exception ex) {
+                  LOG.error(ex, ex);
+                  handshakeStatus = sslEngine.getHandshakeStatus();
+                }
+                break;
+              default:
+                throw new IllegalStateException("Invalid SSL status " + result.getStatus());
+            }
+            break;
+          case NEED_TASK:
+            Runnable task;
+            while ((task = sslEngine.getDelegatedTask()) != null) {
+              executor.execute(task);
+            }
+            handshakeStatus = sslEngine.getHandshakeStatus();
+            break;
+          case FINISHED:
+            break;
+          case NOT_HANDSHAKING:
+            break;
+          default:
+            throw new IllegalStateException("Invalid SSL status " + handshakeStatus);
+        }
+      }
+
+      return true;
+    }
+
+    private ByteBuffer enlargePacketBuffer(ByteBuffer buffer) {
+      return enlargeBuffer(buffer, sslEngine.getSession().getPacketBufferSize());
+    }
+
+    private ByteBuffer enlargeApplicationBuffer(ByteBuffer buffer) {
+      return enlargeBuffer(buffer, sslEngine.getSession().getApplicationBufferSize());
+    }
+
+    private ByteBuffer enlargeBuffer(ByteBuffer buffer, int sessionProposedCapacity) {
+      if (sessionProposedCapacity > buffer.capacity()) {
+        buffer = ByteBuffer.allocate(sessionProposedCapacity);
+      } else {
+        buffer = ByteBuffer.allocate(buffer.capacity() * 2);
+      }
+
+      return buffer;
+    }
+
+    private ByteBuffer handleBufferUnderflow(ByteBuffer buffer) {
+      if (sslEngine.getSession().getPacketBufferSize() < buffer.limit()) {
+        return buffer;
+      } else {
+        ByteBuffer replaceBuffer = enlargePacketBuffer(buffer);
+        buffer.flip();
+        replaceBuffer.put(buffer);
+        return replaceBuffer;
+      }
+    }
 
     @Override
     public String toString() {
@@ -1472,13 +1656,15 @@ public abstract class Server {
 
     public int readAndProcess()
         throws WrappedRpcServerException, IOException, InterruptedException {
+      // Do the decryption here
+
       while (true) {
         /* Read at most one RPC. If the header is not read completely yet
          * then iterate until we read first RPC or until there is no data left.
          */    
         int count = -1;
         if (dataLengthBuffer.remaining() > 0) {
-          count = channelRead(channel, dataLengthBuffer);       
+          count = channelRead(channel, dataLengthBuffer);
           if (count < 0 || dataLengthBuffer.remaining() > 0) 
             return count;
         }
@@ -2128,7 +2314,27 @@ public abstract class Server {
     }
 
   }
-  
+
+  private KeyManager[] createKeyManager(String filePath, String keyStorePasswd, String keyPasswd) throws Exception {
+    KeyStore keyStore = KeyStore.getInstance("JKS");
+    keyStore.load(new FileInputStream(filePath), keyStorePasswd.toCharArray());
+
+    KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
+    kmf.init(keyStore, keyPasswd.toCharArray());
+
+    return kmf.getKeyManagers();
+  }
+
+  private TrustManager[] createTrustManager(String filePath, String keyStorePasswd) throws Exception {
+    KeyStore trustStore = KeyStore.getInstance("JKS");
+    trustStore.load(new FileInputStream(filePath), keyStorePasswd.toCharArray());
+
+    TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
+    tmf.init(trustStore);
+
+    return tmf.getTrustManagers();
+  }
+
   protected Server(String bindAddress, int port,
                   Class<? extends Writable> paramClass, int handlerCount, 
                   Configuration conf)
@@ -2146,7 +2352,11 @@ public abstract class Server {
     this(bindAddress, port, rpcRequestClass, handlerCount, numReaders, 
         queueSizePerHandler, conf, serverName, secretManager, null);
   }
-  
+
+
+  private SSLContext sslCtx;
+  private SSLSession sslSession;
+  private ExecutorService executor = Executors.newSingleThreadExecutor();
   /** 
    * Constructs a server listening on the named port and address.  Parameters passed must
    * be of the named class.  The <code>handlerCount</handlerCount> determines
@@ -2221,6 +2431,21 @@ public abstract class Server {
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_KEY,
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_DEFAULT);
 
+    // Configure SSLContext
+    try {
+      this.sslCtx = SSLContext.getInstance("TLSv1.2");
+      String keyStoreFilePath = "/home/antonis/SICS/keyStore.jks";
+      String keyStorePasswd = "123456";
+      String keyPasswd = "123456";
+      this.sslCtx.init(createKeyManager(keyStoreFilePath, keyStorePasswd, keyPasswd),
+              createTrustManager(keyStoreFilePath, keyStorePasswd), new SecureRandom());
+      this.sslSession = sslCtx.createSSLEngine().getSession();
+      this.sslSession.invalidate();
+    } catch (Exception ex) {
+      LOG.error(ex, ex);
+    }
+
+
     // Create the responder here
     responder = new Responder();
     
@@ -2231,7 +2456,7 @@ public abstract class Server {
     
     this.exceptionsHandler.addTerseExceptions(StandbyException.class);
   }
-  
+
   private RpcSaslProto buildNegotiateResponse(List<AuthMethod> authMethods)
       throws IOException {
     RpcSaslProto.Builder negotiateBuilder = RpcSaslProto.newBuilder();
@@ -2710,10 +2935,14 @@ public abstract class Server {
     }
 
     Connection register(SocketChannel channel) {
+      return register(channel, null);
+    }
+
+    Connection register(SocketChannel channel, SSLEngine sslEngine) {
       if (isFull()) {
         return null;
       }
-      Connection connection = new Connection(channel, Time.now());
+      Connection connection = new Connection(channel, Time.now(), sslEngine);
       add(connection);
       if (LOG.isDebugEnabled()) {
         LOG.debug("Server connection from " + connection +
