@@ -9,7 +9,8 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
-import java.security.KeyStore;
+import java.security.*;
+import java.security.cert.CertificateException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
@@ -18,7 +19,7 @@ import java.util.concurrent.Executors;
  */
 public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
 
-    private final Log LOG = LogFactory.getLog(RpcSSLEngineAbstr.class);
+    private final static Log LOG = LogFactory.getLog(RpcSSLEngineAbstr.class);
     protected final SocketChannel socketChannel;
     protected final SSLEngine sslEngine;
     private final ExecutorService exec = Executors.newSingleThreadExecutor();
@@ -188,28 +189,71 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
     public abstract int decryptData(ReadableByteChannel channel, ByteBuffer buffer)
         throws IOException;
 
+    public static SSLContext initializeSSLContext() throws IOException {
+        SSLContext sslCtx = null;
+        try {
+            sslCtx = SSLContext.getInstance("TLSv1.2");
+
+            // TODO: Get them from the configuration file
+            String keystoreFilePath = "/home/antonis/SICS/keyStore.jks";
+            String keystorePasswd = "123456";
+            String keyPasswd = "123456";
+            sslCtx.init(createKeyManager(keystoreFilePath, keystorePasswd, keyPasswd),
+                    createTrustManager(keystoreFilePath, keystorePasswd),
+                    new SecureRandom());
+        } catch (NoSuchAlgorithmException | KeyManagementException ex) {
+            handleException(ex);
+        }
+
+        return sslCtx;
+    }
+
     // Helper method to initialize key managers needed by SSLContext
-    public static KeyManager[] createKeyManager(String filePath, String keyStorePasswd, String keyPasswd)
-            throws Exception {
-        KeyStore keyStore = KeyStore.getInstance("JKS");
-        keyStore.load(new FileInputStream(filePath), keyStorePasswd.toCharArray());
+    private static KeyManager[] createKeyManager(String filePath, String keyStorePasswd, String keyPasswd)
+        throws IOException {
 
-        KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
-        kmf.init(keyStore, keyPasswd.toCharArray());
+        KeyManager[] keyManagers = null;
+        try {
+            KeyStore keyStore = KeyStore.getInstance("JKS");
+            keyStore.load(new FileInputStream(filePath), keyStorePasswd.toCharArray());
 
-        return kmf.getKeyManagers();
+            KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
+            kmf.init(keyStore, keyPasswd.toCharArray());
+
+            keyManagers = kmf.getKeyManagers();
+        } catch (KeyStoreException | NoSuchAlgorithmException
+                | CertificateException | UnrecoverableKeyException ex) {
+            handleException(ex);
+        }
+
+        return keyManagers;
     }
 
     // Helper method to initialize trust manager needed by SSLContext
-    public static TrustManager[] createTrustManager(String filePath, String keyStorePasswd)
-            throws Exception {
-        KeyStore trustStore = KeyStore.getInstance("JKS");
-        trustStore.load(new FileInputStream(filePath), keyStorePasswd.toCharArray());
+    private static TrustManager[] createTrustManager(String filePath, String keyStorePasswd)
+            throws IOException {
+        TrustManager[] trustManagers = null;
 
-        TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
-        tmf.init(trustStore);
+        try {
+            KeyStore trustStore = KeyStore.getInstance("JKS");
+            trustStore.load(new FileInputStream(filePath), keyStorePasswd.toCharArray());
 
-        return tmf.getTrustManagers();
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
+            tmf.init(trustStore);
+
+            trustManagers = tmf.getTrustManagers();
+        } catch (KeyStoreException | NoSuchAlgorithmException
+                | CertificateException ex) {
+            handleException(ex);
+        }
+
+        return trustManagers;
+    }
+
+    private static void handleException(Throwable ex) throws IOException {
+        String errorPrefix = "Error while initializing cryptographic material ";
+        LOG.error(errorPrefix + ex, ex);
+        throw new IOException(errorPrefix, ex);
     }
 
     protected ByteBuffer enlargeApplicationBuffer(ByteBuffer buffer) {

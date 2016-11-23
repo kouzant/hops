@@ -43,7 +43,6 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
 import java.security.PrivilegedExceptionAction;
-import java.security.SecureRandom;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -376,6 +375,9 @@ public abstract class Server {
   private Listener listener = null;
   private Responder responder = null;
   private Handler[] handlers = null;
+
+  private final boolean isSSLEnabled;
+  private SSLContext sslCtx = null;
 
   /**
    * A convenience method to bind to a given address and report 
@@ -2230,7 +2232,7 @@ public abstract class Server {
   }
 
 
-  private SSLContext sslCtx;
+
   /**
    * Constructs a server listening on the named port and address.  Parameters passed must
    * be of the named class.  The <code>handlerCount</handlerCount> determines
@@ -2305,18 +2307,13 @@ public abstract class Server {
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_KEY,
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_DEFAULT);
 
-    // Configure SSLContext
-    try {
-      this.sslCtx = SSLContext.getInstance("TLSv1.2");
-      String keyStoreFilePath = "/home/antonis/SICS/keyStore.jks";
-      String keyStorePasswd = "123456";
-      String keyPasswd = "123456";
-      this.sslCtx.init(RpcSSLEngineAbstr.createKeyManager(keyStoreFilePath, keyStorePasswd, keyPasswd),
-              RpcSSLEngineAbstr.createTrustManager(keyStoreFilePath, keyStorePasswd), new SecureRandom());
-    } catch (Exception ex) {
-      LOG.error(ex, ex);
-    }
+    // TODO: Get it from the configuration file
+    this.isSSLEnabled = true;
 
+    if (isSSLEnabled) {
+      // Configure SSLContext
+      this.sslCtx = RpcSSLEngineAbstr.initializeSSLContext();
+    }
 
     // Create the responder here
     responder = new Responder();
@@ -2328,6 +2325,8 @@ public abstract class Server {
     
     this.exceptionsHandler.addTerseExceptions(StandbyException.class);
   }
+
+
 
   private RpcSaslProto buildNegotiateResponse(List<AuthMethod> authMethods)
       throws IOException {
