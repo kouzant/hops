@@ -732,7 +732,21 @@ public abstract class Server {
     InetSocketAddress getAddress() {
       return (InetSocketAddress)acceptChannel.socket().getLocalSocketAddress();
     }
-    
+
+    SSLEngine createSSLEngine() throws IOException {
+      if (isSSLEnabled) {
+        SSLEngine sslEngine = sslCtx.createSSLEngine();
+        sslEngine.getSession().invalidate();
+        sslEngine.setUseClientMode(false);
+        // Probably we want this, right?
+        sslEngine.setNeedClientAuth(true);
+        sslEngine.beginHandshake();
+        return sslEngine;
+      } else {
+        return null;
+      }
+    }
+
     void doAccept(SelectionKey key) throws InterruptedException, IOException,  OutOfMemoryError {
       ServerSocketChannel server = (ServerSocketChannel) key.channel();
       SocketChannel channel;
@@ -742,27 +756,28 @@ public abstract class Server {
         channel.socket().setTcpNoDelay(tcpNoDelay);
         channel.socket().setKeepAlive(true);
 
-        SSLEngine sslEngine = sslCtx.createSSLEngine();
-        sslEngine.getSession().invalidate();
-        sslEngine.setUseClientMode(false);
-        // TODO: Probably later
-        sslEngine.setNeedClientAuth(true);
-        sslEngine.beginHandshake();
+        SSLEngine sslEngine = createSSLEngine();
 
         Connection c = connectionManager.register(channel, sslEngine);
         if (c != null) {
-          if (c.getRpcSSLEngine().doHandshake()) {
-            Reader reader = getReader();
-
-            key.attach(c);  // so closeCurrentConnection can get the object
-            reader.addConnection(c);
-          } else {
-            // If SSL handshake failed, remove from connection manager and close the connection
-            LOG.error("SSL handshake failed");
-            connectionManager.close(c);
-            if (channel.isOpen()) {
-              IOUtils.cleanup(null, channel);
+          boolean handshakeDone = false;
+          if (isSSLEnabled) {
+            if (!c.getRpcSSLEngine().doHandshake()) {
+              // SSL handshake failed
+              LOG.error("SSL handshake failed");
+              connectionManager.close(c);
+              if (channel.isOpen()) {
+                IOUtils.cleanup(null, channel);
+              }
+            } else {
+              handshakeDone = true;
             }
+          }
+
+          if (!isSSLEnabled || (isSSLEnabled && handshakeDone)) {
+            Reader reader = getReader();
+            key.attach(c); // so closeCurrentConnection can get the object
+            reader.addConnection(c);
           }
         } else {
           // If the connectionManager can't take it, close the connection.
@@ -770,7 +785,7 @@ public abstract class Server {
             IOUtils.cleanup(null, channel);
           }
         }
-    }
+      }
     }
 
     void doRead(SelectionKey key) throws InterruptedException {
@@ -998,8 +1013,12 @@ public abstract class Server {
           // Send as much data as we can in the non-blocking fashion
           //
 
-          //int numBytes = channelWrite(channel, call.rpcResponse);
-          int numBytes = call.connection.sslChannelWrite(channel, call.rpcResponse);
+          int numBytes = 0;
+          if (isSSLEnabled) {
+            numBytes = call.connection.sslChannelWrite(channel, call.rpcResponse);
+          } else {
+            numBytes = channelWrite(channel, call.rpcResponse);
+          }
 
           if (numBytes < 0) {
             return true;
@@ -2806,15 +2825,16 @@ public abstract class Server {
       return connections.toArray(new Connection[0]);
     }
 
-    Connection register(SocketChannel channel) {
-      return register(channel, null);
-    }
-
     Connection register(SocketChannel channel, SSLEngine sslEngine) {
       if (isFull()) {
         return null;
       }
-      Connection connection = new Connection(channel, Time.now(), new ServerRpcSSLEngineImpl(channel, sslEngine));
+      Connection connection;
+      if (sslEngine != null) {
+        connection = new Connection(channel, Time.now(), new ServerRpcSSLEngineImpl(channel, sslEngine));
+      } else {
+        connection = new Connection(channel, Time.now());
+      }
       add(connection);
       if (LOG.isDebugEnabled()) {
         LOG.debug("Server connection from " + connection +
