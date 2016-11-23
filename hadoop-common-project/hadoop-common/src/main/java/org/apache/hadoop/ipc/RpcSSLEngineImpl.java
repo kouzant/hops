@@ -225,8 +225,8 @@ public class RpcSSLEngineImpl implements RpcSSLEngine {
                     throw new SSLException("Buffer underflow should not happen after wrap");
                 case CLOSED:
                     LOG.debug("Client closed the connection while trying to write");
-                    /*sslEngine.closeOutbound();
-                    doHandshake();*/
+                    sslEngine.closeOutbound();
+                    doHandshake();
                     return -1;
                 default:
                     throw new IllegalStateException("Invalid SSL state: " + result.getStatus());
@@ -263,7 +263,7 @@ public class RpcSSLEngineImpl implements RpcSSLEngine {
                         LOG.debug("Client closed the connection while trying to read");
                         sslEngine.closeOutbound();
                         doHandshake();
-                        break;
+                        return -1;
                     default:
                         throw new IllegalStateException("Invalid SSL status: " + result.getStatus());
                 }

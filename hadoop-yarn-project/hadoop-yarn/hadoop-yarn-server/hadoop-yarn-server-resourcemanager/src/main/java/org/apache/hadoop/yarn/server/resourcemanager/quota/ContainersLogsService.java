@@ -128,7 +128,6 @@ public class ContainersLogsService extends CompositeService {
 
     // Creates separate thread for retrieving container statuses
     tickThread = new Thread(new TickThread());
-    tickThread.setDaemon(true);
     tickThread.setName("ContainersLogs Tick Thread");
 
     super.serviceInit(conf);

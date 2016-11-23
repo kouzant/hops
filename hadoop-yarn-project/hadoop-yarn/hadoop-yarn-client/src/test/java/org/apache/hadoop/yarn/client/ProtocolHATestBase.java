@@ -22,6 +22,7 @@ import java.nio.ByteBuffer;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.RegisterApplicationMasterRequest;
@@ -304,6 +305,8 @@ public abstract class ProtocolHATestBase extends ClientBaseWithFixes {
     conf.setBoolean(YarnConfiguration.AUTO_FAILOVER_ENABLED, false);
     conf.set(YarnConfiguration.LEADER_CLIENT_FAILOVER_PROXY_PROVIDER,
             "org.apache.hadoop.yarn.client.ConfiguredRMFailoverProxyProvider");
+    conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
+            "org.apache.hadoop.net.HopsSSLSocketFactory");
     cluster =
         new MiniYARNClusterForHATesting(TestRMFailover.class.getName(), 2,
             numOfNMs, 1, 1, false, overrideClientRMService, overrideRTS,

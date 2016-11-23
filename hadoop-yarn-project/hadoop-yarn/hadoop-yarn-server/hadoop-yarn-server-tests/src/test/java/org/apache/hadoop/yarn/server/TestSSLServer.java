@@ -37,7 +37,7 @@ public class TestSSLServer {
         conf.setBoolean(YarnConfiguration.YARN_MINICLUSTER_USE_RPC, true);
         conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
                 "org.apache.hadoop.net.HopsSSLSocketFactory");
-        cluster = new MiniYARNCluster(TestSSLServer.class.getName(), 1, 1, 1, 1, false, true);
+        cluster = new MiniYARNCluster(TestSSLServer.class.getName(), 1, 3, 1, 1, false, true);
         cluster.init(conf);
         cluster.start();
 
@@ -68,7 +68,7 @@ public class TestSSLServer {
         List<NodeReport> reports = res.getNodeReports();
         LOG.info("<Skata> Printing cluster nodes report");
         for (NodeReport report : reports) {
-            LOG.info("<Skata> NodeId: " + report.getNodeId().getHost());
+            LOG.info("<Skata> NodeId: " + report.getNodeId().toString());
         }
     }
 }

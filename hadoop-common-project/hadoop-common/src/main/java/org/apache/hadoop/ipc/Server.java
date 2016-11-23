@@ -748,7 +748,7 @@ public abstract class Server {
         sslEngine.getSession().invalidate();
         sslEngine.setUseClientMode(false);
         // TODO: Probably later
-        //sslEngine.setNeedClientAuth(true);
+        sslEngine.setNeedClientAuth(true);
         sslEngine.beginHandshake();
 
         Connection c = connectionManager.register(channel, sslEngine);
@@ -1520,8 +1520,11 @@ public abstract class Server {
       while (true) {
         // Decrypt incoming data
         int bytesRead = rpcSSLEngine.decryptData(channel, sslDecryptedBuffer);
-        if (!sslDecryptedBuffer.hasRemaining()) {
-          return 0;
+        if (bytesRead < 0) {
+          return bytesRead;
+        }
+        if (sslDecryptedBuffer.position() == 0) {
+          continue;
         }
         LOG.debug("<Skata> bytesRead: " + bytesRead);
         sslDecryptedBuffer.flip();
