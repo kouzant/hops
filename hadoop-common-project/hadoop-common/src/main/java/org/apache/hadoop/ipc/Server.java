@@ -744,8 +744,8 @@ public abstract class Server {
         channel.socket().setTcpNoDelay(tcpNoDelay);
         channel.socket().setKeepAlive(true);
 
-        // TODO: DO the SSL handshake here
         SSLEngine sslEngine = sslCtx.createSSLEngine();
+        sslEngine.getSession().invalidate();
         sslEngine.setUseClientMode(false);
         // TODO: Probably later
         //sslEngine.setNeedClientAuth(true);
@@ -753,13 +753,14 @@ public abstract class Server {
 
         Connection c = connectionManager.register(channel, sslEngine);
         if (c != null) {
-          if (c.doHandshake()) {
+          if (c.getRpcSSLEngine().doHandshake()) {
             Reader reader = getReader();
 
             key.attach(c);  // so closeCurrentConnection can get the object
             reader.addConnection(c);
           } else {
             // If SSL handshake failed, remove from connection manager and close the connection
+            LOG.error("SSL handshake failed");
             connectionManager.close(c);
             if (channel.isOpen()) {
               IOUtils.cleanup(null, channel);
@@ -998,7 +999,10 @@ public abstract class Server {
           //
           // Send as much data as we can in the non-blocking fashion
           //
-          int numBytes = channelWrite(channel, call.rpcResponse);
+
+          //int numBytes = channelWrite(channel, call.rpcResponse);
+          int numBytes = call.connection.sslChannelWrite(channel, call.rpcResponse);
+
           if (numBytes < 0) {
             return true;
           }
@@ -1179,22 +1183,16 @@ public abstract class Server {
 
 
     // For SSL encryption
-    private SSLEngine sslEngine;
-    // Server plaintext yet data
-    private ByteBuffer serverAppData;
-    // Server encrypted data
-    private ByteBuffer serverNetData;
-    // Client decrypted data
-    private ByteBuffer clientAppData;
-    // Client encrypted data
-    private ByteBuffer clientNetData;
+    private final RpcSSLEngine rpcSSLEngine;
+    private ByteBuffer sslDecryptedBuffer;
 
     public Connection(SocketChannel channel, long lastContact) {
       this(channel, lastContact, null);
     }
 
-    public Connection(SocketChannel channel, long lastContact, SSLEngine sslEngine) {
-      this.sslEngine = sslEngine;
+    public Connection(SocketChannel channel, long lastContact, RpcSSLEngine rpcSSLEngine) {
+      this.rpcSSLEngine = rpcSSLEngine;
+      this.sslDecryptedBuffer = ByteBuffer.allocate(4096);
       this.channel = channel;
       this.lastContact = lastContact;
       this.data = null;
@@ -1218,158 +1216,20 @@ public abstract class Server {
                    socketSendBufferSize);
         }
       }
-      serverNetData = ByteBuffer.allocate(this.sslEngine.getSession().getPacketBufferSize());
-      serverAppData = ByteBuffer.allocate(this.sslEngine.getSession().getApplicationBufferSize());
-      clientNetData = ByteBuffer.allocate(this.sslEngine.getSession().getPacketBufferSize());
-      clientAppData = ByteBuffer.allocate(this.sslEngine.getSession().getApplicationBufferSize());
-    }   
+    }
 
-    public boolean doHandshake() throws IOException {
-      LOG.info("Starting SSL handshake...");
+    public RpcSSLEngine getRpcSSLEngine() {
+      return rpcSSLEngine;
+    }
 
-      SSLEngineResult result;
-      SSLEngineResult.HandshakeStatus handshakeStatus;
-      ByteBuffer serverAppData = ByteBuffer.allocate(this.sslEngine.getSession().getApplicationBufferSize());
-      ByteBuffer clientAppData = ByteBuffer.allocate(this.sslEngine.getSession().getApplicationBufferSize());
-      serverNetData.clear();
-      clientNetData.clear();
-
-      handshakeStatus = sslEngine.getHandshakeStatus();
-      while (handshakeStatus != SSLEngineResult.HandshakeStatus.FINISHED
-              && handshakeStatus != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
-        switch (handshakeStatus) {
-          case NEED_UNWRAP:
-            if (channel.read(clientNetData) < 0) {
-              if (sslEngine.isInboundDone() && sslEngine.isOutboundDone()) {
-                return false;
-              }
-              try {
-                sslEngine.closeInbound();
-              } catch (SSLException ex) {
-                LOG.error(ex, ex);
-              }
-              sslEngine.closeOutbound();
-
-              handshakeStatus = sslEngine.getHandshakeStatus();
-              break;
-            }
-            clientNetData.flip();
-            try {
-              result = sslEngine.unwrap(clientNetData, clientAppData);
-              clientNetData.compact();
-              handshakeStatus = sslEngine.getHandshakeStatus();
-            } catch (SSLException ex) {
-              LOG.error(ex, ex);
-              sslEngine.closeOutbound();
-              handshakeStatus = sslEngine.getHandshakeStatus();
-              break;
-            }
-            switch (result.getStatus()) {
-              case OK:
-                break;
-              case BUFFER_OVERFLOW:
-                clientAppData = enlargeApplicationBuffer(clientAppData);
-                break;
-              case BUFFER_UNDERFLOW:
-                clientNetData = handleBufferUnderflow(clientNetData);
-                break;
-              case CLOSED:
-                if (sslEngine.isOutboundDone()) {
-                  return false;
-                } else {
-                  sslEngine.closeOutbound();
-                  handshakeStatus = sslEngine.getHandshakeStatus();
-                  break;
-                }
-              default:
-                throw new IllegalStateException("Invalid SSL status: " + result.getStatus());
-            }
-            break;
-          case NEED_WRAP:
-            serverNetData.clear();
-            try {
-              result = sslEngine.wrap(serverAppData, serverNetData);
-              handshakeStatus = result.getHandshakeStatus();
-            } catch (SSLException ex) {
-              LOG.error(ex, ex);
-              sslEngine.closeOutbound();
-              handshakeStatus = sslEngine.getHandshakeStatus();
-              break;
-            }
-            switch (result.getStatus()) {
-              case OK:
-                serverNetData.flip();
-                while (serverNetData.hasRemaining()) {
-                  channel.write(serverNetData);
-                }
-                break;
-              case BUFFER_OVERFLOW:
-                serverNetData = enlargePacketBuffer(serverNetData);
-                break;
-              case BUFFER_UNDERFLOW:
-                throw new SSLException("Buffer underflow while wrapping");
-              case CLOSED:
-                try {
-                  serverNetData.flip();
-                  while (serverNetData.hasRemaining()) {
-                    channel.write(serverNetData);
-                  }
-                  clientNetData.clear();
-                } catch (Exception ex) {
-                  LOG.error(ex, ex);
-                  handshakeStatus = sslEngine.getHandshakeStatus();
-                }
-                break;
-              default:
-                throw new IllegalStateException("Invalid SSL status " + result.getStatus());
-            }
-            break;
-          case NEED_TASK:
-            Runnable task;
-            while ((task = sslEngine.getDelegatedTask()) != null) {
-              executor.execute(task);
-            }
-            handshakeStatus = sslEngine.getHandshakeStatus();
-            break;
-          case FINISHED:
-            break;
-          case NOT_HANDSHAKING:
-            break;
-          default:
-            throw new IllegalStateException("Invalid SSL status " + handshakeStatus);
-        }
+    public int sslChannelWrite(WritableByteChannel channel, ByteBuffer buffer)
+      throws IOException {
+      LOG.debug("Encrypting and sending data");
+      int count = rpcSSLEngine.write(channel, buffer);
+      if (count > 0) {
+        rpcMetrics.incrSentBytes(count);
       }
-
-      return true;
-    }
-
-    private ByteBuffer enlargePacketBuffer(ByteBuffer buffer) {
-      return enlargeBuffer(buffer, sslEngine.getSession().getPacketBufferSize());
-    }
-
-    private ByteBuffer enlargeApplicationBuffer(ByteBuffer buffer) {
-      return enlargeBuffer(buffer, sslEngine.getSession().getApplicationBufferSize());
-    }
-
-    private ByteBuffer enlargeBuffer(ByteBuffer buffer, int sessionProposedCapacity) {
-      if (sessionProposedCapacity > buffer.capacity()) {
-        buffer = ByteBuffer.allocate(sessionProposedCapacity);
-      } else {
-        buffer = ByteBuffer.allocate(buffer.capacity() * 2);
-      }
-
-      return buffer;
-    }
-
-    private ByteBuffer handleBufferUnderflow(ByteBuffer buffer) {
-      if (sslEngine.getSession().getPacketBufferSize() < buffer.limit()) {
-        return buffer;
-      } else {
-        ByteBuffer replaceBuffer = enlargePacketBuffer(buffer);
-        buffer.flip();
-        replaceBuffer.put(buffer);
-        return replaceBuffer;
-      }
+      return count;
     }
 
     @Override
@@ -1656,31 +1516,56 @@ public abstract class Server {
 
     public int readAndProcess()
         throws WrappedRpcServerException, IOException, InterruptedException {
-      // Do the decryption here
 
       while (true) {
+        // Decrypt incoming data
+        int bytesRead = rpcSSLEngine.decryptData(channel, sslDecryptedBuffer);
+        if (!sslDecryptedBuffer.hasRemaining()) {
+          return 0;
+        }
+        LOG.debug("<Skata> bytesRead: " + bytesRead);
+        sslDecryptedBuffer.flip();
+
         /* Read at most one RPC. If the header is not read completely yet
          * then iterate until we read first RPC or until there is no data left.
          */    
         int count = -1;
         if (dataLengthBuffer.remaining() > 0) {
-          count = channelRead(channel, dataLengthBuffer);
-          if (count < 0 || dataLengthBuffer.remaining() > 0) 
+
+          //count = channelRead(channel, dataLengthBuffer);
+          // 4 bytes
+          while (dataLengthBuffer.hasRemaining()) {
+            dataLengthBuffer.put(sslDecryptedBuffer.get());
+            count++;
+          }
+          if (count < 0 || dataLengthBuffer.remaining() > 0)
             return count;
         }
-        
+
+        count = 0;
         if (!connectionHeaderRead) {
           //Every connection is expected to send the header.
           if (connectionHeaderBuf == null) {
             connectionHeaderBuf = ByteBuffer.allocate(3);
           }
-          count = channelRead(channel, connectionHeaderBuf);
+
+          //count = channelRead(channel, connectionHeaderBuf);
+          // 3 bytes
+          while (connectionHeaderBuf.hasRemaining()) {
+            connectionHeaderBuf.put(sslDecryptedBuffer.get());
+            count++;
+          }
           if (count < 0 || connectionHeaderBuf.remaining() > 0) {
             return count;
           }
+          count = 0;
+          connectionHeaderBuf.flip();
           int version = connectionHeaderBuf.get(0);
+          LOG.debug("<Skata> RPC version is: " + version);
           // TODO we should add handler for service class later
-          this.setServiceClass(connectionHeaderBuf.get(1));
+          int serviceClass = connectionHeaderBuf.get(1);
+          LOG.debug("<Skata> RPC serviceClass is: " + serviceClass);
+          this.setServiceClass(serviceClass);
           dataLengthBuffer.flip();
           
           // Check if it looks like the user is hitting an IPC port
@@ -1708,6 +1593,8 @@ public abstract class Server {
           dataLengthBuffer.clear();
           connectionHeaderBuf = null;
           connectionHeaderRead = true;
+          sslDecryptedBuffer.compact();
+          LOG.debug("sslDecryptedBuffer: " + sslDecryptedBuffer.toString());
           continue;
         }
         
@@ -1718,8 +1605,13 @@ public abstract class Server {
           data = ByteBuffer.allocate(dataLength);
         }
         
-        count = channelRead(channel, data);
-        
+        //count = channelRead(channel, data);
+        while (data.hasRemaining()) {
+          data.put(sslDecryptedBuffer.get());
+          count++;
+        }
+        sslDecryptedBuffer.compact();
+
         if (data.remaining() == 0) {
           dataLengthBuffer.clear();
           data.flip();
@@ -1948,6 +1840,7 @@ public abstract class Server {
       int callId = -1;
       int retry = RpcConstants.INVALID_RETRY_COUNT;
       try {
+        LOG.debug("<Skata> Processing RPC");
         final DataInputStream dis =
             new DataInputStream(new ByteArrayInputStream(buf));
         final RpcRequestHeaderProto header =
@@ -2023,6 +1916,7 @@ public abstract class Server {
         InterruptedException {
       Class<? extends Writable> rpcRequestClass = 
           getRpcRequestWrapper(header.getRpcKind());
+      LOG.info("<Skata> processRpcRequest with callId: " + header.getCallId());
       if (rpcRequestClass == null) {
         LOG.warn("Unknown rpc kind "  + header.getRpcKind() + 
             " from client " + getHostAddress());
@@ -2076,6 +1970,7 @@ public abstract class Server {
         DataInputStream dis) throws WrappedRpcServerException, IOException,
         InterruptedException {
       final int callId = header.getCallId();
+      LOG.info("<Skata> processOutOfBand with callId: " + callId);
       if (callId == CONNECTION_CONTEXT_CALL_ID) {
         // SASL must be established prior to connection context
         if (authProtocol == AuthProtocol.SASL && !saslContextEstablished) {
@@ -2174,6 +2069,7 @@ public abstract class Server {
       dataLengthBuffer = null;
       if (!channel.isOpen())
         return;
+
       try {socket.shutdownOutput();} catch(Exception e) {
         LOG.debug("Ignoring socket shutdown exception", e);
       }
@@ -2287,6 +2183,7 @@ public abstract class Server {
                   + call.toString());
               buf = new ByteArrayOutputStream(INITIAL_RESP_BUF_SIZE);
             }
+            LOG.debug("Adding response to responder");
             responder.doRespond(call);
           }
         } catch (InterruptedException e) {
@@ -2315,26 +2212,6 @@ public abstract class Server {
 
   }
 
-  private KeyManager[] createKeyManager(String filePath, String keyStorePasswd, String keyPasswd) throws Exception {
-    KeyStore keyStore = KeyStore.getInstance("JKS");
-    keyStore.load(new FileInputStream(filePath), keyStorePasswd.toCharArray());
-
-    KeyManagerFactory kmf = KeyManagerFactory.getInstance("SunX509");
-    kmf.init(keyStore, keyPasswd.toCharArray());
-
-    return kmf.getKeyManagers();
-  }
-
-  private TrustManager[] createTrustManager(String filePath, String keyStorePasswd) throws Exception {
-    KeyStore trustStore = KeyStore.getInstance("JKS");
-    trustStore.load(new FileInputStream(filePath), keyStorePasswd.toCharArray());
-
-    TrustManagerFactory tmf = TrustManagerFactory.getInstance("SunX509");
-    tmf.init(trustStore);
-
-    return tmf.getTrustManagers();
-  }
-
   protected Server(String bindAddress, int port,
                   Class<? extends Writable> paramClass, int handlerCount, 
                   Configuration conf)
@@ -2355,9 +2232,7 @@ public abstract class Server {
 
 
   private SSLContext sslCtx;
-  private SSLSession sslSession;
-  private ExecutorService executor = Executors.newSingleThreadExecutor();
-  /** 
+  /**
    * Constructs a server listening on the named port and address.  Parameters passed must
    * be of the named class.  The <code>handlerCount</handlerCount> determines
    * the number of handler threads that will be used to process calls.
@@ -2437,10 +2312,8 @@ public abstract class Server {
       String keyStoreFilePath = "/home/antonis/SICS/keyStore.jks";
       String keyStorePasswd = "123456";
       String keyPasswd = "123456";
-      this.sslCtx.init(createKeyManager(keyStoreFilePath, keyStorePasswd, keyPasswd),
-              createTrustManager(keyStoreFilePath, keyStorePasswd), new SecureRandom());
-      this.sslSession = sslCtx.createSSLEngine().getSession();
-      this.sslSession.invalidate();
+      this.sslCtx.init(RpcSSLEngineImpl.createKeyManager(keyStoreFilePath, keyStorePasswd, keyPasswd),
+              RpcSSLEngineImpl.createTrustManager(keyStoreFilePath, keyStorePasswd), new SecureRandom());
     } catch (Exception ex) {
       LOG.error(ex, ex);
     }
@@ -2507,6 +2380,7 @@ public abstract class Server {
   }
   
   private void closeConnection(Connection connection) {
+    LOG.info("Closing a connection");
     connectionManager.close(connection);
   }
   
@@ -2942,7 +2816,7 @@ public abstract class Server {
       if (isFull()) {
         return null;
       }
-      Connection connection = new Connection(channel, Time.now(), sslEngine);
+      Connection connection = new Connection(channel, Time.now(), new RpcSSLEngineImpl(channel, sslEngine));
       add(connection);
       if (LOG.isDebugEnabled()) {
         LOG.debug("Server connection from " + connection +
@@ -2993,6 +2867,7 @@ public abstract class Server {
     void closeAll() {
       // use a copy of the connections to be absolutely sure the concurrent
       // iterator doesn't miss a connection
+      LOG.info("Closing all connections");
       for (Connection connection : toArray()) {
         close(connection);
       }

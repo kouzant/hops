@@ -112,6 +112,7 @@ public class PriceMultiplicatiorService extends AbstractService {
 
     priceCalculationThread = new Thread(new WorkingThread());
     priceCalculationThread.setName("Price estimation service");
+    priceCalculationThread.setDaemon(true);
     priceCalculationThread.start();
     super.serviceStart();
   }

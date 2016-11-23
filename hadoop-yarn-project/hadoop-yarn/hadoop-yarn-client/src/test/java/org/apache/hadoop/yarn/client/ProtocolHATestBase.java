@@ -167,20 +167,20 @@ public abstract class ProtocolHATestBase extends ClientBaseWithFixes {
   }
 
   private void setRpcAddressForRM(String rmId, int base) {
-    setConfForRM(rmId, YarnConfiguration.RM_ADDRESS, "0.0.0.0:" +
+    setConfForRM(rmId, YarnConfiguration.RM_ADDRESS, "localhost:" +
         (base + YarnConfiguration.DEFAULT_RM_PORT));
-    setConfForRM(rmId, YarnConfiguration.RM_SCHEDULER_ADDRESS, "0.0.0.0:" +
+    setConfForRM(rmId, YarnConfiguration.RM_SCHEDULER_ADDRESS, "localhost:" +
         (base + YarnConfiguration.DEFAULT_RM_SCHEDULER_PORT));
-    setConfForRM(rmId, YarnConfiguration.RM_ADMIN_ADDRESS, "0.0.0.0:" +
+    setConfForRM(rmId, YarnConfiguration.RM_ADMIN_ADDRESS, "localhost:" +
         (base + YarnConfiguration.DEFAULT_RM_ADMIN_PORT));
     setConfForRM(rmId, YarnConfiguration.RM_RESOURCE_TRACKER_ADDRESS,
-            "0.0.0.0:" + (base + YarnConfiguration
+            "localhost:" + (base + YarnConfiguration
             .DEFAULT_RM_RESOURCE_TRACKER_PORT));
-    setConfForRM(rmId, YarnConfiguration.RM_WEBAPP_ADDRESS, "0.0.0.0:" +
+    setConfForRM(rmId, YarnConfiguration.RM_WEBAPP_ADDRESS, "localhost:" +
         (base + YarnConfiguration.DEFAULT_RM_WEBAPP_PORT));
-    setConfForRM(rmId, YarnConfiguration.RM_WEBAPP_HTTPS_ADDRESS, "0.0.0.0:" +
+    setConfForRM(rmId, YarnConfiguration.RM_WEBAPP_HTTPS_ADDRESS, "localhost:" +
         (base + YarnConfiguration.DEFAULT_RM_WEBAPP_HTTPS_PORT));
-    setConfForRM(rmId, YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS, "0.0.0.0:" +
+    setConfForRM(rmId, YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS, "localhost:" +
         (base + YarnConfiguration.DEFAULT_RM_GROUP_MEMBERSHIP_PORT));
   }
 
