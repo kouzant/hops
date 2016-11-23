@@ -2,7 +2,7 @@ package org.apache.hadoop.net;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.ipc.RpcSSLEngineImpl;
+import org.apache.hadoop.ipc.RpcSSLEngineAbstr;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLContext;
@@ -32,8 +32,8 @@ public class HopsSSLSocketFactory extends SocketFactory {
             String keyStoreFilePath = "/home/antonis/SICS/keyStore.jks";
             String keyStorePasswd = "123456";
             String keyPasswd = "123456";
-            this.sslCtx.init(RpcSSLEngineImpl.createKeyManager(keyStoreFilePath, keyStorePasswd, keyPasswd),
-                    RpcSSLEngineImpl.createTrustManager(keyStoreFilePath, keyStorePasswd), new SecureRandom());
+            this.sslCtx.init(RpcSSLEngineAbstr.createKeyManager(keyStoreFilePath, keyStorePasswd, keyPasswd),
+                    RpcSSLEngineAbstr.createTrustManager(keyStoreFilePath, keyStorePasswd), new SecureRandom());
             SSLSocketFactory socketFactory = sslCtx.getSocketFactory();
             Socket socket = socketFactory.createSocket();
             return socket;
@@ -67,7 +67,8 @@ public class HopsSSLSocketFactory extends SocketFactory {
     }
 
     @Override
-    public Socket createSocket(InetAddress inetAddress, int port, InetAddress localAddress, int localPort) throws IOException {
+    public Socket createSocket(InetAddress inetAddress, int port, InetAddress localAddress, int localPort)
+            throws IOException {
         Socket socket = createSocket();
         socket.bind(new InetSocketAddress(localAddress, localPort));
         socket.connect(new InetSocketAddress(inetAddress, port));

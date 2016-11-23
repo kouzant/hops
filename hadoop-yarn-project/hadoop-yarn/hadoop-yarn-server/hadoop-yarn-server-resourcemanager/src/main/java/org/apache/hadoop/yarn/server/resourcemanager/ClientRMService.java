@@ -817,8 +817,7 @@ public class ClientRMService extends AbstractService implements
   @Override
   public GetClusterNodesResponse getClusterNodes(GetClusterNodesRequest request)
       throws YarnException {
-    LOG.info("<Skata> Got request");
-    GetClusterNodesResponse response = 
+    GetClusterNodesResponse response =
       recordFactory.newRecordInstance(GetClusterNodesResponse.class);
     EnumSet<NodeState> nodeStates = request.getNodeStates();
     if (nodeStates == null || nodeStates.isEmpty()) {
@@ -832,7 +831,6 @@ public class ClientRMService extends AbstractService implements
       nodeReports.add(createNodeReports(nodeInfo));
     }
     response.setNodeReports(nodeReports);
-    LOG.info("<Skata> Sending response");
     return response;
   }
 

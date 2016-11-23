@@ -42,11 +42,8 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
-import java.security.KeyStore;
-import java.security.NoSuchAlgorithmException;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
-import java.sql.Connection;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -72,7 +69,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
-import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.conf.Configuration.IntegerRanges;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
@@ -2315,8 +2311,8 @@ public abstract class Server {
       String keyStoreFilePath = "/home/antonis/SICS/keyStore.jks";
       String keyStorePasswd = "123456";
       String keyPasswd = "123456";
-      this.sslCtx.init(RpcSSLEngineImpl.createKeyManager(keyStoreFilePath, keyStorePasswd, keyPasswd),
-              RpcSSLEngineImpl.createTrustManager(keyStoreFilePath, keyStorePasswd), new SecureRandom());
+      this.sslCtx.init(RpcSSLEngineAbstr.createKeyManager(keyStoreFilePath, keyStorePasswd, keyPasswd),
+              RpcSSLEngineAbstr.createTrustManager(keyStoreFilePath, keyStorePasswd), new SecureRandom());
     } catch (Exception ex) {
       LOG.error(ex, ex);
     }
@@ -2819,7 +2815,7 @@ public abstract class Server {
       if (isFull()) {
         return null;
       }
-      Connection connection = new Connection(channel, Time.now(), new RpcSSLEngineImpl(channel, sslEngine));
+      Connection connection = new Connection(channel, Time.now(), new ServerRpcSSLEngineImpl(channel, sslEngine));
       add(connection);
       if (LOG.isDebugEnabled()) {
         LOG.debug("Server connection from " + connection +
