@@ -36,6 +36,7 @@ public class TestSSLServer {
         conf.setBoolean(YarnConfiguration.YARN_MINICLUSTER_USE_RPC, true);
         conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
                 "org.apache.hadoop.net.HopsSSLSocketFactory");
+        conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
         cluster = new MiniYARNCluster(TestSSLServer.class.getName(), 1, 3, 1, 1, false, true);
         cluster.init(conf);
         cluster.start();

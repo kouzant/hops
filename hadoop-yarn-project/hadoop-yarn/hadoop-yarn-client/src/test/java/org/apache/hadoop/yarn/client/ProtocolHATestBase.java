@@ -307,6 +307,7 @@ public abstract class ProtocolHATestBase extends ClientBaseWithFixes {
             "org.apache.hadoop.yarn.client.ConfiguredRMFailoverProxyProvider");
     conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
             "org.apache.hadoop.net.HopsSSLSocketFactory");
+    conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
     cluster =
         new MiniYARNClusterForHATesting(TestRMFailover.class.getName(), 2,
             numOfNMs, 1, 1, false, overrideClientRMService, overrideRTS,

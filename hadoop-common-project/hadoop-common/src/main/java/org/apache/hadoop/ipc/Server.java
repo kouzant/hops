@@ -1201,7 +1201,7 @@ public abstract class Server {
 
     // For SSL encryption
     private final RpcSSLEngine rpcSSLEngine;
-    private ByteBuffer sslDecryptedBuffer;
+    private ByteBuffer sslUnwrappedBuffer = null;
 
     public Connection(SocketChannel channel, long lastContact) {
       this(channel, lastContact, null);
@@ -1209,7 +1209,9 @@ public abstract class Server {
 
     public Connection(SocketChannel channel, long lastContact, RpcSSLEngine rpcSSLEngine) {
       this.rpcSSLEngine = rpcSSLEngine;
-      this.sslDecryptedBuffer = ByteBuffer.allocate(4096);
+      if (rpcSSLEngine != null) {
+        this.sslUnwrappedBuffer = ByteBuffer.allocate(4096);
+      }
       this.channel = channel;
       this.lastContact = lastContact;
       this.data = null;
@@ -1536,49 +1538,45 @@ public abstract class Server {
 
       while (true) {
         // Decrypt incoming data
-        int bytesRead = rpcSSLEngine.decryptData(channel, sslDecryptedBuffer);
-        if (bytesRead < 0) {
-          return bytesRead;
+        if (isSSLEnabled) {
+          int bytesRead = rpcSSLEngine.decryptData(channel, sslUnwrappedBuffer);
+          if (bytesRead < 0) {
+            return bytesRead;
+          } else if (bytesRead > 0) {
+            rpcMetrics.incrReceivedBytes(bytesRead);
+          }
+          if (sslUnwrappedBuffer.position() == 0) {
+            continue;
+          }
+          LOG.debug("<Skata> bytesRead: " + bytesRead);
+          sslUnwrappedBuffer.flip();
         }
-        if (sslDecryptedBuffer.position() == 0) {
-          continue;
-        }
-        LOG.debug("<Skata> bytesRead: " + bytesRead);
-        sslDecryptedBuffer.flip();
 
         /* Read at most one RPC. If the header is not read completely yet
          * then iterate until we read first RPC or until there is no data left.
          */    
         int count = -1;
         if (dataLengthBuffer.remaining() > 0) {
+          // dataLengthBuffer :: 4 bytes
+          count = channelRead(channel, dataLengthBuffer, sslUnwrappedBuffer);
 
-          //count = channelRead(channel, dataLengthBuffer);
-          // 4 bytes
-          while (dataLengthBuffer.hasRemaining()) {
-            dataLengthBuffer.put(sslDecryptedBuffer.get());
-            count++;
-          }
           if (count < 0 || dataLengthBuffer.remaining() > 0)
             return count;
         }
 
-        count = 0;
         if (!connectionHeaderRead) {
           //Every connection is expected to send the header.
           if (connectionHeaderBuf == null) {
             connectionHeaderBuf = ByteBuffer.allocate(3);
           }
 
-          //count = channelRead(channel, connectionHeaderBuf);
-          // 3 bytes
-          while (connectionHeaderBuf.hasRemaining()) {
-            connectionHeaderBuf.put(sslDecryptedBuffer.get());
-            count++;
-          }
+          // connectionHeaderBuf :: 3 bytes
+          count = channelRead(channel, connectionHeaderBuf, sslUnwrappedBuffer);
+
           if (count < 0 || connectionHeaderBuf.remaining() > 0) {
             return count;
           }
-          count = 0;
+
           connectionHeaderBuf.flip();
           int version = connectionHeaderBuf.get(0);
           LOG.debug("<Skata> RPC version is: " + version);
@@ -1613,8 +1611,13 @@ public abstract class Server {
           dataLengthBuffer.clear();
           connectionHeaderBuf = null;
           connectionHeaderRead = true;
-          sslDecryptedBuffer.compact();
-          LOG.debug("sslDecryptedBuffer: " + sslDecryptedBuffer.toString());
+
+          if (isSSLEnabled) {
+            sslUnwrappedBuffer.compact();
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("sslDecryptedBuffer: " + sslUnwrappedBuffer.toString());
+            }
+          }
           continue;
         }
         
@@ -1625,12 +1628,11 @@ public abstract class Server {
           data = ByteBuffer.allocate(dataLength);
         }
         
-        //count = channelRead(channel, data);
-        while (data.hasRemaining()) {
-          data.put(sslDecryptedBuffer.get());
-          count++;
+        count = channelRead(channel, data, sslUnwrappedBuffer);
+
+        if (isSSLEnabled) {
+          sslUnwrappedBuffer.compact();
         }
-        sslDecryptedBuffer.compact();
 
         if (data.remaining() == 0) {
           dataLengthBuffer.clear();
@@ -2326,10 +2328,11 @@ public abstract class Server {
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_KEY,
         CommonConfigurationKeysPublic.IPC_SERVER_TCPNODELAY_DEFAULT);
 
-    // TODO: Get it from the configuration file
-    this.isSSLEnabled = true;
+    this.isSSLEnabled = conf.getBoolean(
+            CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
+            CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT);
 
-    if (isSSLEnabled) {
+    if (this.isSSLEnabled) {
       // Configure SSLContext
       this.sslCtx = RpcSSLEngineAbstr.initializeSSLContext();
     }
@@ -2703,7 +2706,12 @@ public abstract class Server {
     }
     return count;
   }
-  
+
+
+  private int channelRead(ReadableByteChannel channel, ByteBuffer buffer)
+    throws IOException {
+    return channelRead(channel, buffer, null);
+  }
   
   /**
    * This is a wrapper around {@link ReadableByteChannel#read(ByteBuffer)}.
@@ -2714,13 +2722,26 @@ public abstract class Server {
    * @see ReadableByteChannel#read(ByteBuffer)
    */
   private int channelRead(ReadableByteChannel channel, 
-                          ByteBuffer buffer) throws IOException {
-    
-    int count = (buffer.remaining() <= NIO_BUFFER_LIMIT) ?
-                channel.read(buffer) : channelIO(channel, null, buffer);
-    if (count > 0) {
-      rpcMetrics.incrReceivedBytes(count);
+                          ByteBuffer buffer, ByteBuffer sslUnwrappedBuffer) throws IOException {
+    int count = -1;
+    if (isSSLEnabled && sslUnwrappedBuffer != null) {
+
+      while (buffer.hasRemaining()) {
+        buffer.put(sslUnwrappedBuffer.get());
+        count++;
+      }
+
+      if (count > -1) {
+        count++;
+      }
+    } else if (!isSSLEnabled) {
+      count = (buffer.remaining() <= NIO_BUFFER_LIMIT) ?
+              channel.read(buffer) : channelIO(channel, null, buffer);
+      if (count > 0) {
+        rpcMetrics.incrReceivedBytes(count);
+      }
     }
+
     return count;
   }
   
