@@ -2,6 +2,8 @@ package org.apache.hadoop.ipc;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.net.HopsSSLSocketFactory;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -96,9 +98,12 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
                         clientNetBuffer.compact();
                         handshakeStatus = result.getHandshakeStatus();
                     } catch (SSLException ex) {
+                        // Handle unknown certificate
+                        // javax.net.ssl.SSLException: Received fatal alert: certificate_unknown
                         LOG.error(ex, ex);
                         sslEngine.closeOutbound();
                         handshakeStatus = sslEngine.getHandshakeStatus();
+                        LOG.debug("Handshake status: " + handshakeStatus);
                         break;
                     }
                     switch (result.getStatus()) {
@@ -189,17 +194,24 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
     public abstract int decryptData(ReadableByteChannel channel, ByteBuffer buffer)
         throws IOException;
 
-    public static SSLContext initializeSSLContext() throws IOException {
+    public static SSLContext initializeSSLContext(Configuration conf) throws IOException {
         SSLContext sslCtx = null;
         try {
             sslCtx = SSLContext.getInstance("TLSv1.2");
 
-            // TODO: Get them from the configuration file
-            String keystoreFilePath = "/home/antonis/SICS/keyStore.jks";
-            String keystorePasswd = "123456";
-            String keyPasswd = "123456";
-            sslCtx.init(createKeyManager(keystoreFilePath, keystorePasswd, keyPasswd),
-                    createTrustManager(keystoreFilePath, keystorePasswd),
+            String keyStoreFilePath = conf.get(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY,
+                    HopsSSLSocketFactory.KEY_STORE_FILEPATH_DEFAULT);
+            String keyStorePassword = conf.get(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY,
+                    HopsSSLSocketFactory.KEY_STORE_PASSWORD_DEFAULT);
+            String keyPassword = conf.get(HopsSSLSocketFactory.KEY_PASSWORD_KEY,
+                    HopsSSLSocketFactory.KEY_PASSWORD_DEFAULT);
+            String trustStoreFilePath = conf.get(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY,
+                    HopsSSLSocketFactory.TRUST_STORE_FILEPATH_DEFAULT);
+            String trustStorePassword = conf.get(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY,
+                    HopsSSLSocketFactory.TRUST_STORE_PASSWORD_DEFAULT);
+
+            sslCtx.init(createKeyManager(keyStoreFilePath, keyStorePassword, keyPassword),
+                    createTrustManager(trustStoreFilePath, trustStorePassword),
                     new SecureRandom());
         } catch (NoSuchAlgorithmException | KeyManagementException ex) {
             handleException(ex);

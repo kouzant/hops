@@ -18,16 +18,9 @@
 -->
 <configuration>
 
-<property>
-  <name>ssl.server.keystore.location</name>
-  <value>/home/antonis/SICS/keyStore.jks</value>
-  <description>Keystore to be used by NN and DN. Must be specified.
-  </description>
-</property>
-
  <property>
   <name>ssl.server.truststore.location</name>
-  <value>/home/antonis/SICS/keyStore.jks</value>
+  <value>/home/antonis/SICS/key_material/server.truststore.jks</value>
   <description>Truststore to be used by NN and DN. Must be specified.
   </description>
 </property>
@@ -51,6 +44,13 @@
   <value>10000</value>
   <description>Truststore reload check interval, in milliseconds.
   Default value is 10000 (10 seconds).
+  </description>
+</property>
+
+<property>
+  <name>ssl.server.keystore.location</name>
+  <value>/home/antonis/SICS/key_material/server.keystore.jks</value>
+  <description>Keystore to be used by NN and DN. Must be specified.
   </description>
 </property>
 

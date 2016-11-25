@@ -2,6 +2,7 @@ package org.apache.hadoop.net;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ipc.RpcSSLEngineAbstr;
 
 import javax.net.SocketFactory;
@@ -17,15 +18,34 @@ import java.net.UnknownHostException;
  * Created by antonis on 11/21/16.
  */
 public class HopsSSLSocketFactory extends SocketFactory {
+
+    // TODO: Choose sensible default values, for the moment it's fine
+    public static final String KEY_STORE_FILEPATH_KEY = "client.rpc.ssl.keystore.filepath";
+    public static final String KEY_STORE_FILEPATH_DEFAULT = "/home/antonis/SICS/key_material/client.keystore.jks";
+    public static final String KEY_STORE_PASSWORD_KEY = "client.rpc.ssl.keystore.password";
+    public static final String KEY_STORE_PASSWORD_DEFAULT = "123456";
+    public static final String KEY_PASSWORD_KEY = "client.rpc.ssl.keypassword";
+    public static final String KEY_PASSWORD_DEFAULT = "123456";
+    public static final String TRUST_STORE_FILEPATH_KEY = "client.rpc.ssl.truststore.filepath";
+    public static final String TRUST_STORE_FILEPATH_DEFAULT = "/home/antonis/SICS/key_material/client.truststore.jks";
+    public static final String TRUST_STORE_PASSWORD_KEY = "client.rpc.ssl.truststore.password";
+    public static final String TRUST_STORE_PASSWORD_DEFAULT = "123456";
+
     private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
+
+    private Configuration conf;
 
     public HopsSSLSocketFactory() {
 
     }
 
+    public void init(Configuration conf) {
+        this.conf = conf;
+    }
+
     public Socket createSocket() throws IOException, UnknownHostException {
         LOG.debug("Creating SSL client socket");
-        SSLContext sslCtx = RpcSSLEngineAbstr.initializeSSLContext();
+        SSLContext sslCtx = RpcSSLEngineAbstr.initializeSSLContext(conf);
         SSLSocketFactory socketFactory = sslCtx.getSocketFactory();
         return socketFactory.createSocket();
     }
