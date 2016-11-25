@@ -146,7 +146,7 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
                             serverNetBuffer = enlargePacketBuffer(serverNetBuffer);
                             break;
                         case BUFFER_UNDERFLOW:
-                            throw new SSLException("Buffer overflow occured after a wrap.");
+                            throw new SSLException("Buffer overflow occurred after a wrap.");
                         case CLOSED:
                             try {
                                 serverNetBuffer.flip();

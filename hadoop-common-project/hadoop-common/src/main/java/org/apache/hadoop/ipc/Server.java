@@ -42,6 +42,7 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
+import java.security.GeneralSecurityException;
 import java.security.PrivilegedExceptionAction;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -103,6 +104,7 @@ import org.apache.hadoop.security.authorize.AuthorizationException;
 import org.apache.hadoop.security.authorize.PolicyProvider;
 import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.TokenIdentifier;
@@ -377,7 +379,7 @@ public abstract class Server {
   private Handler[] handlers = null;
 
   private final boolean isSSLEnabled;
-  private SSLContext sslCtx = null;
+  private SSLFactory sslFactory = null;
 
   /**
    * A convenience method to bind to a given address and report 
@@ -735,13 +737,17 @@ public abstract class Server {
 
     SSLEngine createSSLEngine() throws IOException {
       if (isSSLEnabled) {
-        SSLEngine sslEngine = sslCtx.createSSLEngine();
-        sslEngine.getSession().invalidate();
-        sslEngine.setUseClientMode(false);
-        // Probably we want this, right?
-        sslEngine.setNeedClientAuth(true);
-        sslEngine.beginHandshake();
-        return sslEngine;
+        try {
+          SSLEngine sslEngine = sslFactory.createSSLEngine();
+          sslEngine.getSession().invalidate();
+          // Override whatever value from configuration file, we always need
+          // the client to authenticate here
+          sslEngine.setNeedClientAuth(true);
+          sslEngine.beginHandshake();
+          return sslEngine;
+        } catch (GeneralSecurityException ex) {
+          throw new IOException(ex);
+        }
       } else {
         return null;
       }
@@ -2334,7 +2340,12 @@ public abstract class Server {
 
     if (this.isSSLEnabled) {
       // Configure SSLContext
-      this.sslCtx = RpcSSLEngineAbstr.initializeSSLContext();
+      this.sslFactory = new SSLFactory(SSLFactory.Mode.SERVER, conf);
+      try {
+        this.sslFactory.init();
+      } catch (GeneralSecurityException ex) {
+        throw new IOException(ex);
+      }
     }
 
     // Create the responder here
@@ -2578,6 +2589,9 @@ public abstract class Server {
     notifyAll();
     this.rpcMetrics.shutdown();
     this.rpcDetailedMetrics.shutdown();
+    if (sslFactory != null) {
+      sslFactory.destroy();
+    }
   }
 
   /** Wait for the server to be stopped.
