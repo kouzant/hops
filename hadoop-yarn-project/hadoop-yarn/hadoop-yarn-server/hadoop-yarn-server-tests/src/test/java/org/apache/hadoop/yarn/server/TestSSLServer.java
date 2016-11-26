@@ -36,11 +36,11 @@ public class TestSSLServer {
         conf = new YarnConfiguration();
         conf.setBoolean(YarnConfiguration.YARN_MINICLUSTER_FIXED_PORTS, true);
         conf.setBoolean(YarnConfiguration.YARN_MINICLUSTER_USE_RPC, true);
-        /*conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
+        conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
                 "org.apache.hadoop.net.HopsSSLSocketFactory");
         conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
         conf.set(SSLFactory.SSL_ENABLED_PROTOCOLS, "TLSv1.2");
-        conf.set(SSLFactory.SSL_HOSTNAME_VERIFIER_KEY, "ALLOW_ALL");*/
+        conf.set(SSLFactory.SSL_HOSTNAME_VERIFIER_KEY, "ALLOW_ALL");
 
         cluster = new MiniYARNCluster(TestSSLServer.class.getName(), 1, 3, 1, 1, false, true);
         cluster.init(conf);
