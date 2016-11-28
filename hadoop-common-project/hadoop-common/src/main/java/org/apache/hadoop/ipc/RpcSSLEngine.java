@@ -10,6 +10,7 @@ import java.nio.channels.WritableByteChannel;
  */
 public interface RpcSSLEngine {
     boolean doHandshake() throws IOException;
-    int decryptData(ReadableByteChannel channel, ByteBuffer buffer) throws IOException;
+    int read(ReadableByteChannel channel, ByteBuffer buffer) throws IOException;
     int write(WritableByteChannel channel, ByteBuffer src) throws IOException;
+    void close() throws IOException;
 }

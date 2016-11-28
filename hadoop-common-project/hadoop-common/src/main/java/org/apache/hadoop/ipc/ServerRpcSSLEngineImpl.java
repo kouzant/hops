@@ -59,7 +59,7 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
     }
 
     @Override
-    public int decryptData(ReadableByteChannel channel, ByteBuffer buffer)
+    public int read(ReadableByteChannel channel, ByteBuffer buffer)
             throws IOException {
         clientNetBuffer.clear();
         int bytesRead = channel.read(clientNetBuffer);

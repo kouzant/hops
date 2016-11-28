@@ -54,8 +54,10 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 
 import javax.net.SocketFactory;
+import javax.net.ssl.SSLException;
 import javax.security.sasl.Sasl;
 
+import org.apache.commons.collections.functors.ExceptionClosure;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -598,12 +600,12 @@ public class Client {
            */
           UserGroupInformation ticket = remoteId.getTicket();
           if (ticket != null && ticket.hasKerberosCredentials()) {
-            KerberosInfo krbInfo = 
-              remoteId.getProtocol().getAnnotation(KerberosInfo.class);
+            KerberosInfo krbInfo =
+                    remoteId.getProtocol().getAnnotation(KerberosInfo.class);
             if (krbInfo != null && krbInfo.clientPrincipal() != null) {
-              String host = 
-                SecurityUtil.getHostFromPrincipal(remoteId.getTicket().getUserName());
-              
+              String host =
+                      SecurityUtil.getHostFromPrincipal(remoteId.getTicket().getUserName());
+
               // If host name is a valid local address then bind socket to it
               InetAddress localAddr = NetUtils.getLocalInetAddress(host);
               if (localAddr != null) {
@@ -611,13 +613,15 @@ public class Client {
               }
             }
           }
-          
+
           NetUtils.connect(this.socket, server, connectionTimeout);
           if (rpcTimeout > 0) {
             pingInterval = rpcTimeout;  // rpcTimeout overwrites pingInterval
           }
           this.socket.setSoTimeout(pingInterval);
           return;
+        } catch (SSLException ex) {
+          handleSSLConnectionFailure(ex);
         } catch (ConnectTimeoutException toe) {
           /* Check for an address change and update the local reference.
            * Reset the failure counter if the address was changed
@@ -636,6 +640,13 @@ public class Client {
       }
     }
 
+    private synchronized void handleSSLConnectionFailure(Exception ex)
+      throws IOException {
+      if (LOG.isDebugEnabled()) {
+        LOG.debug("Client received an SSL exception", ex);
+      }
+      throw (IOException) new IOException("Failure during SSL handshake").initCause(ex);
+    }
     /**
      * If multiple clients with the same principal try to connect to the same
      * server at the same time, the server assumes a replay attack is in
@@ -1148,6 +1159,7 @@ public class Client {
     
     private synchronized void markClosed(IOException e) {
       if (shouldCloseConnection.compareAndSet(false, true)) {
+        LOG.debug("Connection marked to be closed");
         closeException = e;
         notifyAll();
       }
@@ -1222,10 +1234,6 @@ public class Client {
         CommonConfigurationKeys.IPC_CLIENT_FALLBACK_TO_SIMPLE_AUTH_ALLOWED_DEFAULT);
     this.clientId = ClientId.getClientId();
     this.sendParamsExecutor = clientExcecutorFactory.refAndGetInstance();
-
-    if (socketFactory instanceof HopsSSLSocketFactory) {
-      ((HopsSSLSocketFactory) socketFactory).init(conf);
-    }
   }
 
   /**

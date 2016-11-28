@@ -772,9 +772,6 @@ public abstract class Server {
               // SSL handshake failed
               LOG.error("SSL handshake failed");
               connectionManager.close(c);
-              if (channel.isOpen()) {
-                IOUtils.cleanup(null, channel);
-              }
             } else {
               handshakeDone = true;
             }
@@ -1545,7 +1542,7 @@ public abstract class Server {
       while (true) {
         // Decrypt incoming data
         if (isSSLEnabled) {
-          int bytesRead = rpcSSLEngine.decryptData(channel, sslUnwrappedBuffer);
+          int bytesRead = rpcSSLEngine.read(channel, sslUnwrappedBuffer);
           if (bytesRead < 0) {
             return bytesRead;
           } else if (bytesRead > 0) {
@@ -2095,6 +2092,18 @@ public abstract class Server {
       disposeSasl();
       data = null;
       dataLengthBuffer = null;
+
+      // TODO: shutdown outbound and perform the handshake
+      if (rpcSSLEngine != null) {
+        try {
+          LOG.debug("Preparing SSLEngine to close");
+          rpcSSLEngine.close();
+        } catch (IOException ex) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Ignoring exception while closing the socket", ex);
+          }
+        }
+      }
       if (!channel.isOpen())
         return;
 

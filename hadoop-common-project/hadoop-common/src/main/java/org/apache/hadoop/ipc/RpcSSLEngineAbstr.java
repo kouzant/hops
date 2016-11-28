@@ -188,10 +188,20 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
         return true;
     }
 
+    @Override
+    public void close() throws IOException {
+        if (exec != null) {
+            exec.shutdownNow();
+        }
+
+        sslEngine.closeOutbound();
+        doHandshake();
+    }
+
     public abstract int write(WritableByteChannel channel, ByteBuffer buffer)
             throws IOException;
 
-    public abstract int decryptData(ReadableByteChannel channel, ByteBuffer buffer)
+    public abstract int read(ReadableByteChannel channel, ByteBuffer buffer)
         throws IOException;
 
     public static SSLContext initializeSSLContext(Configuration conf) throws IOException {
