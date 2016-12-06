@@ -44,6 +44,7 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
 import java.security.GeneralSecurityException;
 import java.security.PrivilegedExceptionAction;
+import java.security.cert.X509Certificate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -1773,6 +1774,9 @@ public abstract class Server {
           .getProtocol() : null;
 
       UserGroupInformation protocolUser = ProtoUtil.getUgi(connectionContext);
+
+      authenticateSSLConnection(protocolUser);
+
       if (saslServer == null) {
         user = protocolUser;
       } else {
@@ -1804,7 +1808,43 @@ public abstract class Server {
       // don't set until after authz because connection isn't established
       connectionContextRead = true;
     }
-    
+
+      /**
+       * Checks whether the CN from the client's certificate subject
+       * matches the username supplied by the RPC call
+       * @param protocolUser - UserGroupInformation for the user made the RPC call
+       * @throws WrappedRpcServerException
+       */
+    private void authenticateSSLConnection(UserGroupInformation protocolUser)
+            throws WrappedRpcServerException {
+      if (!isSSLEnabled) {
+        return;
+      }
+      try {
+        X509Certificate clientCertificate = ((ServerRpcSSLEngineImpl) rpcSSLEngine)
+                .getClientCertificate();
+
+        String subjectDN = clientCertificate.getSubjectX500Principal().getName("RFC2253");
+        String[] subjectTokens = subjectDN.split(",");
+        String[] cnTokens = subjectTokens[0].split("=");
+        if (cnTokens.length != 2) {
+          throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
+                  "Problematic CN in client certificate: " + subjectTokens[0]);
+        }
+        String cn = cnTokens[1];
+
+        if (protocolUser.getUserName() != null
+                && !protocolUser.getUserName().equals(cn)) {
+          throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
+                  "Client's certificate CN " + cn +
+                          " did not match the supplied RPC username " + protocolUser.getUserName());
+        }
+        LOG.debug("SSL authentication went through successfully");
+      } catch (SSLPeerUnverifiedException ex) {
+        throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED, ex);
+      }
+    }
+
     /**
      * Process a wrapped RPC Request - unwrap the SASL packet and process
      * each embedded RPC request 
@@ -2050,7 +2090,7 @@ public abstract class Server {
             RpcErrorCodeProto.FATAL_UNAUTHORIZED, ae);
       }
     }
-    
+
     /**
      * Decode the a protobuf from the given input stream 
      * @param builder - Builder of the protobuf to decode

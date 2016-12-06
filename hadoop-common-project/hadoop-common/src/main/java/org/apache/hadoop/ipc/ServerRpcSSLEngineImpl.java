@@ -6,11 +6,13 @@ import org.apache.commons.logging.LogFactory;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLPeerUnverifiedException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
+import java.security.cert.X509Certificate;
 
 /**
  * Created by antonis on 11/23/16.
@@ -93,5 +95,10 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
             }
         }
         return bytesRead;
+    }
+
+    public X509Certificate getClientCertificate() throws SSLPeerUnverifiedException {
+        // The first certificate is always the peer's own certificate
+        return (X509Certificate) sslEngine.getSession().getPeerCertificates()[0];
     }
 }

@@ -7,6 +7,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
@@ -28,6 +29,7 @@ import javax.net.ssl.SSLHandshakeException;
 import static org.junit.Assert.assertNotNull;
 
 import java.io.IOException;
+import java.security.PrivilegedExceptionAction;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -52,11 +54,21 @@ public class TestSSLServer {
         conf.set(SSLFactory.SSL_ENABLED_PROTOCOLS, "TLSv1.2");
         conf.set(SSLFactory.SSL_HOSTNAME_VERIFIER_KEY, "ALLOW_ALL");
 
+        // Set the client certificate with the correct CN, antonis
+        conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY,
+                "/home/antonis/SICS/key_material/cl_antonis.keystore.jks");
+        conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY, "123456");
+        conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY, "123456");
+        conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY,
+                "/home/antonis/SICS/key_material/cl_antonis.truststore.jks");
+        conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, "123456");
+
         cluster = new MiniYARNCluster(TestSSLServer.class.getName(), 1, 3, 1, 1, false, true);
         cluster.init(conf);
         cluster.start();
 
         LOG.info("<Skata> Started cluster");
+        // Running as user antonis
         acClient = ClientRMProxy.createRMProxy(conf, ApplicationClientProtocol.class, true);
     }
 
