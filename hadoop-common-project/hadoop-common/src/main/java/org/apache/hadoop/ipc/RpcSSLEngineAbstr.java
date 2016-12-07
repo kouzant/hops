@@ -190,12 +190,11 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
 
     @Override
     public void close() throws IOException {
+        sslEngine.closeOutbound();
+        doHandshake();
         if (exec != null) {
             exec.shutdownNow();
         }
-
-        sslEngine.closeOutbound();
-        doHandshake();
     }
 
     public abstract int write(WritableByteChannel channel, ByteBuffer buffer)

@@ -55,6 +55,7 @@ import java.util.concurrent.atomic.AtomicLong;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSocket;
 import javax.security.sasl.Sasl;
 
 import org.apache.commons.collections.functors.ExceptionClosure;
@@ -620,8 +621,6 @@ public class Client {
           }
           this.socket.setSoTimeout(pingInterval);
           return;
-        } catch (SSLException ex) {
-          handleSSLConnectionFailure(ex);
         } catch (ConnectTimeoutException toe) {
           /* Check for an address change and update the local reference.
            * Reset the failure counter if the address was changed
@@ -640,13 +639,6 @@ public class Client {
       }
     }
 
-    private synchronized void handleSSLConnectionFailure(Exception ex)
-      throws IOException {
-      if (LOG.isDebugEnabled()) {
-        LOG.debug("Client received an SSL exception", ex);
-      }
-      throw (IOException) new IOException("Failure during SSL handshake").initCause(ex);
-    }
     /**
      * If multiple clients with the same principal try to connect to the same
      * server at the same time, the server assumes a replay attack is in
@@ -724,7 +716,12 @@ public class Client {
           setupConnection();
           InputStream inStream = NetUtils.getInputStream(socket);
           OutputStream outStream = NetUtils.getOutputStream(socket);
-          writeConnectionHeader(outStream);
+
+          try {
+            writeConnectionHeader(outStream);
+          } catch (SSLException ex) {
+            throw new IOException(ex.getMessage()).initCause(ex);
+          }
           if (authProtocol == AuthProtocol.SASL) {
             final InputStream in2 = inStream;
             final OutputStream out2 = outStream;
@@ -800,7 +797,7 @@ public class Client {
         }
       } catch (Throwable t) {
         if (t instanceof IOException) {
-          markClosed((IOException)t);
+          markClosed((IOException) t);
         } else {
           markClosed(new IOException("Couldn't set up IO streams", t));
         }
@@ -897,7 +894,7 @@ public class Client {
      * +----------------------------------+
      */
     private void writeConnectionHeader(OutputStream outStream)
-        throws IOException {
+        throws IOException, SSLException {
       DataOutputStream out = new DataOutputStream(new BufferedOutputStream(outStream));
       // Write out the header, version and authentication method
       out.write(RpcConstants.HEADER.array());
@@ -1487,6 +1484,9 @@ public class Client {
         if (call.error instanceof RemoteException) {
           call.error.fillInStackTrace();
           throw call.error;
+        } else if (call.error.getCause() instanceof SSLException){
+          LOG.error("Encountered SSLException");
+          throw new SSLException(call.error.getMessage());
         } else { // local exception
           InetSocketAddress address = connection.getRemoteAddress();
           throw NetUtils.wrapException(address.getHostName(),
@@ -1533,7 +1533,7 @@ public class Client {
         }
       }
     } while (!connection.addCall(call));
-    
+
     //we don't invoke the method below inside "synchronized (connections)"
     //block above. The reason for that is if the server happens to be slow,
     //it will take longer to establish a connection and that will slow the

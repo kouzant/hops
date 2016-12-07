@@ -1,14 +1,11 @@
 package org.apache.hadoop.yarn.server;
 
-import org.apache.commons.io.IOExceptionWithCause;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
-import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesRequest;
@@ -22,14 +19,15 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.junit.After;
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
+import org.junit.rules.ExpectedException;
 
-import javax.net.ssl.SSLHandshakeException;
+import javax.net.ssl.SSLException;
 
 import static org.junit.Assert.assertNotNull;
 
 import java.io.IOException;
-import java.security.PrivilegedExceptionAction;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -42,6 +40,8 @@ public class TestSSLServer {
     private MiniYARNCluster cluster;
     private Configuration conf;
     private ApplicationClientProtocol acClient, acClient1;
+    @Rule
+    public final ExpectedException rule = ExpectedException.none();
 
     @Before
     public void setUp() throws Exception {
@@ -75,6 +75,7 @@ public class TestSSLServer {
     @After
     public void tearDown() throws Exception {
         if (cluster != null) {
+            LOG.info("Stopping MiniYARN cluster");
             cluster.stop();
         }
 
@@ -131,6 +132,8 @@ public class TestSSLServer {
 
         GetNewApplicationRequest req1 = GetNewApplicationRequest.newInstance();
         LOG.info("Sending request from the second client");
+
+        rule.expect(SSLException.class);
         GetNewApplicationResponse res1 = acClient1.getNewApplication(req1);
 
         invoker.join();
