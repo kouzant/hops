@@ -16,7 +16,6 @@ import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.client.ClientRMProxy;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -27,7 +26,6 @@ import javax.net.ssl.SSLException;
 
 import static org.junit.Assert.assertNotNull;
 
-import java.io.IOException;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -35,11 +33,13 @@ import java.util.concurrent.TimeUnit;
 /**
  * Created by antonis on 11/22/16.
  */
-public class TestSSLServer {
-    private final Log LOG = LogFactory.getLog(TestSSLServer.class);
+public class TestYarnSSLServer {
+    private final Log LOG = LogFactory.getLog(TestYarnSSLServer.class);
     private MiniYARNCluster cluster;
     private Configuration conf;
     private ApplicationClientProtocol acClient, acClient1;
+    private Thread invoker;
+
     @Rule
     public final ExpectedException rule = ExpectedException.none();
 
@@ -63,17 +63,21 @@ public class TestSSLServer {
                 "/home/antonis/SICS/key_material/cl_antonis.truststore.jks");
         conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, "123456");
 
-        cluster = new MiniYARNCluster(TestSSLServer.class.getName(), 1, 3, 1, 1, false, true);
+        cluster = new MiniYARNCluster(TestYarnSSLServer.class.getName(), 1, 3, 1, 1, false, true);
         cluster.init(conf);
         cluster.start();
 
-        LOG.info("<Skata> Started cluster");
+        LOG.info("Started cluster");
         // Running as user antonis
         acClient = ClientRMProxy.createRMProxy(conf, ApplicationClientProtocol.class, true);
     }
 
     @After
     public void tearDown() throws Exception {
+        if (invoker != null) {
+            invoker.join();
+            invoker = null;
+        }
         if (cluster != null) {
             LOG.info("Stopping MiniYARN cluster");
             cluster.stop();
@@ -88,24 +92,24 @@ public class TestSSLServer {
         }
     }
 
-    @Test(timeout = 5000)
+    @Test(timeout = 3000)
     public void testRpcCall() throws Exception {
         EnumSet<NodeState> filter = EnumSet.of(NodeState.RUNNING);
         GetClusterNodesRequest req = GetClusterNodesRequest.newInstance();
         req.setNodeStates(filter);
-        LOG.info("<Skata> Sending request");
+        LOG.debug("Sending request");
         GetClusterNodesResponse res = acClient.getClusterNodes(req);
-        LOG.info("<Skata> Got response from server");
+        LOG.debug("Got response from server");
         assertNotNull("Response should not be null", res);
         List<NodeReport> reports = res.getNodeReports();
-        LOG.info("<Skata> Printing cluster nodes report");
+        LOG.debug("Printing cluster nodes report");
         for (NodeReport report : reports) {
-            LOG.info("<Skata> NodeId: " + report.getNodeId().toString());
+            LOG.debug("NodeId: " + report.getNodeId().toString());
         }
     }
 
     @Test
-    public void testRpcCallWithSecondClient() throws Exception {
+    public void testRpcCallWithNonValidCert() throws Exception {
         conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY,
                 "/home/antonis/SICS/key_material/client2.keystore.jks");
         conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY,
@@ -117,46 +121,42 @@ public class TestSSLServer {
         conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY,
                 "1234567");
 
-        LOG.info("Creating the second client");
+        // Exception will be thrown later. JUnit does not execute the code
+        // after the exception, so make the call in a separate thread
+        invoker = new Thread(new Invoker(acClient));
+        invoker.start();
+
+        LOG.debug("Creating the second client");
         acClient1 = ClientRMProxy.createRMProxy(conf, ApplicationClientProtocol.class,
                 true);
 
-        EnumSet<NodeState> filter = EnumSet.of(NodeState.RUNNING);
-        GetClusterNodesRequest req = GetClusterNodesRequest.newInstance();
-        req.setNodeStates(filter);
-        GetClusterNodesResponse res = acClient.getClusterNodes(req);
-        assertNotNull("Response from the first client should not be null", res);
-
-        Thread invoker = new Thread(new Invoker(acClient));
-        invoker.start();
-
         GetNewApplicationRequest req1 = GetNewApplicationRequest.newInstance();
-        LOG.info("Sending request from the second client");
-
         rule.expect(SSLException.class);
         GetNewApplicationResponse res1 = acClient1.getNewApplication(req1);
-
-        invoker.join();
     }
 
     private class Invoker implements Runnable {
+        private final ApplicationClientProtocol client;
 
-        private final ApplicationClientProtocol acClient;
-
-        public Invoker(ApplicationClientProtocol acClient) {
-            this.acClient = acClient;
+        public Invoker(ApplicationClientProtocol client) {
+            this.client = client;
         }
 
         @Override
         public void run() {
-            LOG.info("Sending request from the Invoker thread");
+            EnumSet<NodeState> filter = EnumSet.of(NodeState.RUNNING);
+            GetClusterNodesRequest req = GetClusterNodesRequest.newInstance();
+            req.setNodeStates(filter);
+            LOG.debug("Sending cluster nodes request from first client");
             try {
-                TimeUnit.MILLISECONDS.sleep(500);
-                GetNewApplicationResponse res = acClient.getNewApplication(GetNewApplicationRequest.newInstance());
-                assertNotNull(res);
-
-                LOG.info("New application id for invoker is: " + res.getApplicationId());
-            } catch (YarnException | IOException | InterruptedException ex) {
+                TimeUnit.SECONDS.sleep(1);
+                GetClusterNodesResponse res = client.getClusterNodes(req);
+                assertNotNull("Response from the first client should not be null", res);
+                LOG.debug("NodeReports: " + res.getNodeReports().size());
+                for (NodeReport nodeReport : res.getNodeReports()) {
+                    LOG.debug("Node: " + nodeReport.getNodeId() + " Capability: " + nodeReport.getCapability());
+                }
+            } catch (Exception ex) {
                 LOG.error(ex, ex);
             }
         }

@@ -107,6 +107,7 @@ import org.apache.hadoop.util.Progressable;
 import org.apache.hadoop.util.Time;
 
 import javax.net.SocketFactory;
+import javax.net.ssl.SSLException;
 import java.io.BufferedOutputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
