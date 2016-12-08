@@ -56,10 +56,8 @@ public class ClientCache {
     if (client == null) {
       client = new Client(valueClass, conf, factory);
       clients.put(factory, client);
-      Client.LOG.debug("Creating new client instance");
     } else {
       client.incCount();
-      Client.LOG.debug("Getting client from cache");
     }
     if (Client.LOG.isDebugEnabled()) {
       Client.LOG.debug("getting client out of cache: " + client);

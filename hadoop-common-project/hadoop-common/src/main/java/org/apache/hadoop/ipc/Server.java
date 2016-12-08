@@ -736,6 +736,11 @@ public abstract class Server {
       return (InetSocketAddress)acceptChannel.socket().getLocalSocketAddress();
     }
 
+    /**
+     * If SSL is enabled create SSLEngine for this connection
+     * @return the configured SSLEngine or null if SSL is not enabled
+     * @throws IOException
+       */
     SSLEngine createSSLEngine() throws IOException {
       if (isSSLEnabled) {
         try {
@@ -769,16 +774,16 @@ public abstract class Server {
         if (c != null) {
           boolean handshakeDone = false;
           if (isSSLEnabled) {
-            if (!c.getRpcSSLEngine().doHandshake()) {
+            if (!c.doHandshake()) {
               // SSL handshake failed
-              LOG.error("SSL handshake failed");
+              LOG.error("SSL handshake for " + c.getHostAddress() + " failed");
               connectionManager.close(c);
             } else {
               handshakeDone = true;
             }
           }
 
-          if (!isSSLEnabled || (isSSLEnabled && handshakeDone)) {
+          if (!isSSLEnabled || handshakeDone) {
             Reader reader = getReader();
             key.attach(c); // so closeCurrentConnection can get the object
             reader.addConnection(c);
@@ -1205,6 +1210,8 @@ public abstract class Server {
 
     // For SSL encryption
     private final RpcSSLEngine rpcSSLEngine;
+    // Buffer to store decrypted incoming data
+    // In SSL mode, readAndProcess reads from this buffer instead of the channel directly
     private ByteBuffer sslUnwrappedBuffer = null;
 
     public Connection(SocketChannel channel, long lastContact) {
@@ -1214,6 +1221,7 @@ public abstract class Server {
     public Connection(SocketChannel channel, long lastContact, RpcSSLEngine rpcSSLEngine) {
       this.rpcSSLEngine = rpcSSLEngine;
       if (rpcSSLEngine != null) {
+        // Is 4k large enough, maybe
         this.sslUnwrappedBuffer = ByteBuffer.allocate(4096);
       }
       this.channel = channel;
@@ -1241,13 +1249,12 @@ public abstract class Server {
       }
     }
 
-    public RpcSSLEngine getRpcSSLEngine() {
-      return rpcSSLEngine;
+    public boolean doHandshake() throws IOException {
+      return rpcSSLEngine.doHandshake();
     }
 
     public int sslChannelWrite(WritableByteChannel channel, ByteBuffer buffer)
       throws IOException {
-      LOG.debug("Encrypting and sending data");
       int count = rpcSSLEngine.write(channel, buffer);
       if (count > 0) {
         rpcMetrics.incrSentBytes(count);
@@ -1549,10 +1556,10 @@ public abstract class Server {
           } else if (bytesRead > 0) {
             rpcMetrics.incrReceivedBytes(bytesRead);
           }
+          // If decrypted data buffer is empty continue reading from channel
           if (sslUnwrappedBuffer.position() == 0) {
             continue;
           }
-          LOG.debug("<Skata> bytesRead: " + bytesRead);
           sslUnwrappedBuffer.flip();
         }
 
@@ -1583,10 +1590,8 @@ public abstract class Server {
 
           connectionHeaderBuf.flip();
           int version = connectionHeaderBuf.get(0);
-          LOG.debug("<Skata> RPC version is: " + version);
           // TODO we should add handler for service class later
           int serviceClass = connectionHeaderBuf.get(1);
-          LOG.debug("<Skata> RPC serviceClass is: " + serviceClass);
           this.setServiceClass(serviceClass);
           dataLengthBuffer.flip();
           
@@ -1618,9 +1623,6 @@ public abstract class Server {
 
           if (isSSLEnabled) {
             sslUnwrappedBuffer.compact();
-            if (LOG.isDebugEnabled()) {
-              LOG.debug("sslDecryptedBuffer: " + sslUnwrappedBuffer.toString());
-            }
           }
           continue;
         }
@@ -1839,7 +1841,9 @@ public abstract class Server {
                   "Client's certificate CN " + cn +
                           " did not match the supplied RPC username " + protocolUser.getUserName());
         }
-        LOG.debug("SSL authentication went through successfully");
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Username: " + protocolUser.getUserName() + " matches with the certificate CN");
+        }
       } catch (SSLPeerUnverifiedException ex) {
         throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED, ex);
       }
@@ -1905,7 +1909,6 @@ public abstract class Server {
       int callId = -1;
       int retry = RpcConstants.INVALID_RETRY_COUNT;
       try {
-        LOG.debug("<Skata> Processing RPC");
         final DataInputStream dis =
             new DataInputStream(new ByteArrayInputStream(buf));
         final RpcRequestHeaderProto header =
@@ -1981,7 +1984,6 @@ public abstract class Server {
         InterruptedException {
       Class<? extends Writable> rpcRequestClass = 
           getRpcRequestWrapper(header.getRpcKind());
-      LOG.info("<Skata> processRpcRequest with callId: " + header.getCallId());
       if (rpcRequestClass == null) {
         LOG.warn("Unknown rpc kind "  + header.getRpcKind() + 
             " from client " + getHostAddress());
@@ -2035,7 +2037,6 @@ public abstract class Server {
         DataInputStream dis) throws WrappedRpcServerException, IOException,
         InterruptedException {
       final int callId = header.getCallId();
-      LOG.info("<Skata> processOutOfBand with callId: " + callId);
       if (callId == CONNECTION_CONTEXT_CALL_ID) {
         // SASL must be established prior to connection context
         if (authProtocol == AuthProtocol.SASL && !saslContextEstablished) {
@@ -2133,10 +2134,8 @@ public abstract class Server {
       data = null;
       dataLengthBuffer = null;
 
-      // TODO: shutdown outbound and perform the handshake
-      if (rpcSSLEngine != null) {
+      if (isSSLEnabled && rpcSSLEngine != null) {
         try {
-          LOG.debug("Preparing SSLEngine to close");
           rpcSSLEngine.close();
         } catch (IOException ex) {
           if (LOG.isDebugEnabled()) {
@@ -2307,8 +2306,6 @@ public abstract class Server {
         queueSizePerHandler, conf, serverName, secretManager, null);
   }
 
-
-
   /**
    * Constructs a server listening on the named port and address.  Parameters passed must
    * be of the named class.  The <code>handlerCount</handlerCount> determines
@@ -2408,8 +2405,6 @@ public abstract class Server {
     this.exceptionsHandler.addTerseExceptions(StandbyException.class);
   }
 
-
-
   private RpcSaslProto buildNegotiateResponse(List<AuthMethod> authMethods)
       throws IOException {
     RpcSaslProto.Builder negotiateBuilder = RpcSaslProto.newBuilder();
@@ -2460,7 +2455,6 @@ public abstract class Server {
   }
   
   private void closeConnection(Connection connection) {
-    LOG.info("Closing a connection");
     connectionManager.close(connection);
   }
   
@@ -2969,7 +2963,6 @@ public abstract class Server {
     void closeAll() {
       // use a copy of the connections to be absolutely sure the concurrent
       // iterator doesn't miss a connection
-      LOG.info("Closing all connections");
       for (Connection connection : toArray()) {
         close(connection);
       }

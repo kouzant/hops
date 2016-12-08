@@ -1156,7 +1156,6 @@ public class Client {
     
     private synchronized void markClosed(IOException e) {
       if (shouldCloseConnection.compareAndSet(false, true)) {
-        LOG.debug("Connection marked to be closed");
         closeException = e;
         notifyAll();
       }
@@ -1484,8 +1483,8 @@ public class Client {
         if (call.error instanceof RemoteException) {
           call.error.fillInStackTrace();
           throw call.error;
-        } else if (call.error.getCause() instanceof SSLException){
-          LOG.error("Encountered SSLException");
+        } else if (call.error.getCause() instanceof SSLException) {
+          LOG.error("Connection " + connection.getName() + " encountered TLS error", call.error.getCause());
           throw new SSLException(call.error.getMessage());
         } else { // local exception
           InetSocketAddress address = connection.getRemoteAddress();

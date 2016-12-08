@@ -1,3 +1,18 @@
+/*
+ * Copyright 2016 Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.hadoop.net;
 
 import org.apache.commons.logging.Log;
@@ -15,9 +30,6 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
 
-/**
- * Created by antonis on 11/21/16.
- */
 public class HopsSSLSocketFactory extends SocketFactory implements Configurable {
 
     // TODO: Choose sensible default values, for the moment it's fine
@@ -38,12 +50,15 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     private String keyStoreFilePath;
 
     public HopsSSLSocketFactory() {
-
     }
 
     @Override
     public void setConf(Configuration conf) {
         this.conf = conf;
+        // *ClientCache* caches client instances based on their socket factory.
+        // In order to distinguish two client with the same socket factory but
+        // with different certificates, the hashCode is computed by the
+        // keystore filepath as well
         this.keyStoreFilePath = conf.get(KEY_STORE_FILEPATH_KEY,
                 KEY_STORE_FILEPATH_DEFAULT);
     }
@@ -54,7 +69,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     }
 
     public Socket createSocket() throws IOException, UnknownHostException {
-        LOG.debug("Creating SSL client socket");
+        if (LOG.isDebugEnabled()) {
+            LOG.debug("Creating SSL client socket");
+        }
         SSLContext sslCtx = RpcSSLEngineAbstr.initializeSSLContext(conf);
         SSLSocketFactory socketFactory = sslCtx.getSocketFactory();
         return socketFactory.createSocket();
@@ -98,15 +115,10 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
 
     @Override
     public boolean equals(Object obj) {
-        /*if (this == obj)
-            return true;
-        if (obj == null)
-            return false;
-        return obj.getClass().equals(this.getClass());*/
-
         if (obj instanceof HopsSSLSocketFactory) {
 
-            return this == obj || ((HopsSSLSocketFactory) obj).getKeyStoreFilePath().equals(this.getKeyStoreFilePath());
+            return this == obj || ((HopsSSLSocketFactory) obj)
+                    .getKeyStoreFilePath().equals(this.getKeyStoreFilePath());
         }
 
         return false;
@@ -116,6 +128,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     public int hashCode() {
         int result = 3;
         result = 37 * result + this.getClass().hashCode();
+        // See comment at setConf
         result = 37 * result + this.keyStoreFilePath.hashCode();
 
         return result;

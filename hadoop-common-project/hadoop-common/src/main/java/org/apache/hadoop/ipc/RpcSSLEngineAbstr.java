@@ -1,3 +1,18 @@
+/*
+ * Copyright 2016 Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.hadoop.ipc;
 
 import org.apache.commons.logging.Log;
@@ -16,9 +31,6 @@ import java.security.cert.CertificateException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/**
- * Created by antonis on 11/21/16.
- */
 public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
 
     private final static Log LOG = LogFactory.getLog(RpcSSLEngineAbstr.class);
@@ -98,12 +110,9 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
                         clientNetBuffer.compact();
                         handshakeStatus = result.getHandshakeStatus();
                     } catch (SSLException ex) {
-                        // Handle unknown certificate
-                        // javax.net.ssl.SSLException: Received fatal alert: certificate_unknown
                         LOG.error(ex, ex);
                         sslEngine.closeOutbound();
                         handshakeStatus = sslEngine.getHandshakeStatus();
-                        LOG.debug("Handshake status: " + handshakeStatus);
                         break;
                     }
                     switch (result.getStatus()) {
@@ -184,7 +193,6 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
             }
         }
 
-        LOG.debug("SSL handshake finished successfully");
         return true;
     }
 
@@ -193,7 +201,7 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
         sslEngine.closeOutbound();
         doHandshake();
         if (exec != null) {
-            exec.shutdownNow();
+            exec.shutdown();
         }
     }
 

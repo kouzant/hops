@@ -1,3 +1,18 @@
+/*
+ * Copyright 2016 Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.hadoop.ipc;
 
 import org.apache.commons.logging.Log;
@@ -14,9 +29,6 @@ import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
 import java.security.cert.X509Certificate;
 
-/**
- * Created by antonis on 11/23/16.
- */
 public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
     private final Log LOG = LogFactory.getLog(ServerRpcSSLEngineImpl.class);
 
@@ -41,7 +53,6 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
                     while (serverNetBuffer.hasRemaining()) {
                         bytesWritten += channel.write(serverNetBuffer);
                     }
-                    LOG.debug("Encrypted and sent back response");
                     return bytesWritten;
                 case BUFFER_OVERFLOW:
                     serverNetBuffer = enlargePacketBuffer(serverNetBuffer);
@@ -49,7 +60,6 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
                 case BUFFER_UNDERFLOW:
                     throw new SSLException("Buffer underflow should not happen after wrap");
                 case CLOSED:
-                    LOG.debug("Client closed the connection while trying to write");
                     sslEngine.closeOutbound();
                     doHandshake();
                     return -1;
@@ -72,7 +82,6 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
                 SSLEngineResult result = sslEngine.unwrap(clientNetBuffer, clientAppBuffer);
                 switch (result.getStatus()) {
                     case OK:
-                        LOG.debug("Decrypted data");
                         clientAppBuffer.flip();
                         while (clientAppBuffer.hasRemaining()) {
                             buffer.put(clientAppBuffer.get());
@@ -85,7 +94,6 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
                         clientNetBuffer = handleBufferUnderflow(clientNetBuffer);
                         break;
                     case CLOSED:
-                        LOG.debug("Client closed the connection while trying to read");
                         sslEngine.closeOutbound();
                         doHandshake();
                         return -1;
@@ -99,6 +107,7 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
 
     public X509Certificate getClientCertificate() throws SSLPeerUnverifiedException {
         // The first certificate is always the peer's own certificate
+        // https://docs.oracle.com/javase/8/docs/api/javax/net/ssl/SSLSession.html#getPeerCertificates--
         return (X509Certificate) sslEngine.getSession().getPeerCertificates()[0];
     }
 }
