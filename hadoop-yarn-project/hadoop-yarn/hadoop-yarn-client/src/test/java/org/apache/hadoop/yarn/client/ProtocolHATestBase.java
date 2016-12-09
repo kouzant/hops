@@ -23,6 +23,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterResponse;
@@ -311,6 +312,14 @@ public abstract class ProtocolHATestBase extends ClientBaseWithFixes {
     conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
     conf.set(SSLFactory.SSL_ENABLED_PROTOCOLS, "TLSv1.2");
     conf.set(SSLFactory.SSL_HOSTNAME_VERIFIER_KEY, "ALLOW_ALL");
+    // Set the client certificate with the correct CN, antonis
+    conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY,
+            "/home/antonis/SICS/key_material/cl_antonis.keystore.jks");
+    conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY, "123456");
+    conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY, "123456");
+    conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY,
+            "/home/antonis/SICS/key_material/cl_antonis.truststore.jks");
+    conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, "123456");
 
     cluster =
         new MiniYARNClusterForHATesting(TestRMFailover.class.getName(), 2,
