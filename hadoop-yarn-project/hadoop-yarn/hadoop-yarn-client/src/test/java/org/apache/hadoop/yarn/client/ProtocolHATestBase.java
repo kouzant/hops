@@ -307,19 +307,6 @@ public abstract class ProtocolHATestBase extends ClientBaseWithFixes {
     conf.setBoolean(YarnConfiguration.AUTO_FAILOVER_ENABLED, false);
     conf.set(YarnConfiguration.LEADER_CLIENT_FAILOVER_PROXY_PROVIDER,
             "org.apache.hadoop.yarn.client.ConfiguredRMFailoverProxyProvider");
-    conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
-            "org.apache.hadoop.net.HopsSSLSocketFactory");
-    conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
-    conf.set(SSLFactory.SSL_ENABLED_PROTOCOLS, "TLSv1.2");
-    conf.set(SSLFactory.SSL_HOSTNAME_VERIFIER_KEY, "ALLOW_ALL");
-    // Set the client certificate with the correct CN, antonis
-    conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY,
-            "/home/antonis/SICS/key_material/cl_antonis.keystore.jks");
-    conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY, "123456");
-    conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY, "123456");
-    conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY,
-            "/home/antonis/SICS/key_material/cl_antonis.truststore.jks");
-    conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, "123456");
 
     cluster =
         new MiniYARNClusterForHATesting(TestRMFailover.class.getName(), 2,
