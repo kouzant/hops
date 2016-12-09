@@ -1,11 +1,11 @@
 package org.apache.hadoop.yarn.server;
 
-import org.apache.commons.collections.ArrayStack;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.ipc.RpcServerException;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.ssl.KeyStoreTestUtil;
@@ -24,6 +24,8 @@ import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import javax.net.ssl.SSLException;
 
@@ -33,20 +35,31 @@ import java.io.File;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.KeyPair;
-import java.security.KeyStore;
-import java.security.PrivateKey;
-import java.security.PublicKey;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.EnumSet;
-import java.util.List;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 /**
  * Created by antonis on 11/22/16.
  */
+@RunWith(Parameterized.class)
 public class TestYarnSSLServer {
     private final Log LOG = LogFactory.getLog(TestYarnSSLServer.class);
+
+    private enum CERT_ERR {
+        ERR_CN,
+        NO_CA
+    }
+
+    @Parameterized.Parameters
+    public static Collection parameters() {
+        return Arrays.asList(new Object[][] {
+                {CERT_ERR.ERR_CN},
+                {CERT_ERR.NO_CA}
+        });
+    }
+
+    private CERT_ERR error_mode = CERT_ERR.ERR_CN;
     private MiniYARNCluster cluster;
     private Configuration conf;
     private ApplicationClientProtocol acClient, acClient1;
@@ -59,9 +72,12 @@ public class TestYarnSSLServer {
     String outDir;
     Path serverKeyStore, serverTrustStore;
     Path c_clientKeyStore, c_clientTrustStore;
-    Path noCA_clientKeyStore, noCA_clientTrustStore;
-    Path errCN_clientKeyStore, errCN_clientTrustStore;
+    Path err_clientKeyStore, err_clientTrustStore;
     List<Path> filesToPurge;
+
+    public TestYarnSSLServer(CERT_ERR error_mode) {
+        this.error_mode = error_mode;
+    }
 
     private List<Path> prepareCryptoMaterial() throws Exception {
         List<Path> filesToPurge = new ArrayList<>();
@@ -102,30 +118,36 @@ public class TestYarnSSLServer {
                 "c_client_alias", c_clientKeyPair.getPrivate(), c_clientCrt);
         KeyStoreTestUtil.createTrustStore(c_clientTrustStore.toString(), passwd, "CARoot", caCert);
 
-        // Generate client certificate with the correct CN field but NOT signed by the CA
-        KeyPair noCA_clientKeyPair = KeyStoreTestUtil.generateKeyPair(keyAlg);
-        X509Certificate noCA_clientCrt = KeyStoreTestUtil.generateCertificate(c_cn, noCA_clientKeyPair, 42, signAlg);
+        if (error_mode.equals(CERT_ERR.NO_CA)) {
+            LOG.info("no ca error mode");
+            // Generate client certificate with the correct CN field but NOT signed by the CA
+            KeyPair noCA_clientKeyPair = KeyStoreTestUtil.generateKeyPair(keyAlg);
+            X509Certificate noCA_clientCrt = KeyStoreTestUtil.generateCertificate(c_cn, noCA_clientKeyPair, 42,
+                    signAlg);
 
-        noCA_clientKeyStore = Paths.get(outDir, "noCA_client.keystore.jks");
-        noCA_clientTrustStore = Paths.get(outDir, "noCA_client.truststore.jks");
-        filesToPurge.add(noCA_clientKeyStore);
-        filesToPurge.add(noCA_clientTrustStore);
-        KeyStoreTestUtil.createKeyStore(noCA_clientKeyStore.toString(), passwd, passwd,
-                "noca_client_alias", noCA_clientKeyPair.getPrivate(), noCA_clientCrt);
-        KeyStoreTestUtil.createTrustStore(noCA_clientTrustStore.toString(), passwd, "CARoot", caCert);
+            err_clientKeyStore = Paths.get(outDir, "noCA_client.keystore.jks");
+            err_clientTrustStore = Paths.get(outDir, "noCA_client.truststore.jks");
+            filesToPurge.add(err_clientKeyStore);
+            filesToPurge.add(err_clientTrustStore);
+            KeyStoreTestUtil.createKeyStore(err_clientKeyStore.toString(), passwd, passwd,
+                    "noca_client_alias", noCA_clientKeyPair.getPrivate(), noCA_clientCrt);
+            KeyStoreTestUtil.createTrustStore(err_clientTrustStore.toString(), passwd, "CARoot", caCert);
 
-        // Generate client with INCORRECT CN field but signed by the CA
-        KeyPair errCN_clientKeyPair = KeyStoreTestUtil.generateKeyPair(keyAlg);
-        X509Certificate errCN_clientCrt = KeyStoreTestUtil.generateSignedCertificate("CN=Phil Lynott",
-                errCN_clientKeyPair, 42, signAlg, caKeyPair.getPrivate(), caCert);
+        } else if (error_mode.equals(CERT_ERR.ERR_CN)) {
+            LOG.info("wrong cn error mode");
+            // Generate client with INCORRECT CN field but signed by the CA
+            KeyPair errCN_clientKeyPair = KeyStoreTestUtil.generateKeyPair(keyAlg);
+            X509Certificate errCN_clientCrt = KeyStoreTestUtil.generateSignedCertificate("CN=Phil Lynott",
+                    errCN_clientKeyPair, 42, signAlg, caKeyPair.getPrivate(), caCert);
 
-        errCN_clientKeyStore = Paths.get(outDir, "errCN_client.keystore.jks");
-        errCN_clientTrustStore = Paths.get(outDir, "errCN_client.truststore.jks");
-        filesToPurge.add(errCN_clientKeyStore);
-        filesToPurge.add(errCN_clientTrustStore);
-        KeyStoreTestUtil.createKeyStore(errCN_clientKeyStore.toString(), passwd, passwd,
-                "errcn_client_alias", errCN_clientKeyPair.getPrivate(), errCN_clientCrt);
-        KeyStoreTestUtil.createTrustStore(errCN_clientTrustStore.toString(), passwd, "CARoot", caCert);
+            err_clientKeyStore = Paths.get(outDir, "errCN_client.keystore.jks");
+            err_clientTrustStore = Paths.get(outDir, "errCN_client.truststore.jks");
+            filesToPurge.add(err_clientKeyStore);
+            filesToPurge.add(err_clientTrustStore);
+            KeyStoreTestUtil.createKeyStore(err_clientKeyStore.toString(), passwd, passwd,
+                    "errcn_client_alias", errCN_clientKeyPair.getPrivate(), errCN_clientCrt);
+            KeyStoreTestUtil.createTrustStore(err_clientTrustStore.toString(), passwd, "CARoot", caCert);
+        }
 
         return filesToPurge;
     }
@@ -172,7 +194,6 @@ public class TestYarnSSLServer {
         cluster.start();
 
         LOG.info("Started cluster");
-        // Running as user antonis
         acClient = ClientRMProxy.createRMProxy(conf, ApplicationClientProtocol.class, true);
     }
 
@@ -216,10 +237,10 @@ public class TestYarnSSLServer {
 
     @Test
     public void testRpcCallWithNonValidCert() throws Exception {
-        conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY, noCA_clientKeyStore.toString());
+        conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY, err_clientKeyStore.toString());
         conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY, passwd);
         conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY, passwd);
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY, noCA_clientTrustStore.toString());
+        conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY, err_clientTrustStore.toString());
         conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, passwd);
 
         // Exception will be thrown later. JUnit does not execute the code
@@ -232,7 +253,11 @@ public class TestYarnSSLServer {
                 true);
 
         GetNewApplicationRequest req1 = GetNewApplicationRequest.newInstance();
-        rule.expect(SSLException.class);
+        if (error_mode.equals(CERT_ERR.NO_CA)) {
+            rule.expect(SSLException.class);
+        } else if (error_mode.equals(CERT_ERR.ERR_CN)) {
+            rule.expect(RpcServerException.class);
+        }
         GetNewApplicationResponse res1 = acClient1.getNewApplication(req1);
     }
 
