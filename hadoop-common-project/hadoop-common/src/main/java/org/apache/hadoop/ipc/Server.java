@@ -1777,10 +1777,9 @@ public abstract class Server {
 
       UserGroupInformation protocolUser = ProtoUtil.getUgi(connectionContext);
 
-      authenticateSSLConnection(protocolUser);
-
       if (saslServer == null) {
         user = protocolUser;
+        authenticateSSLConnection(protocolUser);
       } else {
         // user is authenticated
         user.setAuthenticationMethod(authMethod);
@@ -1823,6 +1822,9 @@ public abstract class Server {
         return;
       }
       try {
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Authentication via certificate CN");
+        }
         X509Certificate clientCertificate = ((ServerRpcSSLEngineImpl) rpcSSLEngine)
                 .getClientCertificate();
 
