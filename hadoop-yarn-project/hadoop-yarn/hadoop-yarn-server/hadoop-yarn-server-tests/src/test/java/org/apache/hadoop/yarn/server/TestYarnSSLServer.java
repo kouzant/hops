@@ -7,6 +7,7 @@ import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RpcServerException;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.ssl.HopsSSLTestUtils;
+import org.apache.hadoop.security.ssl.KeyStoreTestUtil;
 import org.apache.hadoop.yarn.api.ApplicationClientProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetClusterNodesResponse;
@@ -16,6 +17,8 @@ import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.client.ClientRMProxy;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.bouncycastle.asn1.x509.X509Extensions;
+import org.bouncycastle.x509.extension.X509ExtensionUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -26,6 +29,8 @@ import javax.net.ssl.SSLException;
 
 import static org.junit.Assert.assertNotNull;
 
+import java.security.Provider;
+import java.security.Security;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -37,7 +42,6 @@ public class TestYarnSSLServer extends HopsSSLTestUtils {
     private final Log LOG = LogFactory.getLog(TestYarnSSLServer.class);
 
     private MiniYARNCluster cluster;
-    private Configuration conf;
     private ApplicationClientProtocol acClient, acClient1;
 
     public TestYarnSSLServer(CERT_ERR error_mode) {
@@ -48,12 +52,12 @@ public class TestYarnSSLServer extends HopsSSLTestUtils {
     public void setUp() throws Exception {
         LOG.debug("Error mode: " + error_mode.name());
 
-        filesToPurge = prepareCryptoMaterial();
         conf = new YarnConfiguration();
+        filesToPurge = prepareCryptoMaterial(conf, KeyStoreTestUtil.getClasspathDir(TestYarnSSLServer.class));
+        setCryptoConfig(conf);
+
         conf.setBoolean(YarnConfiguration.YARN_MINICLUSTER_FIXED_PORTS, true);
         conf.setBoolean(YarnConfiguration.YARN_MINICLUSTER_USE_RPC, true);
-
-        setCryptoConfig(conf);
 
         cluster = new MiniYARNCluster(TestYarnSSLServer.class.getName(), 1, 3, 1, 1, false, true);
         cluster.init(conf);

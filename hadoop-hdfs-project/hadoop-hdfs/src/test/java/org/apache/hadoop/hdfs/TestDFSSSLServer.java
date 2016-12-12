@@ -2,17 +2,15 @@ package org.apache.hadoop.hdfs;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.ipc.RpcServerException;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
-import org.apache.hadoop.security.ssl.SSLFactory;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
-import org.junit.rules.ExpectedException;
+import org.apache.hadoop.security.ssl.HopsSSLTestUtils;
+import org.apache.hadoop.security.ssl.KeyStoreTestUtil;
+import org.junit.*;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
 
 import javax.net.ssl.SSLException;
 
@@ -25,34 +23,22 @@ import java.util.concurrent.TimeUnit;
 /**
  * Created by antonis on 12/7/16.
  */
-public class TestDFSSSLServer {
-    @Rule
-    public final ExpectedException rule = ExpectedException.none();
+@RunWith(Parameterized.class)
+public class TestDFSSSLServer extends HopsSSLTestUtils {
     private final Log LOG = LogFactory.getLog(TestDFSSSLServer.class);
 
     MiniDFSCluster cluster;
     FileSystem dfs1, dfs2;
-    Configuration conf;
-    Thread invoker;
+
+    public TestDFSSSLServer(CERT_ERR error_mode) {
+        super.error_mode = error_mode;
+    }
 
     @Before
     public void setUp() throws Exception {
         conf = new HdfsConfiguration();
-        conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
-                "org.apache.hadoop.net.HopsSSLSocketFactory");
-        conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
-
-        conf.set(SSLFactory.SSL_ENABLED_PROTOCOLS, "TLSv1.2");
-        conf.set(SSLFactory.SSL_HOSTNAME_VERIFIER_KEY, "ALLOW_ALL");
-
-        // Set the client certificate with the correct CN, antonis
-        conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY,
-                "/home/antonis/SICS/key_material/cl_antonis.keystore.jks");
-        conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY, "123456");
-        conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY, "123456");
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY,
-                "/home/antonis/SICS/key_material/cl_antonis.truststore.jks");
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, "123456");
+        filesToPurge = prepareCryptoMaterial(conf, KeyStoreTestUtil.getClasspathDir(TestDFSSSLServer.class));
+        setCryptoConfig(conf);
 
         String testDataPath = System
                 .getProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA, "build/test/data");
@@ -61,6 +47,7 @@ public class TestDFSSSLServer {
         conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, c1Path);
 
         cluster = new MiniDFSCluster.Builder(conf).build();
+        LOG.info("DFS cluster started");
     }
 
     @After
@@ -93,26 +80,26 @@ public class TestDFSSSLServer {
     }
 
     @Test
+    @Ignore
     public void testRpcCallNonValidCert() throws Exception {
         dfs1 = DistributedFileSystem.newInstance(conf);
 
-        conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY,
-                "/home/antonis/SICS/key_material/client2.keystore.jks");
-        conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY,
-                "1234567");
-        conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY,
-                "1234567");
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY,
-                "/home/antonis/SICS/key_material/client2.truststore.jks");
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY,
-                "1234567");
+        conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY, err_clientKeyStore.toString());
+        conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY, passwd);
+        conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY, passwd);
+        conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY, err_clientTrustStore.toString());
+        conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, passwd);
 
         // Exception will be thrown later. JUnit does not execute the code
         // after the exception, so make the call in a separate thread
         invoker = new Thread(new Invoker(dfs1));
         invoker.start();
 
-        rule.expect(SSLException.class);
+        if (error_mode.equals(CERT_ERR.NO_CA)) {
+            rule.expect(SSLException.class);
+        } else if (error_mode.equals(CERT_ERR.ERR_CN)) {
+            rule.expect(RpcServerException.class);
+        }
         dfs2 = DistributedFileSystem.newInstance(conf);
     }
 

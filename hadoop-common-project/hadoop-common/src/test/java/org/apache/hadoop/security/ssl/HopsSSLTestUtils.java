@@ -7,7 +7,6 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.After;
-import org.junit.Before;
 import org.junit.Rule;
 import org.junit.rules.ExpectedException;
 import org.junit.runners.Parameterized;
@@ -48,6 +47,7 @@ public class HopsSSLTestUtils {
     private Path c_clientKeyStore, c_clientTrustStore;
     protected Path err_clientKeyStore, err_clientTrustStore;
     protected List<Path> filesToPurge;
+    protected Configuration conf;
 
     protected Thread invoker;
 
@@ -91,13 +91,12 @@ public class HopsSSLTestUtils {
         conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, passwd);
     }
 
-    protected List<Path> prepareCryptoMaterial() throws Exception {
+    protected List<Path> prepareCryptoMaterial(Configuration conf, String outDir) throws Exception {
         List<Path> filesToPurge = new ArrayList<>();
+        this.outDir = outDir;
 
         String keyAlg = "RSA";
         String signAlg = "MD5withRSA";
-
-        outDir = KeyStoreTestUtil.getClasspathDir(HopsSSLTestUtils.class);
 
         // Generate CA
         KeyPair caKeyPair = KeyStoreTestUtil.generateKeyPair(keyAlg);

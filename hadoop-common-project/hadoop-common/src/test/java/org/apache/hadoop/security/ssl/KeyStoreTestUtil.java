@@ -40,7 +40,7 @@ import java.util.Map;
 
 import javax.security.auth.x500.X500Principal;
 
-import org.bouncycastle.asn1.x509.X509Extensions;
+import org.bouncycastle.asn1.x509.*;
 import org.bouncycastle.x509.X509V1CertificateGenerator;
 import org.bouncycastle.x509.X509V3CertificateGenerator;
 import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
@@ -92,6 +92,7 @@ public class KeyStoreTestUtil {
     return cert;
   }
 
+  @SuppressWarnings("deprecation")
   public static X509Certificate generateSignedCertificate(String dn, KeyPair pair, int days, String algorithm,
           PrivateKey caKey, X509Certificate caCert) throws CertificateParsingException,
                                                             CertificateEncodingException,
@@ -103,6 +104,7 @@ public class KeyStoreTestUtil {
     Date to = new Date(from.getTime() + days * 86400000l);
     BigInteger sn = new BigInteger(64, new SecureRandom());
     X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();
+
     X500Principal subjectName = new X500Principal(dn);
 
     certGen.setSerialNumber(sn);
