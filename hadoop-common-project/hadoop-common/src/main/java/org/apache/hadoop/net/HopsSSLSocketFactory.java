@@ -32,17 +32,16 @@ import java.net.UnknownHostException;
 
 public class HopsSSLSocketFactory extends SocketFactory implements Configurable {
 
-    // TODO: Choose sensible default values, for the moment it's fine
     public static final String KEY_STORE_FILEPATH_KEY = "client.rpc.ssl.keystore.filepath";
-    public static final String KEY_STORE_FILEPATH_DEFAULT = "/home/antonis/SICS/key_material/client.keystore.jks";
+    public static final String KEY_STORE_FILEPATH_DEFAULT = "client.keystore.jks";
     public static final String KEY_STORE_PASSWORD_KEY = "client.rpc.ssl.keystore.password";
-    public static final String KEY_STORE_PASSWORD_DEFAULT = "123456";
+    public static final String KEY_STORE_PASSWORD_DEFAULT = "";
     public static final String KEY_PASSWORD_KEY = "client.rpc.ssl.keypassword";
-    public static final String KEY_PASSWORD_DEFAULT = "123456";
+    public static final String KEY_PASSWORD_DEFAULT = "";
     public static final String TRUST_STORE_FILEPATH_KEY = "client.rpc.ssl.truststore.filepath";
-    public static final String TRUST_STORE_FILEPATH_DEFAULT = "/home/antonis/SICS/key_material/client.truststore.jks";
+    public static final String TRUST_STORE_FILEPATH_DEFAULT = "client.truststore.jks";
     public static final String TRUST_STORE_PASSWORD_KEY = "client.rpc.ssl.truststore.password";
-    public static final String TRUST_STORE_PASSWORD_DEFAULT = "123456";
+    public static final String TRUST_STORE_PASSWORD_DEFAULT = "";
 
     private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
 
