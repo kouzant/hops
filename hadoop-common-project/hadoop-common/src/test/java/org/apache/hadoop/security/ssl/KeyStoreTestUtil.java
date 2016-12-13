@@ -40,7 +40,7 @@ import java.util.Map;
 
 import javax.security.auth.x500.X500Principal;
 
-import org.bouncycastle.asn1.x509.*;
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.x509.X509V1CertificateGenerator;
 import org.bouncycastle.x509.X509V3CertificateGenerator;
 import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
@@ -115,9 +115,9 @@ public class KeyStoreTestUtil {
     certGen.setPublicKey(pair.getPublic());
     certGen.setSignatureAlgorithm(algorithm);
 
-    certGen.addExtension(X509Extensions.AuthorityKeyIdentifier, false,
+    certGen.addExtension(new ASN1ObjectIdentifier("2.5.29.35"), false,
             new AuthorityKeyIdentifierStructure(caCert));
-    certGen.addExtension(X509Extensions.SubjectKeyIdentifier, false,
+    certGen.addExtension(new ASN1ObjectIdentifier("2.5.29.14"), false,
             new SubjectKeyIdentifierStructure(pair.getPublic()));
 
     return certGen.generate(caKey);

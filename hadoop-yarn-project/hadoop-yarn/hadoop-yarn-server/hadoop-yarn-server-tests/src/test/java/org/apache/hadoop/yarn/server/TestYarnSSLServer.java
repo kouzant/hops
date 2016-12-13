@@ -1,8 +1,22 @@
+/**
+ * Copyright 2016 Apache Software Foundation.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *      http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.hadoop.yarn.server;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
-import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RpcServerException;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
@@ -17,8 +31,6 @@ import org.apache.hadoop.yarn.api.records.NodeReport;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.client.ClientRMProxy;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
-import org.bouncycastle.asn1.x509.X509Extensions;
-import org.bouncycastle.x509.extension.X509ExtensionUtil;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -29,14 +41,9 @@ import javax.net.ssl.SSLException;
 
 import static org.junit.Assert.assertNotNull;
 
-import java.security.Provider;
-import java.security.Security;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
-/**
- * Created by antonis on 11/22/16.
- */
 @RunWith(Parameterized.class)
 public class TestYarnSSLServer extends HopsSSLTestUtils {
     private final Log LOG = LogFactory.getLog(TestYarnSSLServer.class);

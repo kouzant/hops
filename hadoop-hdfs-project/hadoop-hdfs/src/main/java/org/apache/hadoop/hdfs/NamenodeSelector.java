@@ -26,6 +26,7 @@ import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.hdfs.server.namenode.NameNode;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.RemoteException;
+import org.apache.hadoop.ipc.RpcServerException;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos;
 
 import javax.net.ssl.SSLException;
@@ -359,7 +360,7 @@ public class NamenodeSelector extends Thread {
         if (e instanceof RemoteException
                 && ((RemoteException) e).getErrorCode().equals(
                 RpcHeaderProtos.RpcResponseHeaderProto.RpcErrorCodeProto.FATAL_UNAUTHORIZED)) {
-          throw new SSLException(e.getMessage());
+          throw new RpcServerException(e.getMessage());
         }
         LOG.warn("Failed to get list of NN from default NN. Default NN was " +
             defaultUri);
