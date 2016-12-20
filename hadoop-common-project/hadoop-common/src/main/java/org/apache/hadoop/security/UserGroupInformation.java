@@ -676,7 +676,7 @@ public class UserGroupInformation {
       return getLoginUser();
     } else {
       return new UserGroupInformation(subject);
-    }
+          }
   }
 
   /**
@@ -1352,23 +1352,51 @@ public class UserGroupInformation {
    * Create a user from a login name. It is intended to be used for remote
    * users in RPC, since it won't have any credentials.
    * @param user the full user principal name, must not be empty or null
+   * @param createHops add user to hdfs_users or not
    * @return the UserGroupInformation for the remote user.
    */
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
+  public static UserGroupInformation createRemoteUser(String user, boolean createHops) {
+    return createRemoteUser(user, AuthMethod.SIMPLE, createHops);
+  }
+  
+  /**
+   * Create a user from a login name. It is intended to be used for remote
+   * users in RPC, since it won't have any credentials.
+   * automatically add user to hdfs_users.
+   * @param user the full user principal name, must not be empty or null
+   * @return the UserGroupInformation for the remote user.
+   */
   public static UserGroupInformation createRemoteUser(String user) {
-    return createRemoteUser(user, AuthMethod.SIMPLE);
+    return createRemoteUser(user, AuthMethod.SIMPLE, true);
   }
   
   /**
    * Create a user from a login name. It is intended to be used for remote
    * users in RPC, since it won't have any credentials.
    * @param user the full user principal name, must not be empty or null
+   * @param authMethod the authentication method to use
    * @return the UserGroupInformation for the remote user.
    */
   @InterfaceAudience.Public
   @InterfaceStability.Evolving
   public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod) {
+    return createRemoteUser(user, authMethod, true);
+  }
+  
+  /**
+   * Create a user from a login name. It is intended to be used for remote
+   * users in RPC, since it won't have any credentials.
+   * @param user the full user principal name, must not be empty or null
+   * @param authMethod the authentication method to use
+   * @param createHops add user to hdfs_users or not
+   * @return the UserGroupInformation for the remote user.
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public static UserGroupInformation createRemoteUser(String user, AuthMethod authMethod,
+          boolean createHops) {
     if (user == null || user.isEmpty()) {
       throw new IllegalArgumentException("Null user");
     }
@@ -1376,6 +1404,9 @@ public class UserGroupInformation {
     subject.getPrincipals().add(new User(user));
     UserGroupInformation result = new UserGroupInformation(subject);
     result.setAuthenticationMethod(authMethod);
+    if(createHops){
+      createHopsUser(user);
+    }
     return result;
   }
 
@@ -1441,6 +1472,21 @@ public class UserGroupInformation {
   @InterfaceStability.Evolving
   public static UserGroupInformation createProxyUser(String user,
       UserGroupInformation realUser) {
+    return createProxyUser(user, realUser, true);
+  }
+  
+  /**
+   * Create a proxy user using username of the effective user and the ugi of the
+   * real user.
+   * @param user
+   * @param realUser
+   * @param createHops
+   * @return proxyUser ugi
+   */
+  @InterfaceAudience.Public
+  @InterfaceStability.Evolving
+  public static UserGroupInformation createProxyUser(String user,
+      UserGroupInformation realUser, boolean createHops) {
     if (user == null || user.isEmpty()) {
       throw new IllegalArgumentException("Null user");
     }
@@ -1453,6 +1499,9 @@ public class UserGroupInformation {
     principals.add(new RealUser(realUser));
     UserGroupInformation result =new UserGroupInformation(subject);
     result.setAuthenticationMethod(AuthenticationMethod.PROXY);
+    if(createHops){
+      createHopsUser(user);
+    }
     return result;
   }
 
