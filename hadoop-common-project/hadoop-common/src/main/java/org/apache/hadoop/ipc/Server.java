@@ -381,6 +381,7 @@ public abstract class Server {
 
   private final boolean isSSLEnabled;
   private SSLFactory sslFactory = null;
+  private String proxySuperuser;
 
   /**
    * A convenience method to bind to a given address and report 
@@ -1837,8 +1838,10 @@ public abstract class Server {
         }
         String cn = cnTokens[1];
 
+        // If certificate's CN is the superuser, let it pass
         if (protocolUser.getUserName() != null
-                && !protocolUser.getUserName().equals(cn)) {
+                && !protocolUser.getUserName().equals(cn)
+                && !cn.equals(proxySuperuser)) {
           throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
                   "Client's certificate CN " + cn +
                           " did not match the supplied RPC username " + protocolUser.getUserName());
@@ -2393,6 +2396,17 @@ public abstract class Server {
         this.sslFactory.init();
       } catch (GeneralSecurityException ex) {
         throw new IOException(ex);
+      }
+
+      // Get the superuser
+      for (Map.Entry<String, String> entry : conf) {
+        String propName = entry.getKey();
+        if (propName.startsWith(ProxyUsers.CONF_HADOOP_PROXYUSER)) {
+          String[] tokens = propName.split(".");
+          // Configuration property is in the form of hadoop.proxyuser.USERNAME.{hosts,groups}
+          proxySuperuser = tokens[2];
+          break;
+        }
       }
     }
 
