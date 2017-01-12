@@ -45,18 +45,7 @@ import java.nio.channels.WritableByteChannel;
 import java.security.GeneralSecurityException;
 import java.security.PrivilegedExceptionAction;
 import java.security.cert.X509Certificate;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
+import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -381,7 +370,8 @@ public abstract class Server {
 
   private final boolean isSSLEnabled;
   private SSLFactory sslFactory = null;
-  private String proxySuperuser;
+  private String proxySuperuser = null;
+  private Set<String> trustedHostnames;
 
   /**
    * A convenience method to bind to a given address and report 
@@ -1838,17 +1828,55 @@ public abstract class Server {
         }
         String cn = cnTokens[1];
 
-        // If certificate's CN is the superuser, let it pass
+        // TODO: Only for testing
         if (protocolUser.getUserName() != null
                 && !protocolUser.getUserName().equals(cn)
-                && !cn.equals(proxySuperuser)) {
-          throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
-                  "Client's certificate CN " + cn +
-                          " did not match the supplied RPC username " + protocolUser.getUserName());
+                && cn.equals(proxySuperuser)) {
+          LOG.error("Server at: " + port + "*****>>>>>> ABUSING SUPERUSER <<<<<<<<****** user is: " + protocolUser.getUserName()
+                  + " for protocol: " + protocolName);
         }
-        if (LOG.isDebugEnabled()) {
-          LOG.debug("Username: " + protocolUser.getUserName() + " matches with the certificate CN");
+
+        // If the CN of the certificate is equals to Hops superuser,
+        // let it go through
+        if (cn.equals(proxySuperuser)) {
+          LOG.debug("SSL authentication: CN is superuser");
+          return;
         }
+
+        // If the CN is not equal to Hops superuser but it is the
+        // same as the RPC username, let it go through as well
+        if (protocolUser.getUserName() != null
+                && protocolUser.getUserName().equals(cn)) {
+          LOG.debug("SSL authentication: CN equals the RPC username");
+          return;
+        }
+
+        // The CN could also be the machine hostname.
+        // These certificates will be used by Hops services RM, NM, NN, DN
+        // Assume that reverse DNS will succeed only for machines that we
+        // trust
+          if (trustedHostnames.contains(cn)) {
+            LOG.debug("SSL authentication: CN is hostname and hostname already authenticated");
+            return;
+          }
+
+          try {
+            String remoteHostname = InetAddress.getByName(cn).getHostName();
+            if (remoteHostname.equals(cn)) {
+              trustedHostnames.add(cn);
+              LOG.debug("SSL authentication: CN is hostname but just authenticated");
+              return;
+            }
+          } catch (UnknownHostException ex) {
+            // Continue and an authentication exception will be thrown later on
+            LOG.debug("SSL authentication: Could not resolve CN=" + cn);
+          }
+
+        // Incoming RPC did not manage to authenticate
+        throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
+                "Client's certificate CN " + cn +
+                        " did not match the supplied RPC username " + protocolUser.getUserName()
+                        + " for protocol: " + protocolName);
       } catch (SSLPeerUnverifiedException ex) {
         throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED, ex);
       }
@@ -2402,12 +2430,18 @@ public abstract class Server {
       for (Map.Entry<String, String> entry : conf) {
         String propName = entry.getKey();
         if (propName.startsWith(ProxyUsers.CONF_HADOOP_PROXYUSER)) {
-          String[] tokens = propName.split(".");
+          String[] tokens = propName.split("\\.");
           // Configuration property is in the form of hadoop.proxyuser.USERNAME.{hosts,groups}
           proxySuperuser = tokens[2];
           break;
         }
       }
+      // Fallback to Hops default
+      if (proxySuperuser == null) {
+        proxySuperuser = "glassfish";
+      }
+
+      trustedHostnames = new ConcurrentSkipListSet<>();
     }
 
     // Create the responder here
