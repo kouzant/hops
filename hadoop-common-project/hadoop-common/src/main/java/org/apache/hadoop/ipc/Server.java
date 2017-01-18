@@ -1212,8 +1212,7 @@ public abstract class Server {
     public Connection(SocketChannel channel, long lastContact, RpcSSLEngine rpcSSLEngine) {
       this.rpcSSLEngine = rpcSSLEngine;
       if (rpcSSLEngine != null) {
-        // Is 4k large enough, maybe
-        this.sslUnwrappedBuffer = ByteBuffer.allocate(4096);
+        this.sslUnwrappedBuffer = ByteBuffer.allocate(51200);
       }
       this.channel = channel;
       this.lastContact = lastContact;
@@ -1839,7 +1838,7 @@ public abstract class Server {
         // If the CN of the certificate is equals to Hops superuser,
         // let it go through
         if (cn.equals(proxySuperuser)) {
-          LOG.debug("SSL authentication: CN is superuser");
+          LOG.error("SSL authentication: CN is superuser");
           return;
         }
 
@@ -1847,7 +1846,7 @@ public abstract class Server {
         // same as the RPC username, let it go through as well
         if (protocolUser.getUserName() != null
                 && protocolUser.getUserName().equals(cn)) {
-          LOG.debug("SSL authentication: CN equals the RPC username");
+          LOG.error("SSL authentication: CN equals the RPC username");
           return;
         }
 
@@ -1856,7 +1855,7 @@ public abstract class Server {
         // Assume that reverse DNS will succeed only for machines that we
         // trust
           if (trustedHostnames.contains(cn)) {
-            LOG.debug("SSL authentication: CN is hostname and hostname already authenticated");
+            LOG.error("SSL authentication: CN is hostname and hostname already authenticated");
             return;
           }
 
@@ -1864,12 +1863,12 @@ public abstract class Server {
             String remoteHostname = InetAddress.getByName(cn).getHostName();
             if (remoteHostname.equals(cn)) {
               trustedHostnames.add(cn);
-              LOG.debug("SSL authentication: CN is hostname but just authenticated");
+              LOG.error("SSL authentication: CN is hostname but just authenticated");
               return;
             }
           } catch (UnknownHostException ex) {
             // Continue and an authentication exception will be thrown later on
-            LOG.debug("SSL authentication: Could not resolve CN=" + cn);
+            LOG.error("SSL authentication: Could not resolve CN=" + cn);
           }
 
         // Incoming RPC did not manage to authenticate
@@ -2833,7 +2832,7 @@ public abstract class Server {
     int count = -1;
     if (isSSLEnabled && sslUnwrappedBuffer != null) {
 
-      while (buffer.hasRemaining()) {
+      while (buffer.hasRemaining() && sslUnwrappedBuffer.hasRemaining()) {
         buffer.put(sslUnwrappedBuffer.get());
         count++;
       }

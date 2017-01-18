@@ -95,11 +95,11 @@ public class TestDFSSSLServer extends HopsSSLTestUtils {
     public void testRpcCallNonValidCert() throws Exception {
         dfs1 = DistributedFileSystem.newInstance(conf);
 
-        conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY, err_clientKeyStore.toString());
-        conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY, passwd);
-        conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY, passwd);
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY, err_clientTrustStore.toString());
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, passwd);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), err_clientKeyStore.toString());
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue(), passwd);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_PASSWORD_KEY.getValue(), passwd);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(), err_clientTrustStore.toString());
+        conf.set(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(), passwd);
 
         // Exception will be thrown later. JUnit does not execute the code
         // after the exception, so make the call in a separate thread

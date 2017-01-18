@@ -96,11 +96,11 @@ public class HopsSSLTestUtils {
         KeyStoreTestUtil.saveConfig(sslServer, sslServerConf);
 
         // Set the client certificate with correct CN and signed by the CA
-        conf.set(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY, c_clientKeyStore.toString());
-        conf.set(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY, passwd);
-        conf.set(HopsSSLSocketFactory.KEY_PASSWORD_KEY, passwd);
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY, c_clientTrustStore.toString());
-        conf.set(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY, passwd);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), c_clientKeyStore.toString());
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue(), passwd);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_PASSWORD_KEY.getValue(), passwd);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(), c_clientTrustStore.toString());
+        conf.set(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(), passwd);
     }
 
     protected List<Path> prepareCryptoMaterial(Configuration conf, String outDir) throws Exception {

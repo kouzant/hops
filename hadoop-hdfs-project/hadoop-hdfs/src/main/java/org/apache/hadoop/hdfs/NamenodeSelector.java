@@ -163,8 +163,8 @@ public class NamenodeSelector extends Thread {
     createNamenodeClientsFromConfiguration();
 
     //start periodic Namenode list update thread.
-    setDaemon(true);
-    start();
+    //setDaemon(true);
+    //start();
   }
 
   @Override

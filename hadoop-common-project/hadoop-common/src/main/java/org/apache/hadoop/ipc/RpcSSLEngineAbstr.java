@@ -68,10 +68,14 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
     public RpcSSLEngineAbstr(SocketChannel socketChannel, SSLEngine sslEngine) {
         this.socketChannel = socketChannel;
         this.sslEngine = sslEngine;
-        serverAppBuffer = ByteBuffer.allocate(sslEngine.getSession().getApplicationBufferSize());
-        clientAppBuffer = ByteBuffer.allocate(sslEngine.getSession().getApplicationBufferSize());
-        serverNetBuffer = ByteBuffer.allocate(sslEngine.getSession().getPacketBufferSize());
-        clientNetBuffer = ByteBuffer.allocate(sslEngine.getSession().getPacketBufferSize());
+        //serverAppBuffer = ByteBuffer.allocate(sslEngine.getSession().getApplicationBufferSize());
+        serverAppBuffer = ByteBuffer.allocate(51200);
+        //clientAppBuffer = ByteBuffer.allocate(sslEngine.getSession().getApplicationBufferSize());
+        clientAppBuffer = ByteBuffer.allocate(51200);
+        //serverNetBuffer = ByteBuffer.allocate(sslEngine.getSession().getPacketBufferSize());
+        serverNetBuffer = ByteBuffer.allocate(51200);
+        //clientNetBuffer = ByteBuffer.allocate(sslEngine.getSession().getPacketBufferSize());
+        clientNetBuffer = ByteBuffer.allocate(51200);
     }
 
     @Override
@@ -216,16 +220,16 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
         try {
             sslCtx = SSLContext.getInstance("TLSv1.2");
 
-            String keyStoreFilePath = conf.get(HopsSSLSocketFactory.KEY_STORE_FILEPATH_KEY,
-                    HopsSSLSocketFactory.KEY_STORE_FILEPATH_DEFAULT);
-            String keyStorePassword = conf.get(HopsSSLSocketFactory.KEY_STORE_PASSWORD_KEY,
-                    HopsSSLSocketFactory.KEY_STORE_PASSWORD_DEFAULT);
-            String keyPassword = conf.get(HopsSSLSocketFactory.KEY_PASSWORD_KEY,
-                    HopsSSLSocketFactory.KEY_PASSWORD_DEFAULT);
-            String trustStoreFilePath = conf.get(HopsSSLSocketFactory.TRUST_STORE_FILEPATH_KEY,
-                    HopsSSLSocketFactory.TRUST_STORE_FILEPATH_DEFAULT);
-            String trustStorePassword = conf.get(HopsSSLSocketFactory.TRUST_STORE_PASSWORD_KEY,
-                    HopsSSLSocketFactory.TRUST_STORE_PASSWORD_DEFAULT);
+            String keyStoreFilePath = conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(),
+                    HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getDefaultValue());
+            String keyStorePassword = conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue(),
+                    HopsSSLSocketFactory.CryptoKeys.KEY_STORE_PASSWORD_KEY.getDefaultValue());
+            String keyPassword = conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_PASSWORD_KEY.getValue(),
+                    HopsSSLSocketFactory.CryptoKeys.KEY_PASSWORD_KEY.getDefaultValue());
+            String trustStoreFilePath = conf.get(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(),
+                    HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY.getDefaultValue());
+            String trustStorePassword = conf.get(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(),
+                    HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getDefaultValue());
 
             sslCtx.init(createKeyManager(keyStoreFilePath, keyStorePassword, keyPassword),
                     createTrustManager(trustStoreFilePath, trustStorePassword),
