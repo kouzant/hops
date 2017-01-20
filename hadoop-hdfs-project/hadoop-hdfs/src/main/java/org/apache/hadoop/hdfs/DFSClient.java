@@ -1998,6 +1998,7 @@ public class DFSClient implements java.io.Closeable {
       ClientProtocol namenode, SocketFactory socketFactory, int socketTimeout,
       DataEncryptionKey encryptionKey, boolean connectToDnViaHostname)
       throws IOException {
+    LOG.debug("SocketFactory is: " + socketFactory.getClass().getName());
     //get all block locations
     LocatedBlocks blockLocations =
         callGetBlockLocations(namenode, src, 0, Long.MAX_VALUE);

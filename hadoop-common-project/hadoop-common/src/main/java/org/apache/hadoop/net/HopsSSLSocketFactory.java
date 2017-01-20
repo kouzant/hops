@@ -36,15 +36,10 @@ import java.nio.file.Paths;
 
 public class HopsSSLSocketFactory extends SocketFactory implements Configurable {
 
-    //public static final String KEY_STORE_FILEPATH_KEY = "client.rpc.ssl.keystore.filepath";
     private static final String KEY_STORE_FILEPATH_DEFAULT = "client.keystore.jks";
-    //public static final String KEY_STORE_PASSWORD_KEY = "client.rpc.ssl.keystore.password";
     private static final String KEY_STORE_PASSWORD_DEFAULT = "";
-    //public static final String KEY_PASSWORD_KEY = "client.rpc.ssl.keypassword";
     private static final String KEY_PASSWORD_DEFAULT = "";
-    //public static final String TRUST_STORE_FILEPATH_KEY = "client.rpc.ssl.truststore.filepath";
     private static final String TRUST_STORE_FILEPATH_DEFAULT = "client.truststore.jks";
-    //public static final String TRUST_STORE_PASSWORD_KEY = "client.rpc.ssl.truststore.password";
     private static final String TRUST_STORE_PASSWORD_DEFAULT = "";
 
     private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
@@ -97,12 +92,14 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     public void setConf(Configuration conf) {
         try {
             String username = UserGroupInformation.getCurrentUser().getUserName();
+            String localHostname = NetUtils.getLocalHostname();
             LOG.error("Current user's username is: " + username);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Current user's username is: " + username);
             }
             // First we check if the crypto material has been set in the configuration
-            if (!isCryptoMaterialSet(conf, username)) {
+            if (!isHostnameInCryptoMaterial(conf, localHostname)
+                && !isCryptoMaterialSet(conf, username)) {
 
                 if (username.matches(userPattern)) {
                     // It's a normal user
@@ -123,8 +120,16 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                 } else {
                     // It's the superuser
                     // Set the paths to the host crypto material
-                    // For the moment is /tmp/glassfish__
-                    configureTlsClient("/tmp/", username, conf);
+                    // If hostname certificate exists, use that one
+                    File fd = new File(Paths.get("/tmp/", localHostname + "__kstore.jks").toString());
+                    if (fd.exists()) {
+                        configureTlsClient("/tmp/", localHostname, conf);
+                        LOG.error("Kavouri found " + fd.toString());
+                    } else {
+                        // Otherwise use the superuser's certificate
+                        LOG.error("Kavouri not found!!!!! Falling back to glassfish " + fd.toString());
+                        configureTlsClient("/tmp/", username, conf);
+                    }
                 }
             }
         } catch (IOException ex) {
@@ -141,7 +146,6 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
         LOG.error("<Kavouri> keystore used: " + keyStoreFilePath);
     }
 
-    // TODO Use this also from Hopsworks
     public static void configureTlsClient(String filePrefix, String username, Configuration conf) {
         String pref = Paths.get(filePrefix, username).toString();
         conf.set(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), pref + "__kstore.jks");
@@ -166,6 +170,25 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     }
 
     /**
+     * Services like RM, NM, NN, DN their certificate file name will contain their hostname
+     *
+     * @param conf
+     * @param hostname
+     * @return
+     */
+    private boolean isHostnameInCryptoMaterial(Configuration conf, String hostname) {
+        for (CryptoKeys key : CryptoKeys.values()) {
+            String propValue = conf.get(key.getValue(), key.getDefaultValue());
+            if (key.getType() == PropType.FILEPATH
+                    && !propValue.contains(hostname)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Checks if the username is part of the property value. For example,
      * projectName__userName should be part of value /tmp/projectName__userName__kstore.jks
      * @param username
@@ -173,10 +196,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
      * @return
      */
     private boolean checkUsernameInProperty(String username, String propValue, PropType propType) {
-        // TODO Don't deal with this for the moment
-        /*if (propType == PropType.FILEPATH) {
+        if (propType == PropType.FILEPATH) {
             return propValue.contains(username);
-        }*/
+        }
 
         return true;
     }

@@ -1410,10 +1410,7 @@ public class DFSOutputStream extends FSOutputSummer implements Syncable {
       DFSClient.LOG.debug("Connecting to datanode " + dnAddr);
     }
     final InetSocketAddress isa = NetUtils.createSocketAddr(dnAddr);
-    // final Socket sock = client.socketFactory.createSocket();
-    SocketFactory socketFactory = new StandardSocketFactory();
-    final Socket sock = socketFactory.createSocket();
-
+    final Socket sock = client.socketFactory.createSocket();
 
     final int timeout = client.getDatanodeReadTimeout(length);
     NetUtils.connect(sock, isa, client.getRandomLocalInterfaceAddr(), timeout);

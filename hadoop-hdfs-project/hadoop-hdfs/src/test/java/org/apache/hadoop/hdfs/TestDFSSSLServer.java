@@ -17,8 +17,10 @@ package org.apache.hadoop.hdfs;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.fs.FileChecksum;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.hdfs.protocol.ClientProtocol;
 import org.apache.hadoop.ipc.RpcServerException;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.ssl.HopsSSLTestUtils;
@@ -57,6 +59,10 @@ public class TestDFSSSLServer extends HopsSSLTestUtils {
         File testDataCluster1 = new File(testDataPath, "dfs_cluster");
         String c1Path = testDataCluster1.getAbsolutePath();
         conf.set(MiniDFSCluster.HDFS_MINIDFS_BASEDIR, c1Path);
+        // Force DatanNode non-RPC communication to use plaintext socket
+        // Until we test starting DN in secure-mode
+        conf.set("hadoop.rpc.socket.factory.class.ClientProtocol",
+                "org.apache.hadoop.net.StandardSocketFactory");
 
         cluster = new MiniDFSCluster.Builder(conf).build();
         LOG.info("DFS cluster started");
@@ -89,6 +95,18 @@ public class TestDFSSSLServer extends HopsSSLTestUtils {
         boolean exists = dfs1.exists(new Path("some_path"));
         LOG.debug("Does exist? " + exists);
         assertFalse(exists);
+    }
+
+    @Test
+    public void testChecksum() throws Exception {
+        LOG.debug("testChecksum");
+        dfs1 = DistributedFileSystem.newInstance(conf);
+        Path file = new Path("some_file");
+        dfs1.create(file);
+        boolean exists = dfs1.exists(file);
+        assertTrue(exists);
+        FileChecksum checksum = dfs1.getFileChecksum(file);
+        LOG.debug("File checksum is: " + checksum.toString());
     }
 
     @Test

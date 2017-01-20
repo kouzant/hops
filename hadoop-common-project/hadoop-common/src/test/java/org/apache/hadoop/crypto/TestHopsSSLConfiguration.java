@@ -2,6 +2,7 @@ package org.apache.hadoop.crypto;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
+import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.junit.After;
 import org.junit.Before;
@@ -142,6 +143,64 @@ public class TestHopsSSLConfiguration {
                 conf.get(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue()));
         assertEquals(pass,
                 conf.get(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue()));
+    }
+
+    @Test
+    public void testNoConfigHostCertificates() throws Exception {
+        String hostname = NetUtils.getLocalHostname();
+        String kstore = "/tmp/" + hostname + "__kstore.jks";
+        String tstore = "/tmp/" + hostname + "__tstore.jks";
+
+        touchFile(kstore);
+        touchFile(tstore);
+
+        UserGroupInformation ugi = UserGroupInformation.createRemoteUser("glassfish");
+        ugi.doAs(new PrivilegedAction<Object>() {
+            @Override
+            public Object run() {
+                hopsFactory.setConf(conf);
+                return null;
+            }
+        });
+
+        assertEquals(kstore, conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue()));
+        assertEquals("adminpw", conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue()));
+        assertEquals("adminpw", conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_PASSWORD_KEY.getValue()));
+        assertEquals(tstore, conf.get(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue()));
+        assertEquals("adminpw", conf.get(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue()));
+    }
+
+    @Test
+    public void testHostCertificateWithSuperuser() throws Exception {
+        String hostname = NetUtils.getLocalHostname();
+        String kstore = "/tmp/" + hostname + "__kstore.jks";
+        String tstore = "/tmp/" + hostname + "__tstore.jks";
+        String pass = "anotherPassphrase";
+
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), kstore);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue(), pass);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_PASSWORD_KEY.getValue(), pass);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(), tstore);
+        conf.set(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(), pass);
+
+        String cwd = System.getProperty("user.dir");
+        touchFile(Paths.get(cwd, "glassfish__kstore.jks").toString());
+        touchFile(Paths.get(cwd, "glassfish__tstore.jks").toString());
+
+        UserGroupInformation ugi = UserGroupInformation.createRemoteUser("glassfish");
+        ugi.doAs(new PrivilegedAction<Object>() {
+            @Override
+            public Object run() {
+                hopsFactory.setConf(conf);
+                return null;
+            }
+        });
+
+        assertEquals(kstore, conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue()));
+        assertEquals(pass, conf.get((HopsSSLSocketFactory.CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue())));
+        assertEquals(pass, conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_PASSWORD_KEY.getValue()));
+        assertEquals(tstore, conf.get(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue()));
+        assertEquals(pass, conf.get(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue()));
     }
 
     private String touchFile(String file) throws IOException {

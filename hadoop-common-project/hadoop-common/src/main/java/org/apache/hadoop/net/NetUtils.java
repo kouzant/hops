@@ -655,7 +655,20 @@ public class NetUtils {
     try {return "" + InetAddress.getLocalHost();}
     catch(UnknownHostException uhe) {return "" + uhe;}
   }
-  
+
+  /**
+   * Return the hostname of the local host as a string
+   * @return hostname
+   * @throws UnknownHostException
+   */
+  public static String getLocalHostname() {
+    try {
+      return InetAddress.getLocalHost().getHostName();
+    } catch (UnknownHostException ex) {
+      return "localhost";
+    }
+  }
+
   /**
    * Compose a "host:port" string from the address.
    */
