@@ -36,6 +36,7 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
     private final static Log LOG = LogFactory.getLog(RpcSSLEngineAbstr.class);
     protected final SocketChannel socketChannel;
     protected final SSLEngine sslEngine;
+    protected final static int KB = 1024;
     private final ExecutorService exec = Executors.newSingleThreadExecutor();
 
     /**
@@ -69,13 +70,13 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
         this.socketChannel = socketChannel;
         this.sslEngine = sslEngine;
         //serverAppBuffer = ByteBuffer.allocate(sslEngine.getSession().getApplicationBufferSize());
-        serverAppBuffer = ByteBuffer.allocate(51200);
+        serverAppBuffer = ByteBuffer.allocate(100 * KB);
         //clientAppBuffer = ByteBuffer.allocate(sslEngine.getSession().getApplicationBufferSize());
-        clientAppBuffer = ByteBuffer.allocate(51200);
+        clientAppBuffer = ByteBuffer.allocate(100 * KB);
         //serverNetBuffer = ByteBuffer.allocate(sslEngine.getSession().getPacketBufferSize());
-        serverNetBuffer = ByteBuffer.allocate(51200);
+        serverNetBuffer = ByteBuffer.allocate(100 * KB);
         //clientNetBuffer = ByteBuffer.allocate(sslEngine.getSession().getPacketBufferSize());
-        clientNetBuffer = ByteBuffer.allocate(51200);
+        clientNetBuffer = ByteBuffer.allocate(100 * KB);
     }
 
     @Override

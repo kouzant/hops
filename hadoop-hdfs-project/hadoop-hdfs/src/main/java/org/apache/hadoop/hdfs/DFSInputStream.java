@@ -943,7 +943,9 @@ public class DFSInputStream extends FSInputStream
       if (sockAndStreams == null) {
         fromCache = false;
 
-        sock = dfsClient.socketFactory.createSocket();
+        //sock = dfsClient.socketFactory.createSocket();
+        SocketFactory socketFactory = new StandardSocketFactory();
+        sock = socketFactory.createSocket();
         
         // TCP_NODELAY is crucial here because of bad interactions between
         // Nagle's Algorithm and Delayed ACKs. With connection keepalive

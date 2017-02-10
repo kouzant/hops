@@ -40,6 +40,10 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
     public int write(WritableByteChannel channel, ByteBuffer buffer)
             throws IOException {
         serverAppBuffer.clear();
+        if (serverAppBuffer.capacity() < buffer.capacity()) {
+            LOG.error("ServerAppBuffer capacity: " + serverAppBuffer.capacity()
+                + " Buffer size: " + buffer.capacity());
+        }
         serverAppBuffer.put(buffer);
         serverAppBuffer.flip();
 

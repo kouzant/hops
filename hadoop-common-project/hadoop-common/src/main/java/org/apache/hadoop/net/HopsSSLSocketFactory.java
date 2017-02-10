@@ -36,12 +36,24 @@ import java.nio.file.Paths;
 
 public class HopsSSLSocketFactory extends SocketFactory implements Configurable {
 
+    public static final String FORCE_CONFIGURE = "client.rpc.ssl.force.configure";
+    public static final boolean DEFAULT_FORCE_CONFIGURE = true;
+    
     private static final String KEY_STORE_FILEPATH_DEFAULT = "client.keystore.jks";
     private static final String KEY_STORE_PASSWORD_DEFAULT = "";
     private static final String KEY_PASSWORD_DEFAULT = "";
     private static final String TRUST_STORE_FILEPATH_DEFAULT = "client.truststore.jks";
     private static final String TRUST_STORE_PASSWORD_DEFAULT = "";
-
+    
+    private static final String KEYSTORE_SUFFIX = "__kstore.jks";
+    private static final String TRUSTSTORE_SUFFIX = "__tstore.jks";
+    private static final String PASSPHRASE = "adminpw";
+    private static final String SOCKET_FACTORY_NAME = HopsSSLSocketFactory
+        .class.getCanonicalName();
+    /*private final String CERT_MATERIALIZED_DIR = System.getProperty("java.io.tmpdir",
+        "/tmp/");*/
+    private final String CERT_MATERIALIZED_DIR = "/tmp";
+    
     private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
 
     private enum PropType {
@@ -55,7 +67,8 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
         KEY_STORE_PASSWORD_KEY("client.rpc.ssl.keystore.password", KEY_STORE_PASSWORD_DEFAULT, PropType.LITERAL),
         KEY_PASSWORD_KEY("client.rpc.ssl.keypassword", KEY_PASSWORD_DEFAULT, PropType.LITERAL),
         TRUST_STORE_FILEPATH_KEY("client.rpc.ssl.truststore.filepath", TRUST_STORE_FILEPATH_DEFAULT, PropType.FILEPATH),
-        TRUST_STORE_PASSWORD_KEY("client.rpc.ssl.truststore.password", TRUST_STORE_PASSWORD_DEFAULT, PropType.LITERAL);
+        TRUST_STORE_PASSWORD_KEY("client.rpc.ssl.truststore.password",
+            TRUST_STORE_PASSWORD_DEFAULT, PropType.LITERAL);
 
         private final String value;
         private final String defaultValue;
@@ -88,20 +101,26 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     public HopsSSLSocketFactory() {
     }
 
+    // TODO(Antonis) Change logging severity
     @Override
     public void setConf(Configuration conf) {
         try {
             String username = UserGroupInformation.getCurrentUser().getUserName();
             String localHostname = NetUtils.getLocalHostname();
+            boolean forceConfigure = conf.getBoolean(FORCE_CONFIGURE,
+                DEFAULT_FORCE_CONFIGURE);
+            
             LOG.error("Current user's username is: " + username);
+            LOG.error("Hostname of machine is: " + localHostname);
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Current user's username is: " + username);
             }
             // First we check if the crypto material has been set in the configuration
-            if (!isHostnameInCryptoMaterial(conf, localHostname)
-                && !isCryptoMaterialSet(conf, username)) {
+            /*if (!isCryptoMaterialSet(conf, username)
+                && !isHostnameInCryptoMaterial(conf, localHostname)) {
 
                 if (username.matches(userPattern)) {
+                    LOG.error("It's a normal user");
                     // It's a normal user
                     // First check for the file in classpath
                     File fd = new File(username + "__kstore.jks");
@@ -118,6 +137,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                         configureTlsClient("/tmp/", username, conf);
                     }
                 } else {
+                    LOG.error("It's superuser");
                     // It's the superuser
                     // Set the paths to the host crypto material
                     // If hostname certificate exists, use that one
@@ -129,6 +149,59 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                         // Otherwise use the superuser's certificate
                         LOG.error("Kavouri not found!!!!! Falling back to glassfish " + fd.toString());
                         configureTlsClient("/tmp/", username, conf);
+                    }
+                }
+            }*/
+            
+            // TODO A temporary shortcircuit until I merge Gautier's PR
+            if (username.contains("appattempt")) {
+                configureTlsClient("/tmp/", localHostname, conf);
+            } else {
+    
+                if (username.matches(userPattern) ||
+                    !username.equals("glassfish")) {
+                    // It's a normal user
+                    LOG.error("It's a normal user");
+                    if (!isCryptoMaterialSet(conf, username)
+                        || forceConfigure) {
+                        // First check in the classpath
+                        File fd = new File(username + KEYSTORE_SUFFIX);
+                        if (fd.exists()) {
+                            LOG.error("Keystore exists in classpath");
+                            configureTlsClient("", username, conf);
+                        } else {
+                            // Otherwise it should be in the materialized directory
+                            LOG.error("Keystore exists in materialized dir");
+                            configureTlsClient(CERT_MATERIALIZED_DIR, username,
+                                conf);
+                        }
+                    } else {
+                        LOG.error("Crypto material for normal user already " +
+                            "set");
+                    }
+                } else {
+                    // It's a superuser
+                    LOG.error("It's superuser");
+                    if ((!isCryptoMaterialSet(conf, username)
+                        && !isHostnameInCryptoMaterial(conf, localHostname))
+                        || forceConfigure) {
+                        // First check if the hostname keystore exists
+                        File fd = new File(
+                            Paths.get(CERT_MATERIALIZED_DIR, localHostname +
+                                KEYSTORE_SUFFIX).toString());
+                        if (fd.exists()) {
+                            LOG.error("Hostname keystore exists!");
+                            configureTlsClient(CERT_MATERIALIZED_DIR,
+                                localHostname, conf);
+                        } else {
+                            LOG.error(
+                                "Hostname keystore does not exist, falling " +
+                                    "back to superuser");
+                            configureTlsClient(CERT_MATERIALIZED_DIR, username,
+                                conf);
+                        }
+                    } else {
+                        LOG.error("Crypto material for superuser already set");
                     }
                 }
             }
@@ -145,16 +218,18 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                 KEY_STORE_FILEPATH_DEFAULT);
         LOG.error("<Kavouri> keystore used: " + keyStoreFilePath);
     }
-
+    
     public static void configureTlsClient(String filePrefix, String username, Configuration conf) {
         String pref = Paths.get(filePrefix, username).toString();
-        conf.set(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), pref + "__kstore.jks");
-        conf.set(CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue(), "adminpw");
-        conf.set(CryptoKeys.KEY_PASSWORD_KEY.getValue(), "adminpw");
-        conf.set(CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(), pref + "__tstore.jks");
-        conf.set(CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(), "adminpw");
+        conf.set(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), pref +
+            KEYSTORE_SUFFIX);
+        conf.set(CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue(), PASSPHRASE);
+        conf.set(CryptoKeys.KEY_PASSWORD_KEY.getValue(), PASSPHRASE);
+        conf.set(CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(), pref +
+            TRUSTSTORE_SUFFIX);
+        conf.set(CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(), PASSPHRASE);
         conf.set(CommonConfigurationKeys.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
-                "org.apache.hadoop.net.HopsSSLSocketFactory");
+                SOCKET_FACTORY_NAME);
     }
 
     private boolean isCryptoMaterialSet(Configuration conf, String username) {
@@ -211,6 +286,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     public Socket createSocket() throws IOException, UnknownHostException {
         if (LOG.isDebugEnabled()) {
             LOG.debug("Creating SSL client socket");
+        }
+        if (conf.getBoolean(FORCE_CONFIGURE, false)) {
+            setConf(conf);
         }
         SSLContext sslCtx = RpcSSLEngineAbstr.initializeSSLContext(conf);
         SSLSocketFactory socketFactory = sslCtx.getSocketFactory();

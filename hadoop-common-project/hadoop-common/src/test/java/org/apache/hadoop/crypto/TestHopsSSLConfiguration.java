@@ -119,6 +119,49 @@ public class TestHopsSSLConfiguration {
     }
 
     @Test
+    public void testBothConfigExisting() throws Exception {
+        String tmp = System.getProperty("java.io.tmpdir");
+        String kstore = Paths.get(tmp, "project__user__kstore.jks")
+            .toString();
+        String tstore = Paths.get(tmp, "project__user__tstore.jks")
+            .toString();
+        touchFile(kstore);
+        touchFile(tstore);
+        String hostname = NetUtils.getLocalHostname();
+        String hKstore = Paths.get(tmp, hostname + "__kstore.jks")
+            .toString();
+        String hTstore = Paths.get(tmp, hostname + "__tstore.jks")
+            .toString();
+        touchFile(hKstore);
+        touchFile(hTstore);
+        
+        conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
+            .getValue(), "/tmp/finwe__kstore.jks");
+        conf.set(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_FILEPATH_KEY
+            .getValue(), "/tmp/finwe__tstore.jks");
+        UserGroupInformation ugi = UserGroupInformation
+            .createRemoteUser("project__user");
+        ugi.doAs(new PrivilegedAction<Object>() {
+            @Override
+            public Object run() {
+                hopsFactory.setConf(conf);
+                return null;
+            }
+        });
+        
+        assertEquals(kstore, conf.get(HopsSSLSocketFactory.CryptoKeys
+            .KEY_STORE_FILEPATH_KEY.getValue()));
+        assertEquals("adminpw", conf.get(HopsSSLSocketFactory.CryptoKeys
+            .KEY_STORE_PASSWORD_KEY.getValue()));
+        assertEquals("adminpw", conf.get(HopsSSLSocketFactory.CryptoKeys
+            .KEY_PASSWORD_KEY.getValue()));
+        assertEquals(tstore, conf.get(HopsSSLSocketFactory.CryptoKeys
+            .TRUST_STORE_FILEPATH_KEY.getValue()));
+        assertEquals("adminpw", conf.get(HopsSSLSocketFactory.CryptoKeys
+            .TRUST_STORE_PASSWORD_KEY.getValue()));
+    }
+    
+    @Test
     public void testWithNoConfigSuperuser() throws Exception {
         String kstore = "/tmp/glassfish__kstore.jks";
         String pass = "adminpw";

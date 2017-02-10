@@ -37,6 +37,7 @@ import org.apache.hadoop.fs.FileStatus;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.service.AbstractService;
@@ -176,6 +177,11 @@ public class LogAggregationService extends AbstractService implements
   }
 
   protected FileSystem getFileSystem(Configuration conf) throws IOException {
+    String username = UserGroupInformation.getCurrentUser().getUserName();
+    LOG.error("<Dino> Current username is: " + username);
+    conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
+        .getValue(), username + "__kstore.jks");
+    conf.setBoolean(HopsSSLSocketFactory.FORCE_CONFIGURE,true);
     return FileSystem.get(conf);
   }
 
@@ -183,7 +189,16 @@ public class LogAggregationService extends AbstractService implements
     // Checking the existence of the TLD
     FileSystem remoteFS = null;
     try {
+      // TODO(Antonis) This is not how it shoule be but
+      // org.apache.hadoop.ipc.RemoteException(org.apache.hadoop.ipc
+      // .RpcServerException): Client's certificate CN lalakoko__meb10000 did
+      // not match the supplied RPC username glassfish for protocol: org.apache
+      // .hadoop.hdfs.protocol.ClientProtocol
+      
       remoteFS = getFileSystem(conf);
+      LOG.error("<Dino> Keystore used: " + conf.get(HopsSSLSocketFactory
+              .CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(),
+          HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getDefaultValue()));
     } catch (IOException e) {
       throw new YarnRuntimeException("Unable to get Remote FileSystem instance", e);
     }
