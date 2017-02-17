@@ -1812,6 +1812,10 @@ public abstract class Server {
         return;
       }
       try {
+        String user = protocolUser.getUserName();
+        LOG.error("<Kavouri> Authenticating user: " + user + " for protocol"
+            + protocolName);
+        
         if (LOG.isDebugEnabled()) {
           LOG.debug("Authentication via certificate CN");
         }

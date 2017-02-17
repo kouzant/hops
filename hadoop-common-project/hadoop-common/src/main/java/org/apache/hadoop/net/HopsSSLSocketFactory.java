@@ -105,11 +105,12 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     @Override
     public void setConf(Configuration conf) {
         try {
-            String username = UserGroupInformation.getCurrentUser().getUserName();
+            String username =
+                UserGroupInformation.getCurrentUser().getUserName();
             String localHostname = NetUtils.getLocalHostname();
             boolean forceConfigure = conf.getBoolean(FORCE_CONFIGURE,
                 DEFAULT_FORCE_CONFIGURE);
-            
+    
             LOG.error("Current user's username is: " + username);
             LOG.error("Hostname of machine is: " + localHostname);
             if (LOG.isDebugEnabled()) {
@@ -152,63 +153,79 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                     }
                 }
             }*/
+  
+  
+          File localized = new File("kafka_k_certificate");
+          if (localized.exists()) {
+            LOG.error("<Kavouri> I found kstore in localized directory");
+            setTlsConfiguration("kafka_k_certificate",
+                "kafka_t_certificate", conf);
+          } else {
+            LOG.error("<Kavouri> I DID NOT find kstore in localized " +
+                "directory");
             
             // TODO A temporary shortcircuit until I merge Gautier's PR
             if (username.contains("appattempt")) {
-                configureTlsClient("/tmp/", localHostname, conf);
+              LOG.error("<MALAKIA>");
+              configureTlsClient("/tmp/", localHostname, conf);
             } else {
-    
-                if (username.matches(userPattern) ||
-                    !username.equals("glassfish")) {
-                    // It's a normal user
-                    LOG.error("It's a normal user");
-                    if (!isCryptoMaterialSet(conf, username)
-                        || forceConfigure) {
-                        // First check in the classpath
-                        File fd = new File(username + KEYSTORE_SUFFIX);
-                        if (fd.exists()) {
-                            LOG.error("Keystore exists in classpath");
-                            configureTlsClient("", username, conf);
-                        } else {
-                            // Otherwise it should be in the materialized directory
-                            LOG.error("Keystore exists in materialized dir");
-                            configureTlsClient(CERT_MATERIALIZED_DIR, username,
-                                conf);
-                        }
-                    } else {
-                        LOG.error("Crypto material for normal user already " +
-                            "set");
-                    }
+      
+              if (username.matches(userPattern) ||
+                  !username.equals("glassfish")) {
+                // It's a normal user
+                LOG.error("It's a normal user");
+                if (!isCryptoMaterialSet(conf, username)
+                    || forceConfigure) {
+                  // First check in the classpath
+                  File fd = new File(username + KEYSTORE_SUFFIX);
+                  if (fd.exists()) {
+                    LOG.error("Keystore exists in classpath");
+                    configureTlsClient("", username, conf);
+                  } else {
+                    // Otherwise it should be in the materialized directory
+                    LOG.error(
+                        "Keystore exists in materialized dir");
+                    configureTlsClient(CERT_MATERIALIZED_DIR,
+                        username,
+                        conf);
+                  }
                 } else {
-                    // It's a superuser
-                    LOG.error("It's superuser");
-                    if ((!isCryptoMaterialSet(conf, username)
-                        && !isHostnameInCryptoMaterial(conf, localHostname))
-                        || forceConfigure) {
-                        // First check if the hostname keystore exists
-                        File fd = new File(
-                            Paths.get(CERT_MATERIALIZED_DIR, localHostname +
-                                KEYSTORE_SUFFIX).toString());
-                        if (fd.exists()) {
-                            LOG.error("Hostname keystore exists!");
-                            configureTlsClient(CERT_MATERIALIZED_DIR,
-                                localHostname, conf);
-                        } else {
-                            LOG.error(
-                                "Hostname keystore does not exist, falling " +
-                                    "back to superuser");
-                            configureTlsClient(CERT_MATERIALIZED_DIR, username,
-                                conf);
-                        }
-                    } else {
-                        LOG.error("Crypto material for superuser already set");
-                    }
+                  LOG.error(
+                      "Crypto material for normal user already " +
+                          "set");
                 }
+              } else {
+                // It's a superuser
+                LOG.error("It's superuser");
+                if ((!isCryptoMaterialSet(conf, username)
+                    && !isHostnameInCryptoMaterial(conf, localHostname))
+                    || forceConfigure) {
+                  // First check if the hostname keystore exists
+                  File fd = new File(
+                      Paths.get(CERT_MATERIALIZED_DIR, localHostname +
+                          KEYSTORE_SUFFIX).toString());
+                  if (fd.exists()) {
+                    LOG.error("Hostname keystore exists!");
+                    configureTlsClient(CERT_MATERIALIZED_DIR,
+                        localHostname, conf);
+                  } else {
+                    LOG.error(
+                        "Hostname keystore does not exist, falling " +
+                            "back to superuser");
+                    configureTlsClient(CERT_MATERIALIZED_DIR,
+                        username,
+                        conf);
+                  }
+                } else {
+                  LOG.error(
+                      "Crypto material for superuser already set");
+                }
+              }
             }
-        } catch (IOException ex) {
-            LOG.error(ex, ex);
+          }
+        } catch(IOException ex){
+          LOG.error(ex, ex);
         }
-
         this.conf = conf;
         // *ClientCache* caches client instances based on their socket factory.
         // In order to distinguish two client with the same socket factory but
@@ -221,15 +238,19 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     
     public static void configureTlsClient(String filePrefix, String username, Configuration conf) {
         String pref = Paths.get(filePrefix, username).toString();
-        conf.set(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), pref +
-            KEYSTORE_SUFFIX);
+        setTlsConfiguration(pref + KEYSTORE_SUFFIX, pref +
+            TRUSTSTORE_SUFFIX, conf);
+    }
+    
+    private static void setTlsConfiguration(String kstorePath, String
+        tstorePath, Configuration conf) {
+        conf.set(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), kstorePath);
         conf.set(CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue(), PASSPHRASE);
         conf.set(CryptoKeys.KEY_PASSWORD_KEY.getValue(), PASSPHRASE);
-        conf.set(CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(), pref +
-            TRUSTSTORE_SUFFIX);
+        conf.set(CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(), tstorePath);
         conf.set(CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(), PASSPHRASE);
         conf.set(CommonConfigurationKeys.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
-                SOCKET_FACTORY_NAME);
+            SOCKET_FACTORY_NAME);
     }
 
     private boolean isCryptoMaterialSet(Configuration conf, String username) {
