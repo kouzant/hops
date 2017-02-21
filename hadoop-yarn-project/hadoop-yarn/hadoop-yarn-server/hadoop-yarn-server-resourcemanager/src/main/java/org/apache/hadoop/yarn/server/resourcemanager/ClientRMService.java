@@ -21,6 +21,7 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.security.AccessControlException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -44,6 +45,7 @@ import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
 import org.apache.hadoop.security.authorize.PolicyProvider;
+import org.apache.hadoop.security.ssl.CertificateLocalizer;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
@@ -540,9 +542,11 @@ public class ClientRMService extends AbstractService implements
     // in RMAppManager.
 
     String user = null;
+    String username = null;
     try {
       // Safety
       user = UserGroupInformation.getCurrentUser().getShortUserName();
+      username = UserGroupInformation.getCurrentUser().getUserName();
     } catch (IOException ie) {
       LOG.warn("Unable to get the current user.", ie);
       RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
@@ -550,7 +554,32 @@ public class ClientRMService extends AbstractService implements
           "Exception in submitting application", applicationId);
       throw RPCUtil.getRemoteException(ie);
     }
-
+    
+    if (getConfig().getBoolean(CommonConfigurationKeysPublic
+        .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
+        .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+  
+      ByteBuffer kstore = submissionContext.getKeyStore();
+      ByteBuffer tstore = submissionContext.getTrustStore();
+      try {
+        if (kstore == null || tstore == null) {
+          throw new IOException("RPC TLS is enabled but either keystore or " +
+              "truststore is null");
+        }
+        if (kstore.capacity() == 0 || tstore.capacity() == 0) {
+          throw new IOException("RPC TLS is enabled but either keystore or " +
+              "truststore is empty");
+        }
+        CertificateLocalizer.getInstance().materializeCertificates(username,
+            kstore, tstore);
+      } catch (IOException ex) {
+        LOG.error(ex, ex);
+        RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
+            ex.getMessage(), "ClientRMService",
+            "Exception in submitting application", applicationId);
+        throw RPCUtil.getRemoteException(ex);
+      }
+    }
     // Check whether app has already been put into rmContext,
     // If it is, simply return the response
     if (rmContext.getRMApps().get(applicationId) != null) {

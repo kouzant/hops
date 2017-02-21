@@ -22,6 +22,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.RpcSSLEngineAbstr;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.ssl.CertificateLocalizer;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLContext;
@@ -154,7 +155,27 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                 }
             }*/
   
+          StackTraceElement[] stackTraceElements = Thread.currentThread()
+              .getStackTrace();
   
+          boolean isHopsworks = false;
+          for (StackTraceElement elem : stackTraceElements) {
+            if (elem.toString().contains("hopsworks")) {
+              isHopsworks = true;
+              break;
+            }
+          }
+          
+          if (isHopsworks) {
+            LOG.error("<kavouri> It's HopsWorks");
+          } else {
+            LOG.error("<Kavouri> It's NOT HopsWorks");
+          }
+          // Application running in a container is trying to create a
+          // SecureSocket. The crypto material should have already been
+          // localized.
+          // KeyStore -> kafka_k_certificate
+          // trustStore -> kafka_t_certificate
           File localized = new File("kafka_k_certificate");
           if (localized.exists()) {
             LOG.error("<Kavouri> I found kstore in localized directory");
@@ -176,18 +197,26 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                 LOG.error("It's a normal user");
                 if (!isCryptoMaterialSet(conf, username)
                     || forceConfigure) {
-                  // First check in the classpath
-                  File fd = new File(username + KEYSTORE_SUFFIX);
-                  if (fd.exists()) {
-                    LOG.error("Keystore exists in classpath");
-                    configureTlsClient("", username, conf);
+                  
+                  // Client from HopsWorks is trying to create a SecureSocket
+                  // The crypto material should be in the CERT_MATERIALIZED_DIR
+                  File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
+                      KEYSTORE_SUFFIX).toFile();
+                  if (fd.exists() && isHopsworks) {
+                    LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
+                      + " called from HopsWorks");
+                    configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);
                   } else {
-                    // Otherwise it should be in the materialized directory
-                    LOG.error(
-                        "Keystore exists in materialized dir");
-                    configureTlsClient(CERT_MATERIALIZED_DIR,
-                        username,
-                        conf);
+                    // Client from other services RM or NM is trying to
+                    // create a SecureSocket. Crypto material is already
+                    // materialized with the CertificateLocalizer
+                    CertificateLocalizer.CryptoMaterial material =
+                        CertificateLocalizer.getInstance()
+                            .getMaterialLocation(username);
+                    setTlsConfiguration(material.getKeyStoreLocation(),
+                        material.getTrustStoreLocation(), conf);
+                    LOG.error("Getting Crypto material from the " +
+                        "CertificateLocalizer");
                   }
                 } else {
                   LOG.error(
