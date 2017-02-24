@@ -32,7 +32,12 @@ import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 
 public class CertificateLocalizer {
   private final Logger LOG = LogManager.getLogger(CertificateLocalizer.class);
@@ -42,11 +47,16 @@ public class CertificateLocalizer {
   private final String TMP_DIR = "/tmp/certLoc";
   private File tmpDir;
   private final Map<String, CryptoMaterial> materialLocation;
+  private final ExecutorService execPool;
+  private final Map<String, Future<CryptoMaterial>> futures;
   
   private Path materializeDir;
   
   private CertificateLocalizer() {
     materialLocation = new ConcurrentHashMap<>();
+    execPool = Executors.newFixedThreadPool(5);
+    futures = new ConcurrentHashMap<>();
+    
     String uuid = UUID.randomUUID().toString();
     tmpDir = new File(TMP_DIR);
     if (!tmpDir.exists()) {
@@ -56,6 +66,7 @@ public class CertificateLocalizer {
     materializeDir = Paths.get(TMP_DIR, uuid);
     final File fd = materializeDir.toFile();
     fd.mkdir();
+    LOG.error("Initialized at dir: " + fd.getAbsolutePath());
     //tmpDir.setExecutable(false, false);
     ShutdownHookManager.get().addShutdownHook(new Runnable() {
       @Override
@@ -82,53 +93,107 @@ public class CertificateLocalizer {
   
   public void materializeCertificates(String username, ByteBuffer keyStore,
       ByteBuffer trustStore) throws IOException {
+    if (materialLocation.containsKey(username)) {
+      return;
+    }
+    
     //tmpDir.setExecutable(true, true);
-    File kstore = Paths.get(materializeDir.toString(), username +
-        "__kstore.jks").toFile();
-    File tstore = Paths.get(materializeDir.toString(), username +
-        "__tstore.jks").toFile();
-    
-    FileChannel kstoreChannel = new FileOutputStream(kstore, false)
-        .getChannel();
-    FileChannel tstoreChannel = new FileOutputStream(tstore, false)
-        .getChannel();
-    kstoreChannel.write(keyStore);
-    tstoreChannel.write(trustStore);
-    kstoreChannel.close();
-    tstoreChannel.close();
-    
-    CryptoMaterial material = new CryptoMaterial(kstore.getAbsolutePath(),
-        tstore.getAbsolutePath());
+    Future<CryptoMaterial> future = execPool.submit(new Materializer(username,
+        keyStore, trustStore));
+    futures.put(username, future);
     //tmpDir.setExecutable(false, false);
-    materialLocation.put(username, material);
+    // Put the CryptoMaterial lazily in the materialLocation map
+    
+    LOG.error("<kavouri> Materializing for user " + username + "kstore: " +
+        keyStore.capacity() + " tstore: " + trustStore.capacity());
   }
   
   public CryptoMaterial getMaterialLocation(String username) throws
-      FileNotFoundException {
-    CryptoMaterial material = materialLocation.get(username);
+      FileNotFoundException, InterruptedException, ExecutionException {
+    CryptoMaterial material = null;
+    
+    Future<CryptoMaterial> future = futures.remove(username);
+    
+    // There is an async operation for this username
+    if (future != null) {
+      material = future.get();
+      materialLocation.put(username, material);
+    } else {
+      // Materialization has already been finished
+      material = materialLocation.get(username);
+    }
+    
     if (material == null) {
       throw new FileNotFoundException("Materialized crypto material could not" +
           " be found");
     }
-    
+  
     return material;
   }
   
   public class CryptoMaterial {
     private final String keyStoreLocation;
+    private final int keyStoreSize;
     private final String trustStoreLocation;
+    private final int trustStoreSize;
     
-    public CryptoMaterial(String keyStoreLocation, String trustStoreLocation) {
+    public CryptoMaterial(String keyStoreLocation, int keyStoreSize,
+        String trustStoreLocation, int trustStoreSize) {
       this.keyStoreLocation = keyStoreLocation;
+      this.keyStoreSize = keyStoreSize;
       this.trustStoreLocation = trustStoreLocation;
+      this.trustStoreSize = trustStoreSize;
     }
     
     public String getKeyStoreLocation() {
       return keyStoreLocation;
     }
     
+    public int getKeyStoreSize() {
+      return keyStoreSize;
+    }
+    
     public String getTrustStoreLocation() {
       return trustStoreLocation;
+    }
+    
+    public int getTrustStoreSize() {
+      return trustStoreSize;
+    }
+  }
+  
+  private class Materializer implements Callable<CryptoMaterial> {
+    private final String username;
+    private final ByteBuffer kstore;
+    private final ByteBuffer tstore;
+    
+    public Materializer(String username, ByteBuffer kstore, ByteBuffer tstore) {
+      this.username = username;
+      this.kstore = kstore;
+      this.tstore = tstore;
+    }
+    
+    @Override
+    public CryptoMaterial call() throws IOException {
+      File kstoreFile = Paths.get(materializeDir.toString(), username +
+          "__kstore.jks").toFile();
+      File tstoreFile = Paths.get(materializeDir.toString(), username +
+          "__tstore.jks").toFile();
+      int kstoreSize = kstore.capacity();
+      int tstoreSize = tstore.capacity();
+      FileChannel kstoreChannel = new FileOutputStream(kstoreFile, false)
+          .getChannel();
+      FileChannel tstoreChannel = new FileOutputStream(tstoreFile, false)
+          .getChannel();
+      kstoreChannel.write(kstore);
+      tstoreChannel.write(tstore);
+      kstoreChannel.close();
+      tstoreChannel.close();
+      
+      CryptoMaterial material = new CryptoMaterial(kstoreFile.getAbsolutePath(),
+          kstoreSize, tstoreFile.getAbsolutePath(), tstoreSize);
+      
+      return material;
     }
   }
 }

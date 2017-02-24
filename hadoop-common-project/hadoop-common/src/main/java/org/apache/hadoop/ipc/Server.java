@@ -2833,7 +2833,7 @@ public abstract class Server {
    */
   private int channelRead(ReadableByteChannel channel, 
                           ByteBuffer buffer, ByteBuffer sslUnwrappedBuffer) throws IOException {
-    int count = -1;
+    int count = 0;
     if (isSSLEnabled && sslUnwrappedBuffer != null) {
 
       while (buffer.hasRemaining() && sslUnwrappedBuffer.hasRemaining()) {

@@ -103,6 +103,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     }
 
     // TODO(Antonis) Change logging severity
+    // TODO(Antonis) Remove Hopsworks testing
     @Override
     public void setConf(Configuration conf) {
         try {
@@ -166,11 +167,11 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
             }
           }
           
-          if (isHopsworks) {
+          /*if (isHopsworks) {
             LOG.error("<kavouri> It's HopsWorks");
           } else {
             LOG.error("<Kavouri> It's NOT HopsWorks");
-          }
+          }*/
           // Application running in a container is trying to create a
           // SecureSocket. The crypto material should have already been
           // localized.
@@ -202,7 +203,8 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                   // The crypto material should be in the CERT_MATERIALIZED_DIR
                   File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
                       KEYSTORE_SUFFIX).toFile();
-                  if (fd.exists() && isHopsworks) {
+                  //if (fd.exists() && isHopsworks) {
+                  if (fd.exists()) {
                     LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
                       + " called from HopsWorks");
                     configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);
@@ -252,9 +254,10 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
               }
             }
           }
-        } catch(IOException ex){
+        } catch(Exception ex){
           LOG.error(ex, ex);
         }
+        
         this.conf = conf;
         // *ClientCache* caches client instances based on their socket factory.
         // In order to distinguish two client with the same socket factory but

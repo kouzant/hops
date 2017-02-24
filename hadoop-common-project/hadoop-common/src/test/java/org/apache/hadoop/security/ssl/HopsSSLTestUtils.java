@@ -27,6 +27,8 @@ import org.junit.rules.ExpectedException;
 import org.junit.runners.Parameterized;
 
 import java.io.File;
+import java.nio.ByteBuffer;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.security.KeyPair;
@@ -68,7 +70,9 @@ public class HopsSSLTestUtils {
 
     @After
     public void destroy() throws Exception {
-        purgeFiles(filesToPurge);
+        if (null != filesToPurge) {
+            purgeFiles(filesToPurge);
+        }
     }
 
     private void purgeFiles(List<Path> files) throws Exception {
@@ -81,6 +85,18 @@ public class HopsSSLTestUtils {
         }
     }
 
+    protected ByteBuffer[] getCryptoMaterial() throws Exception {
+        ByteBuffer[] material = new ByteBuffer[2];
+        ByteBuffer kstore = ByteBuffer.wrap(Files.readAllBytes
+            (c_clientKeyStore));
+        ByteBuffer tstore = ByteBuffer.wrap(Files.readAllBytes
+            (c_clientTrustStore));
+        material[0] = kstore;
+        material[1] = tstore;
+        
+        return material;
+    }
+    
     protected void setCryptoConfig(Configuration conf) throws Exception {
         conf.set(CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
                 "org.apache.hadoop.net.HopsSSLSocketFactory");

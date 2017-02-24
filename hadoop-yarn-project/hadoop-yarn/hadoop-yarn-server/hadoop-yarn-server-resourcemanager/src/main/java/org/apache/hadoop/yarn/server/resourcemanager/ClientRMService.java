@@ -18,10 +18,14 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.security.AccessControlException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -570,6 +574,7 @@ public class ClientRMService extends AbstractService implements
           throw new IOException("RPC TLS is enabled but either keystore or " +
               "truststore is empty");
         }
+        
         CertificateLocalizer.getInstance().materializeCertificates(username,
             kstore, tstore);
       } catch (IOException ex) {
@@ -610,7 +615,7 @@ public class ClientRMService extends AbstractService implements
       rmAppManager.submitApplication(submissionContext,
           System.currentTimeMillis(), user);
 
-      LOG.info("Application with id " + applicationId.getId() + 
+      LOG.info("Application with id " + applicationId.getId() +
           " submitted by user " + user);
       RMAuditLogger.logSuccess(user, AuditConstants.SUBMIT_APP_REQUEST,
           "ClientRMService", applicationId);

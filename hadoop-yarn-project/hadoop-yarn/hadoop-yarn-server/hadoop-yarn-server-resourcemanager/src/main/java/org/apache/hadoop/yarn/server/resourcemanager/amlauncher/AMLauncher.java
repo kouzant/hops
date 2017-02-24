@@ -18,21 +18,27 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.amlauncher;
 
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.ssl.CertificateLocalizer;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.util.StringUtils;
@@ -114,7 +120,14 @@ public class AMLauncher implements Runnable {
     list.add(scRequest);
     StartContainersRequest allRequests =
         StartContainersRequest.newInstance(list);
-
+    
+    if (conf.getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      String user = rmContext.getRMApps().get(masterContainerID
+          .getApplicationAttemptId().getApplicationId()).getUser();
+      setupCryptoMaterial(allRequests, user);
+    }
+    
     StartContainersResponse response =
         containerMgrProxy.startContainers(allRequests);
     if (response.getFailedRequests() != null
@@ -125,6 +138,32 @@ public class AMLauncher implements Runnable {
     } else {
       LOG.info("Done launching container " + masterContainer + " for AM "
           + application.getAppAttemptId());
+    }
+  }
+  
+  private void setupCryptoMaterial(StartContainersRequest request,
+      String user) throws FileNotFoundException, YarnException {
+    try {
+      CertificateLocalizer.CryptoMaterial material = CertificateLocalizer
+          .getInstance().getMaterialLocation(user);
+      FileChannel kstoreChannel = new FileInputStream(material
+          .getKeyStoreLocation()).getChannel();
+      FileChannel tstoreChannel = new FileInputStream(material
+          .getTrustStoreLocation()).getChannel();
+      ByteBuffer kstore = ByteBuffer.allocate(material.getKeyStoreSize());
+      ByteBuffer tstore = ByteBuffer.allocate(material.getTrustStoreSize());
+      kstoreChannel.read(kstore);
+      tstoreChannel.read(tstore);
+      kstoreChannel.close();
+      tstoreChannel.close();
+      request.setKeyStore(kstore);
+      request.setTrustStore(tstore);
+    } catch (InterruptedException | ExecutionException e) {
+      throw new YarnException("Execution of CertificateMaterializer " +
+          "interrupted", e);
+    } catch (IOException e) {
+      throw new YarnException("RPC TLS is enabled but keystore or truststore " +
+          "could not be found", e);
     }
   }
   
@@ -153,23 +192,37 @@ public class AMLauncher implements Runnable {
         NetUtils.createSocketAddrForHost(node.getHost(), node.getPort());
 
     final YarnRPC rpc = getYarnRPC();
-
-    UserGroupInformation currentUser =
-        UserGroupInformation.createRemoteUser(containerId
-            .getApplicationAttemptId().toString());
-
+  
     String user =
         rmContext.getRMApps()
             .get(containerId.getApplicationAttemptId().getApplicationId())
             .getUser();
+    
+    // In Apache Hadoop they make the RPC as appattempt user
+    /*UserGroupInformation currentUser =
+        UserGroupInformation.createRemoteUser(containerId
+            .getApplicationAttemptId().toString());
+    
     org.apache.hadoop.yarn.api.records.Token token =
         rmContext.getNMTokenSecretManager().createNMToken(
             containerId.getApplicationAttemptId(), node, user);
     currentUser.addToken(ConverterUtils.convertFromYarn(token,
-        containerManagerConnectAddress));
+        containerManagerConnectAddress));*/
 
+    
+    // BEGIN OF Hops
+    // In Hops we don't, cause this affects RPC over TLS
+    UserGroupInformation realUser = UserGroupInformation.createRemoteUser
+        (user);
+    org.apache.hadoop.yarn.api.records.Token token =
+        rmContext.getNMTokenSecretManager().createNMToken(
+            containerId.getApplicationAttemptId(), node, user);
+    realUser.addToken(ConverterUtils.convertFromYarn(token,
+        containerManagerConnectAddress));
+    // END OF Hops
+    
     return NMProxy.createNMProxy(conf, ContainerManagementProtocol.class,
-        currentUser, rpc, containerManagerConnectAddress);
+        realUser, rpc, containerManagerConnectAddress);
   }
 
   @VisibleForTesting

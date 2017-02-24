@@ -50,6 +50,7 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.PolicyProvider;
+import org.apache.hadoop.security.ssl.CertificateLocalizer;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
@@ -704,7 +705,16 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     UserGroupInformation remoteUgi = getRemoteUgi();
     NMTokenIdentifier nmTokenIdentifier = selectNMTokenIdentifier(remoteUgi);
-    authorizeUser(remoteUgi,nmTokenIdentifier);
+    authorizeUser(remoteUgi, nmTokenIdentifier);
+    
+    if (getConfig().getBoolean(CommonConfigurationKeysPublic
+        .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
+        .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      ApplicationId appId = nmTokenIdentifier.getApplicationAttemptId()
+          .getApplicationId();
+      materializeCertificates(appId, requests);
+    }
+    
     List<ContainerId> succeededContainers = new ArrayList<ContainerId>();
     Map<ContainerId, SerializedException> failedContainers =
         new HashMap<ContainerId, SerializedException>();
@@ -733,6 +743,37 @@ public class ContainerManagerImpl extends CompositeService implements
       succeededContainers, failedContainers);
   }
 
+  private void materializeCertificates(ApplicationId appId,
+      StartContainersRequest requests) throws IOException {
+    
+    if (context.getApplications().containsKey(appId)) {
+      LOG.error("It's not AM container, certs already materialized");
+      return;
+    }
+    
+    String user = null;
+    // When launching AM container there is only one Container request
+    if (requests != null && !requests.getStartContainerRequests().isEmpty()) {
+      StartContainerRequest request = requests.getStartContainerRequests()
+          .get(0);
+      user = BuilderUtils.newContainerTokenIdentifier(request
+          .getContainerToken()).getApplicationSubmitter();
+    }
+    ByteBuffer keyStore = requests.getKeyStore();
+    ByteBuffer trustStore = requests.getTrustStore();
+    if (user == null) {
+      throw new IOException("Submitter user is null");
+    }
+    if (keyStore == null || trustStore == null || (keyStore.capacity() == 0)
+        || (trustStore.capacity() == 0)) {
+      throw new IOException("RPC TLS is enabled but keyStore or trustStore " +
+          "supplied is either null or empty");
+    }
+    
+    CertificateLocalizer.getInstance().materializeCertificates(user,
+        keyStore, trustStore);
+  }
+  
   private ContainerManagerApplicationProto buildAppProto(ApplicationId appId,
       String user, Credentials credentials,
       Map<ApplicationAccessType, String> appAcls,
