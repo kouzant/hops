@@ -203,8 +203,8 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                   // The crypto material should be in the CERT_MATERIALIZED_DIR
                   File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
                       KEYSTORE_SUFFIX).toFile();
-                  if (fd.exists() && isHopsworks) {
-                  //if (fd.exists()) {
+                  //if (fd.exists() && isHopsworks) {
+                  if (fd.exists()) {
                     LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
                       + " called from HopsWorks");
                     configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);

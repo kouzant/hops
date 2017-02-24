@@ -18,13 +18,18 @@
 
 package org.apache.hadoop.yarn.client.api.impl;
 
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.apache.commons.logging.Log;
@@ -32,6 +37,9 @@ import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.ssl.CertificateLocalizer;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesResponse;
@@ -196,6 +204,15 @@ public class NMClientImpl extends NMClient {
         list.add(scRequest);
         StartContainersRequest allRequests =
             StartContainersRequest.newInstance(list);
+        
+        if (getConfig().getBoolean(CommonConfigurationKeysPublic
+            .IPC_SERVER_SSL_ENABLED,
+            CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+          UserGroupInformation user = UserGroupInformation.getCurrentUser();
+          LOG.error("Setting crypto material as user: " + user.getUserName());
+          setupCryptoMaterial(allRequests);
+        }
+        
         StartContainersResponse response =
             proxy
                 .getContainerManagementProtocol().startContainers(allRequests);
@@ -224,7 +241,19 @@ public class NMClientImpl extends NMClient {
       return allServiceResponse;
     }
   }
-
+  
+  private void setupCryptoMaterial(StartContainersRequest request)
+      throws IOException {
+    Path kStorePath = Paths.get("kafka_k_certificate");
+    Path tStorePath = Paths.get("kafka_t_certificate");
+    
+    ByteBuffer kStore = ByteBuffer.wrap(Files.readAllBytes(kStorePath));
+    ByteBuffer tStore = ByteBuffer.wrap(Files.readAllBytes(tStorePath));
+    
+    request.setKeyStore(kStore);
+    request.setTrustStore(tStore);
+  }
+  
   @Override
   public void stopContainer(ContainerId containerId, NodeId nodeId)
       throws YarnException, IOException {

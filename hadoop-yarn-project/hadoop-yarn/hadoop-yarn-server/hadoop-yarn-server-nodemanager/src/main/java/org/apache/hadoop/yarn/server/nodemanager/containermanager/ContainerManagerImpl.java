@@ -747,7 +747,8 @@ public class ContainerManagerImpl extends CompositeService implements
       StartContainersRequest requests) throws IOException {
     
     if (context.getApplications().containsKey(appId)) {
-      LOG.error("It's not AM container, certs already materialized");
+      LOG.error("Application reference exists, certificates should have " +
+          "already been materialized");
       return;
     }
     
