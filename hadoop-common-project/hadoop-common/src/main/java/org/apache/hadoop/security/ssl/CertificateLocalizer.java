@@ -136,13 +136,18 @@ public class CertificateLocalizer {
     private final int keyStoreSize;
     private final String trustStoreLocation;
     private final int trustStoreSize;
+    private final ByteBuffer keyStoreMem;
+    private final ByteBuffer trustStoreMem;
     
-    public CryptoMaterial(String keyStoreLocation, int keyStoreSize,
-        String trustStoreLocation, int trustStoreSize) {
+    public CryptoMaterial(String keyStoreLocation, String trustStoreLocation,
+        ByteBuffer kStore, ByteBuffer tstore) {
       this.keyStoreLocation = keyStoreLocation;
-      this.keyStoreSize = keyStoreSize;
+      this.keyStoreSize = kStore.capacity();
       this.trustStoreLocation = trustStoreLocation;
-      this.trustStoreSize = trustStoreSize;
+      this.trustStoreSize = tstore.capacity();
+      
+      this.keyStoreMem = kStore.asReadOnlyBuffer();
+      this.trustStoreMem = tstore.asReadOnlyBuffer();
     }
     
     public String getKeyStoreLocation() {
@@ -159,6 +164,14 @@ public class CertificateLocalizer {
     
     public int getTrustStoreSize() {
       return trustStoreSize;
+    }
+    
+    public ByteBuffer getKeyStoreMem() {
+      return keyStoreMem;
+    }
+    
+    public ByteBuffer getTrustStoreMem() {
+      return trustStoreMem;
     }
   }
   
@@ -179,8 +192,6 @@ public class CertificateLocalizer {
           "__kstore.jks").toFile();
       File tstoreFile = Paths.get(materializeDir.toString(), username +
           "__tstore.jks").toFile();
-      int kstoreSize = kstore.capacity();
-      int tstoreSize = tstore.capacity();
       FileChannel kstoreChannel = new FileOutputStream(kstoreFile, false)
           .getChannel();
       FileChannel tstoreChannel = new FileOutputStream(tstoreFile, false)
@@ -191,7 +202,7 @@ public class CertificateLocalizer {
       tstoreChannel.close();
       
       CryptoMaterial material = new CryptoMaterial(kstoreFile.getAbsolutePath(),
-          kstoreSize, tstoreFile.getAbsolutePath(), tstoreSize);
+          tstoreFile.getAbsolutePath(), kstore, tstore);
       
       return material;
     }

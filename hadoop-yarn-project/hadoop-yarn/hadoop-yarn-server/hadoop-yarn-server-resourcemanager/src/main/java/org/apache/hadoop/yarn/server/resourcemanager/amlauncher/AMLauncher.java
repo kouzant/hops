@@ -146,18 +146,9 @@ public class AMLauncher implements Runnable {
     try {
       CertificateLocalizer.CryptoMaterial material = CertificateLocalizer
           .getInstance().getMaterialLocation(user);
-      FileChannel kstoreChannel = new FileInputStream(material
-          .getKeyStoreLocation()).getChannel();
-      FileChannel tstoreChannel = new FileInputStream(material
-          .getTrustStoreLocation()).getChannel();
-      ByteBuffer kstore = ByteBuffer.allocate(material.getKeyStoreSize());
-      ByteBuffer tstore = ByteBuffer.allocate(material.getTrustStoreSize());
-      kstoreChannel.read(kstore);
-      tstoreChannel.read(tstore);
-      kstoreChannel.close();
-      tstoreChannel.close();
-      request.setKeyStore(kstore);
-      request.setTrustStore(tstore);
+      
+      request.setKeyStore(material.getKeyStoreMem());
+      request.setTrustStore(material.getTrustStoreMem());
     } catch (InterruptedException | ExecutionException e) {
       throw new YarnException("Execution of CertificateMaterializer " +
           "interrupted", e);
