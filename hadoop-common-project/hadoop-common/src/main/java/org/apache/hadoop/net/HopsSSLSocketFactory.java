@@ -160,7 +160,12 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
               .getStackTrace();
   
           boolean isHopsworks = false;
+          boolean isZeppelin = false;
           for (StackTraceElement elem : stackTraceElements) {
+            if (elem.toString().contains("zeppelin")) {
+              isZeppelin = true;
+              break;
+            }
             if (elem.toString().contains("hopsworks")) {
               isHopsworks = true;
               break;
@@ -196,7 +201,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                 // The crypto material should be in the CERT_MATERIALIZED_DIR
                 File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
                     KEYSTORE_SUFFIX).toFile();
-                if (fd.exists() && isHopsworks) {
+                if (fd.exists() && (isHopsworks || isZeppelin)) {
                   //if (fd.exists()) {
                   LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
                       + " called from HopsWorks");

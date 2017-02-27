@@ -31,7 +31,11 @@ import java.security.cert.X509Certificate;
 
 public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
     private final Log LOG = LogFactory.getLog(ServerRpcSSLEngineImpl.class);
-
+    private final int KB = 1024;
+    private final int MB = 1024 * KB;
+    
+    private final int MAX_BUFFER_SIZE = 5 * MB;
+    
     public ServerRpcSSLEngineImpl(SocketChannel socketChannel, SSLEngine sslEngine) {
         super(socketChannel, sslEngine);
     }
@@ -43,6 +47,8 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
         if (serverAppBuffer.capacity() < buffer.capacity()) {
             LOG.error("ServerAppBuffer capacity: " + serverAppBuffer.capacity()
                 + " Buffer size: " + buffer.capacity());
+            serverAppBuffer = ByteBuffer.allocate(Math.min(buffer.capacity(),
+                MAX_BUFFER_SIZE));
         }
         serverAppBuffer.put(buffer);
         serverAppBuffer.flip();
