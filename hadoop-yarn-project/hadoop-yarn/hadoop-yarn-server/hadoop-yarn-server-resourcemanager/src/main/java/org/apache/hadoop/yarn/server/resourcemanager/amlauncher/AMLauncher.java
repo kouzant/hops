@@ -167,13 +167,24 @@ public class AMLauncher implements Runnable {
         StopContainersRequest.newInstance(containerIds);
     StopContainersResponse response =
         containerMgrProxy.stopContainers(stopRequest);
+    
+    // The application is cleaned-up when completes successfully or killed
+    // If the application failed more times than allowed, the cryptograhic
+    // material is cleaned by RMAppImpl#AttemptFailedTransition
+    if (conf.getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      String user = rmContext.getRMApps().get(containerId
+          .getApplicationAttemptId().getApplicationId()).getUser();
+      CertificateLocalizer.getInstance().removeMaterial(user);
+    }
+    
     if (response.getFailedRequests() != null
         && response.getFailedRequests().containsKey(containerId)) {
       Throwable t = response.getFailedRequests().get(containerId).deSerialize();
       parseAndThrowException(t);
     }
   }
-
+  
   // Protected. For tests.
   protected ContainerManagementProtocol getContainerMgrProxy(
       final ContainerId containerId) {

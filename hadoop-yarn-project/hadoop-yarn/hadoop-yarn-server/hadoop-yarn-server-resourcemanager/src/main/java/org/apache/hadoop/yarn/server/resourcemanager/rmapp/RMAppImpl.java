@@ -41,6 +41,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.ssl.CertificateLocalizer;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -1231,6 +1232,25 @@ public class RMAppImpl implements RMApp, Recoverable {
         app.rememberTargetTransitionsAndStoreState(event,
           new AttemptFailedFinalStateSavedTransition(), RMAppState.FAILED,
           RMAppState.FAILED);
+        
+        // Application has failed and no more attempts are allowed
+        // Cleanup the cryptographic material
+        // In case of successful completion, the cryptographic material will
+        // be cleaned by AMLauncher#cleanup
+        ByteBuffer kstore = app.getApplicationSubmissionContext().getKeyStore();
+        ByteBuffer tstore = app.getApplicationSubmissionContext()
+            .getTrustStore();
+        
+        // Basically if TLS is enabled for RPC
+        if (kstore != null && tstore != null
+            && kstore.capacity() > 0 && tstore.capacity() > 0) {
+          try {
+            CertificateLocalizer.getInstance().removeMaterial(app.getUser());
+          } catch (IOException ex) {
+            LOG.error("Error while deleting cryptographic material for user " +
+                app.getUser(), ex);
+          }
+        }
         return RMAppState.FINAL_SAVING;
       }
     }

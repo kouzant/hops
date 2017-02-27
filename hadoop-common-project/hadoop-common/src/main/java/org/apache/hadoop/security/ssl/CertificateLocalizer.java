@@ -60,13 +60,15 @@ public class CertificateLocalizer {
     
     String uuid = UUID.randomUUID().toString();
     tmpDir = new File(TMP_DIR);
-    if (tmpDir.exists()) {
+    
+    // This block is problematic when RM and NM are in the same machine
+    /*if (tmpDir.exists()) {
       // Owner should be able to list the directory's content in order to
       // delete them recursively
       tmpDir.setReadable(true);
       FileUtils.forceDelete(tmpDir);
     }
-    tmpDir.mkdir();
+    tmpDir.mkdir();*/
   
     // tmpDir permissions: 300
     // Executable only to the owner
@@ -83,7 +85,6 @@ public class CertificateLocalizer {
     // Random materialization directory should have the default umask
     fd.mkdir();
     LOG.error("Initialized at dir: " + fd.getAbsolutePath());
-    //tmpDir.setExecutable(false, false);
     ShutdownHookManager.get().addShutdownHook(new Runnable() {
       @Override
       public void run() {
@@ -120,6 +121,15 @@ public class CertificateLocalizer {
     
     LOG.error("<kavouri> Materializing for user " + username + "kstore: " +
         keyStore.capacity() + " tstore: " + trustStore.capacity());
+  }
+  
+  public void removeMaterial(String user) {
+    CryptoMaterial material = materialLocation.get(user);
+    if (null == material) {
+      LOG.warn("Certificates do not exists for user " + user);
+      return;
+    }
+    execPool.execute(new Remover(user, material));
   }
   
   public CryptoMaterial getMaterialLocation(String username) throws
@@ -186,6 +196,24 @@ public class CertificateLocalizer {
     
     public ByteBuffer getTrustStoreMem() {
       return trustStoreMem;
+    }
+  }
+  
+  private class Remover implements Runnable {
+    private final String user;
+    private CryptoMaterial material;
+    
+    public Remover(String user, CryptoMaterial material) {
+      this.user = user;
+      this.material = material;
+    }
+    
+    @Override
+    public void run() {
+      FileUtils.deleteQuietly(new File(material.getKeyStoreLocation()));
+      FileUtils.deleteQuietly(new File(material.getTrustStoreLocation()));
+      materialLocation.remove(user);
+      material = null;
     }
   }
   
