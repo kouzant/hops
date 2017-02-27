@@ -18,6 +18,7 @@
 package org.apache.hadoop.security.ssl;
 
 import org.apache.commons.io.FileUtils;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.util.ShutdownHookManager;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -52,19 +53,34 @@ public class CertificateLocalizer {
   
   private Path materializeDir;
   
-  private CertificateLocalizer() {
+  private CertificateLocalizer() throws IOException {
     materialLocation = new ConcurrentHashMap<>();
     execPool = Executors.newFixedThreadPool(5);
     futures = new ConcurrentHashMap<>();
     
     String uuid = UUID.randomUUID().toString();
     tmpDir = new File(TMP_DIR);
-    if (!tmpDir.exists()) {
-      tmpDir.mkdir();
+    if (tmpDir.exists()) {
+      // Owner should be able to list the directory's content in order to
+      // delete them recursively
+      tmpDir.setReadable(true);
+      FileUtils.forceDelete(tmpDir);
     }
+    tmpDir.mkdir();
+  
+    // tmpDir permissions: 300
+    // Executable only to the owner
+    tmpDir.setExecutable(false, false);
+    tmpDir.setExecutable(true);
+    // Writable only to the owner
+    tmpDir.setWritable(false, false);
+    tmpDir.setWritable(true);
+    // Readable by none
+    tmpDir.setReadable(false, false);
     
     materializeDir = Paths.get(TMP_DIR, uuid);
     final File fd = materializeDir.toFile();
+    // Random materialization directory should have the default umask
     fd.mkdir();
     LOG.error("Initialized at dir: " + fd.getAbsolutePath());
     //tmpDir.setExecutable(false, false);
@@ -76,7 +92,7 @@ public class CertificateLocalizer {
     }, 1);
   }
   
-  public static CertificateLocalizer getInstance() {
+  public static CertificateLocalizer getInstance() throws IOException {
     if (instance == null) {
       synchronized (CertificateLocalizer.class) {
         if (instance == null) {
@@ -97,11 +113,9 @@ public class CertificateLocalizer {
       return;
     }
     
-    //tmpDir.setExecutable(true, true);
     Future<CryptoMaterial> future = execPool.submit(new Materializer(username,
         keyStore, trustStore));
     futures.put(username, future);
-    //tmpDir.setExecutable(false, false);
     // Put the CryptoMaterial lazily in the materialLocation map
     
     LOG.error("<kavouri> Materializing for user " + username + "kstore: " +

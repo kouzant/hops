@@ -208,9 +208,8 @@ public class NMClientImpl extends NMClient {
         if (getConfig().getBoolean(CommonConfigurationKeysPublic
             .IPC_SERVER_SSL_ENABLED,
             CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-          UserGroupInformation user = UserGroupInformation.getCurrentUser();
-          LOG.error("Setting crypto material as user: " + user.getUserName());
-          setupCryptoMaterial(allRequests);
+          String user = UserGroupInformation.getCurrentUser().getUserName();
+          setupCryptoMaterial(allRequests, user);
         }
         
         StartContainersResponse response =
@@ -242,10 +241,19 @@ public class NMClientImpl extends NMClient {
     }
   }
   
-  private void setupCryptoMaterial(StartContainersRequest request)
+  // TODO(Antonis): Remove hard-coded path
+  private void setupCryptoMaterial(StartContainersRequest request, String user)
       throws IOException {
     Path kStorePath = Paths.get("kafka_k_certificate");
     Path tStorePath = Paths.get("kafka_t_certificate");
+    
+    // Zeppelin does not add the crypto material as local resources.
+    // This fix assumes that the certificates exist in the machine that
+    // Zeppelin is running.
+    if (!kStorePath.toFile().exists() || !tStorePath.toFile().exists()) {
+      kStorePath = Paths.get("/tmp", user + "__kstore.jks");
+      tStorePath = Paths.get("/tmp", user + "__tstore.jks");
+    }
     
     ByteBuffer kStore = ByteBuffer.wrap(Files.readAllBytes(kStorePath));
     ByteBuffer tStore = ByteBuffer.wrap(Files.readAllBytes(tStorePath));
