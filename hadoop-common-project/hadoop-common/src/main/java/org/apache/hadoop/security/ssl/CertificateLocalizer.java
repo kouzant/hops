@@ -72,6 +72,9 @@ public class CertificateLocalizer {
   
     // tmpDir permissions: 300
     // Executable only to the owner
+    if (!tmpDir.exists()) {
+      tmpDir.mkdir();
+    }
     tmpDir.setExecutable(false, false);
     tmpDir.setExecutable(true);
     // Writable only to the owner

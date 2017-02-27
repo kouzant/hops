@@ -185,72 +185,64 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
           } else {
             LOG.error("<Kavouri> I DID NOT find kstore in localized " +
                 "directory");
-            
-            // TODO A temporary shortcircuit until I merge Gautier's PR
-            if (username.contains("appattempt")) {
-              LOG.error("<MALAKIA>");
-              configureTlsClient("/tmp/", localHostname, conf);
-            } else {
+            if (username.matches(userPattern) ||
+                !username.equals("glassfish")) {
+              // It's a normal user
+              LOG.error("It's a normal user");
+              if (!isCryptoMaterialSet(conf, username)
+                  || forceConfigure) {
       
-              if (username.matches(userPattern) ||
-                  !username.equals("glassfish")) {
-                // It's a normal user
-                LOG.error("It's a normal user");
-                if (!isCryptoMaterialSet(conf, username)
-                    || forceConfigure) {
-                  
-                  // Client from HopsWorks is trying to create a SecureSocket
-                  // The crypto material should be in the CERT_MATERIALIZED_DIR
-                  File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
-                      KEYSTORE_SUFFIX).toFile();
-                  if (fd.exists() && isHopsworks) {
+                // Client from HopsWorks is trying to create a SecureSocket
+                // The crypto material should be in the CERT_MATERIALIZED_DIR
+                File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
+                    KEYSTORE_SUFFIX).toFile();
+                if (fd.exists() && isHopsworks) {
                   //if (fd.exists()) {
-                    LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
+                  LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
                       + " called from HopsWorks");
-                    configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);
-                  } else {
-                    // Client from other services RM or NM is trying to
-                    // create a SecureSocket. Crypto material is already
-                    // materialized with the CertificateLocalizer
-                    CertificateLocalizer.CryptoMaterial material =
-                        CertificateLocalizer.getInstance()
-                            .getMaterialLocation(username);
-                    setTlsConfiguration(material.getKeyStoreLocation(),
-                        material.getTrustStoreLocation(), conf);
-                    LOG.error("Getting Crypto material from the " +
-                        "CertificateLocalizer");
-                  }
+                  configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);
                 } else {
-                  LOG.error(
-                      "Crypto material for normal user already " +
-                          "set");
+                  // Client from other services RM or NM is trying to
+                  // create a SecureSocket. Crypto material is already
+                  // materialized with the CertificateLocalizer
+                  CertificateLocalizer.CryptoMaterial material =
+                      CertificateLocalizer.getInstance()
+                          .getMaterialLocation(username);
+                  setTlsConfiguration(material.getKeyStoreLocation(),
+                      material.getTrustStoreLocation(), conf);
+                  LOG.error("Getting Crypto material from the " +
+                      "CertificateLocalizer");
                 }
               } else {
-                // It's a superuser
-                LOG.error("It's superuser");
-                if ((!isCryptoMaterialSet(conf, username)
-                    && !isHostnameInCryptoMaterial(conf, localHostname))
-                    || forceConfigure) {
-                  // First check if the hostname keystore exists
-                  File fd = new File(
-                      Paths.get(CERT_MATERIALIZED_DIR, localHostname +
-                          KEYSTORE_SUFFIX).toString());
-                  if (fd.exists()) {
-                    LOG.error("Hostname keystore exists!");
-                    configureTlsClient(CERT_MATERIALIZED_DIR,
-                        localHostname, conf);
-                  } else {
-                    LOG.error(
-                        "Hostname keystore does not exist, falling " +
-                            "back to superuser");
-                    configureTlsClient(CERT_MATERIALIZED_DIR,
-                        username,
-                        conf);
-                  }
+                LOG.error(
+                    "Crypto material for normal user already " +
+                        "set");
+              }
+            } else {
+              // It's a superuser
+              LOG.error("It's superuser");
+              if ((!isCryptoMaterialSet(conf, username)
+                  && !isHostnameInCryptoMaterial(conf, localHostname))
+                  || forceConfigure) {
+                // First check if the hostname keystore exists
+                File fd = new File(
+                    Paths.get(CERT_MATERIALIZED_DIR, localHostname +
+                        KEYSTORE_SUFFIX).toString());
+                if (fd.exists()) {
+                  LOG.error("Hostname keystore exists!");
+                  configureTlsClient(CERT_MATERIALIZED_DIR,
+                      localHostname, conf);
                 } else {
                   LOG.error(
-                      "Crypto material for superuser already set");
+                      "Hostname keystore does not exist, falling " +
+                          "back to superuser");
+                  configureTlsClient(CERT_MATERIALIZED_DIR,
+                      username,
+                      conf);
                 }
+              } else {
+                LOG.error(
+                    "Crypto material for superuser already set");
               }
             }
           }

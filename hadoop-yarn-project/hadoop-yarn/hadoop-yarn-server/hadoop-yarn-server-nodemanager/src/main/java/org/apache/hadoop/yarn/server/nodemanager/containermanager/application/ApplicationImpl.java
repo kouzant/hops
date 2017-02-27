@@ -29,6 +29,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.security.Credentials;
+import org.apache.hadoop.security.ssl.CertificateLocalizer;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
@@ -37,6 +38,7 @@ import org.apache.hadoop.yarn.api.records.LogAggregationContext;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.logaggregation.ContainerLogsRetentionPolicy;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
+import org.apache.hadoop.yarn.server.nodemanager.NodeManager;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.AuxServicesEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.AuxServicesEventType;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
@@ -435,6 +437,18 @@ public class ApplicationImpl implements Application {
       ApplicationId appId = event.getApplicationID();
       app.context.getApplications().remove(appId);
       app.aclsManager.removeApplication(appId);
+      
+      boolean isSSLEnabled = ((NodeManager.NMContext) app.context)
+          .isSSLEnabled();
+      
+      if (isSSLEnabled) {
+        try {
+          CertificateLocalizer.getInstance().removeMaterial(app.getUser());
+        } catch (IOException ex) {
+          LOG.error("Error while deleting cryptographic material for user " +
+              app.getUser());
+        }
+      }
       try {
         app.context.getNMStateStore().removeApplication(appId);
       } catch (IOException e) {

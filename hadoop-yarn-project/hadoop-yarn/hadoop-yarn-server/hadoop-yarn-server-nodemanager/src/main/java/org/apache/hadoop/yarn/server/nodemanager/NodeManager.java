@@ -30,6 +30,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.fs.permission.FsPermission;
@@ -128,8 +129,11 @@ public class NodeManager extends CompositeService
       NMContainerTokenSecretManager containerTokenSecretManager,
       NMTokenSecretManagerInNM nmTokenSecretManager,
       NMStateStoreService stateStore) {
+    boolean isSSLEnabled = getConfig().getBoolean
+        (CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
+            CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT);
     return new NMContext(containerTokenSecretManager, nmTokenSecretManager,
-        dirsHandler, aclsManager, stateStore);
+        dirsHandler, aclsManager, stateStore, isSSLEnabled);
   }
 
   protected void doSecureLogin() throws IOException {
@@ -355,12 +359,21 @@ public class NodeManager extends CompositeService
         .getRecordFactory(null).newRecordInstance(NodeHealthStatus.class);
     private final NMStateStoreService stateStore;
     private boolean isDecommissioned = false;
+    private final boolean isSSLEnabled;
     private NodeStatusUpdater nodeStatusUpdater;
-
+  
     public NMContext(NMContainerTokenSecretManager containerTokenSecretManager,
         NMTokenSecretManagerInNM nmTokenSecretManager,
         LocalDirsHandlerService dirsHandler, ApplicationACLsManager aclsManager,
         NMStateStoreService stateStore) {
+      this(containerTokenSecretManager, nmTokenSecretManager, dirsHandler,
+          aclsManager, stateStore, false);
+    }
+    
+    public NMContext(NMContainerTokenSecretManager containerTokenSecretManager,
+        NMTokenSecretManagerInNM nmTokenSecretManager,
+        LocalDirsHandlerService dirsHandler, ApplicationACLsManager aclsManager,
+        NMStateStoreService stateStore, boolean isSSLEnabled) {
       this.containerTokenSecretManager = containerTokenSecretManager;
       this.nmTokenSecretManager = nmTokenSecretManager;
       this.dirsHandler = dirsHandler;
@@ -369,6 +382,7 @@ public class NodeManager extends CompositeService
       this.nodeHealthStatus.setHealthReport("Healthy");
       this.nodeHealthStatus.setLastHealthReportTime(System.currentTimeMillis());
       this.stateStore = stateStore;
+      this.isSSLEnabled = isSSLEnabled;
     }
 
     /**
@@ -467,6 +481,10 @@ public class NodeManager extends CompositeService
 
     public void setNodeStatusUpdater(NodeStatusUpdater nodeStatusUpdater) {
       this.nodeStatusUpdater = nodeStatusUpdater;
+    }
+    
+    public boolean isSSLEnabled() {
+      return isSSLEnabled;
     }
   }
 
