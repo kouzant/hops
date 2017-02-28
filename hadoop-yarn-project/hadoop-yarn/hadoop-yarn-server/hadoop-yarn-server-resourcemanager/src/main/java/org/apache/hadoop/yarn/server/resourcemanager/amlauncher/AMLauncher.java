@@ -18,13 +18,12 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.amlauncher;
 
-import java.io.FileInputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -61,6 +60,8 @@ import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.ipc.YarnRPC;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEventType;
@@ -83,6 +84,8 @@ public class AMLauncher implements Runnable {
   private final AMLauncherEventType eventType;
   private final RMContext rmContext;
   private final Container masterContainer;
+  private final EnumSet<RMAppState> appFinalStates = EnumSet.of(
+      RMAppState.FINISHED, RMAppState.KILLED);
   
   @SuppressWarnings("rawtypes")
   private final EventHandler handler;
@@ -173,9 +176,15 @@ public class AMLauncher implements Runnable {
     // material is cleaned by RMAppImpl#AttemptFailedTransition
     if (conf.getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      String user = rmContext.getRMApps().get(containerId
-          .getApplicationAttemptId().getApplicationId()).getUser();
-      CertificateLocalizer.getInstance().removeMaterial(user);
+      // Remove the cryptographic material only if the application is
+      // finished or killed
+      RMApp app = rmContext.getRMApps().get(application.getAppAttemptId()
+          .getApplicationId());
+      if (appFinalStates.contains(app.getState())) {
+        String user = rmContext.getRMApps().get(containerId
+            .getApplicationAttemptId().getApplicationId()).getUser();
+        CertificateLocalizer.getInstance().removeMaterial(user);
+      }
     }
     
     if (response.getFailedRequests() != null
