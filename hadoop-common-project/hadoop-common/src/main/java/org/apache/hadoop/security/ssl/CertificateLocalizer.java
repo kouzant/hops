@@ -144,7 +144,6 @@ public class CertificateLocalizer {
     // There is an async operation for this username
     if (future != null) {
       material = future.get();
-      materialLocation.put(username, material);
     } else {
       // Materialization has already been finished
       material = materialLocation.get(username);
@@ -248,6 +247,7 @@ public class CertificateLocalizer {
       
       CryptoMaterial material = new CryptoMaterial(kstoreFile.getAbsolutePath(),
           tstoreFile.getAbsolutePath(), kstore, tstore);
+      materialLocation.put(username, material);
       
       return material;
     }
