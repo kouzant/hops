@@ -244,8 +244,8 @@ public class NMClientImpl extends NMClient {
   // TODO(Antonis): Remove hard-coded path
   private void setupCryptoMaterial(StartContainersRequest request, String user)
       throws IOException {
-    Path kStorePath = Paths.get("kafka_k_certificate");
-    Path tStorePath = Paths.get("kafka_t_certificate");
+    Path kStorePath = Paths.get("k_certificate");
+    Path tStorePath = Paths.get("t_certificate");
     
     // Zeppelin does not add the crypto material as local resources.
     // This fix assumes that the certificates exist in the machine that

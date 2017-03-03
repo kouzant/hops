@@ -29,6 +29,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import java.io.File;
 import java.io.IOException;
+import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
@@ -155,6 +156,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                     }
                 }
             }*/
+            
+          String pid = ManagementFactory.getRuntimeMXBean().getName();
+          LOG.error("Parent pid is: " + pid);
   
           StackTraceElement[] stackTraceElements = Thread.currentThread()
               .getStackTrace();
@@ -177,16 +181,22 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
           } else {
             LOG.error("<Kavouri> It's NOT HopsWorks");
           }
+          
+          if (isZeppelin) {
+            LOG.error("<kavouri> It's Zeppelin");
+          } else {
+            LOG.error("<Kavouri> It's NOT Zeppelin");
+          }
           // Application running in a container is trying to create a
           // SecureSocket. The crypto material should have already been
           // localized.
-          // KeyStore -> kafka_k_certificate
-          // trustStore -> kafka_t_certificate
-          File localized = new File("kafka_k_certificate");
+          // KeyStore -> k_certificate
+          // trustStore -> t_certificate
+          File localized = new File("k_certificate");
           if (localized.exists()) {
             LOG.error("<Kavouri> I found kstore in localized directory");
-            setTlsConfiguration("kafka_k_certificate",
-                "kafka_t_certificate", conf);
+            setTlsConfiguration("k_certificate",
+                "t_certificate", conf);
           } else {
             LOG.error("<Kavouri> I DID NOT find kstore in localized " +
                 "directory");
@@ -201,8 +211,8 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                 // The crypto material should be in the CERT_MATERIALIZED_DIR
                 File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
                     KEYSTORE_SUFFIX).toFile();
-                if (fd.exists() && (isHopsworks || isZeppelin)) {
-                  //if (fd.exists()) {
+                //if (fd.exists() && (isHopsworks || isZeppelin)) {
+                if (fd.exists()) {
                   LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
                       + " called from HopsWorks");
                   configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);
