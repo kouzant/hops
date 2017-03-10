@@ -1813,8 +1813,8 @@ public abstract class Server {
       }
       try {
         String user = protocolUser.getUserName();
-        LOG.error("<Kavouri> Authenticating user: " + user + " for protocol"
-            + protocolName);
+        LOG.error("<Kavouri> Authenticating user: " + user + " for protocol "
+            + protocolName + " from " + hostAddress + ":" + remotePort);
         
         if (LOG.isDebugEnabled()) {
           LOG.debug("Authentication via certificate CN");
@@ -1846,6 +1846,7 @@ public abstract class Server {
           return;
         }
 
+        
         // If the CN is not equal to Hops superuser but it is the
         // same as the RPC username, let it go through as well
         if (protocolUser.getUserName() != null
