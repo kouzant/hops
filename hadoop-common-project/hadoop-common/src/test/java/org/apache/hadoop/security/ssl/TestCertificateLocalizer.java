@@ -49,13 +49,13 @@ public class TestCertificateLocalizer {
     byte[] randomT = "Some_random_truststore_stuff".getBytes();
     ByteBuffer kstore = ByteBuffer.wrap(randomK);
     ByteBuffer tstore = ByteBuffer.wrap(randomT);
-    loc.materializeCertificates("antonis", kstore, tstore);
+    loc.materializeCertificates("antonis", "appId", kstore, tstore);
     CertificateLocalizer.CryptoMaterial material = loc.getMaterialLocation
-        ("antonis");
+        ("antonis", "appId");
     
-    assertEquals(materDir.toAbsolutePath() + "/antonis__kstore.jks",
+    assertEquals(materDir.toAbsolutePath() + "appId/antonis__kstore.jks",
         material.getKeyStoreLocation());
-    assertEquals(materDir.toAbsolutePath() + "/antonis__tstore.jks",
+    assertEquals(materDir.toAbsolutePath() + "appId/antonis__tstore.jks",
         material.getTrustStoreLocation());
     
     File tmp = new File("/tmp/certLoc");

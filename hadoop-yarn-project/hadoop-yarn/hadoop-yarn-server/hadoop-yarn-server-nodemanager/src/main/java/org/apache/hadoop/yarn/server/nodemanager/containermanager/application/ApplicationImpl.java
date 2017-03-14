@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -443,8 +444,9 @@ public class ApplicationImpl implements Application {
       
       if (isSSLEnabled) {
         try {
-          CertificateLocalizer.getInstance().removeMaterial(app.getUser());
-        } catch (IOException ex) {
+          CertificateLocalizer.getInstance().removeMaterial(app.getUser(),
+              appId.toString());
+        } catch (InterruptedException | ExecutionException | IOException ex) {
           LOG.error("Error while deleting cryptographic material for user " +
               app.getUser());
         }

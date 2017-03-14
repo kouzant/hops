@@ -128,7 +128,8 @@ public class AMLauncher implements Runnable {
         CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       String user = rmContext.getRMApps().get(masterContainerID
           .getApplicationAttemptId().getApplicationId()).getUser();
-      setupCryptoMaterial(allRequests, user);
+      setupCryptoMaterial(allRequests, user, masterContainerID
+          .getApplicationAttemptId().getApplicationId().toString());
     }
     
     StartContainersResponse response =
@@ -145,10 +146,11 @@ public class AMLauncher implements Runnable {
   }
   
   private void setupCryptoMaterial(StartContainersRequest request,
-      String user) throws FileNotFoundException, YarnException {
+      String user, String applicationId) throws FileNotFoundException,
+      YarnException {
     try {
       CertificateLocalizer.CryptoMaterial material = CertificateLocalizer
-          .getInstance().getMaterialLocation(user);
+          .getInstance().getMaterialLocation(user, applicationId);
       
       request.setKeyStore(material.getKeyStoreMem());
       request.setTrustStore(material.getTrustStoreMem());
@@ -183,7 +185,12 @@ public class AMLauncher implements Runnable {
       if (appFinalStates.contains(app.getState())) {
         String user = rmContext.getRMApps().get(containerId
             .getApplicationAttemptId().getApplicationId()).getUser();
-        CertificateLocalizer.getInstance().removeMaterial(user);
+        try {
+          CertificateLocalizer.getInstance().removeMaterial(user, application
+              .getAppAttemptId().getApplicationId().toString());
+        } catch (InterruptedException | ExecutionException e) {
+          throw new IOException(e);
+        }
       }
     }
     

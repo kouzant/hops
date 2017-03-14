@@ -30,6 +30,7 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -1245,8 +1246,9 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (kstore != null && tstore != null
             && kstore.capacity() > 0 && tstore.capacity() > 0) {
           try {
-            CertificateLocalizer.getInstance().removeMaterial(app.getUser());
-          } catch (IOException ex) {
+            CertificateLocalizer.getInstance().removeMaterial(app.getUser(),
+                app.getApplicationId().toString());
+          } catch (InterruptedException | ExecutionException | IOException ex) {
             LOG.error("Error while deleting cryptographic material for user " +
                 app.getUser(), ex);
           }

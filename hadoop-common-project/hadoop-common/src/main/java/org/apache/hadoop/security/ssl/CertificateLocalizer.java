@@ -31,7 +31,12 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,14 +52,16 @@ public class CertificateLocalizer {
   
   private final String TMP_DIR = "/tmp/certLoc";
   private File tmpDir;
-  private final Map<String, CryptoMaterial> materialLocation;
+  private final Map<StorageKey, CryptoMaterial> materialLocation;
+  private final Map<String, Set<CryptoMaterial>> usernameToCryptoMaterial;
   private final ExecutorService execPool;
-  private final Map<String, Future<CryptoMaterial>> futures;
+  private final Map<StorageKey, Future<CryptoMaterial>> futures;
   
   private Path materializeDir;
   
   private CertificateLocalizer() throws IOException {
     materialLocation = new ConcurrentHashMap<>();
+    usernameToCryptoMaterial = new ConcurrentHashMap<>();
     execPool = Executors.newFixedThreadPool(5);
     futures = new ConcurrentHashMap<>();
     
@@ -111,42 +118,69 @@ public class CertificateLocalizer {
     return materializeDir;
   }
   
-  public void materializeCertificates(String username, ByteBuffer keyStore,
-      ByteBuffer trustStore) throws IOException {
-    if (materialLocation.containsKey(username)) {
+  public void materializeCertificates(String username, String applicationId,
+      ByteBuffer keyStore, ByteBuffer trustStore) throws IOException {
+    StorageKey key = new StorageKey(username, applicationId);
+    if (materialLocation.containsKey(key)) {
       return;
     }
     
-    Future<CryptoMaterial> future = execPool.submit(new Materializer(username,
+    Future<CryptoMaterial> future = execPool.submit(new Materializer(key,
         keyStore, trustStore));
-    futures.put(username, future);
+    futures.put(key, future);
     // Put the CryptoMaterial lazily in the materialLocation map
     
     LOG.error("<kavouri> Materializing for user " + username + "kstore: " +
         keyStore.capacity() + " tstore: " + trustStore.capacity());
   }
   
-  public void removeMaterial(String user) {
-    CryptoMaterial material = materialLocation.get(user);
+  public void removeMaterial(String user, String applicationId)
+    throws InterruptedException, ExecutionException {
+    StorageKey key = new StorageKey(user, applicationId);
+    CryptoMaterial material = null;
+    
+    Future<CryptoMaterial> future = futures.remove(key);
+    if (future != null) {
+      material = future.get();
+    } else {
+      material = materialLocation.get(key);
+    }
+    
     if (null == material) {
       LOG.warn("Certificates do not exists for user " + user);
       return;
     }
-    execPool.execute(new Remover(user, material));
+    execPool.execute(new Remover(key, material));
   }
   
+  // HopSSLSocketFactory has no notion of Application ID
   public CryptoMaterial getMaterialLocation(String username) throws
-      FileNotFoundException, InterruptedException, ExecutionException {
-    CryptoMaterial material = null;
+      FileNotFoundException {
+    Set<CryptoMaterial> userMaterial = usernameToCryptoMaterial.get
+        (username);
+    if (userMaterial == null || userMaterial.isEmpty()) {
+      throw new FileNotFoundException("Materialized crypto material for user "
+        + username + " could not be found");
+    }
+  
+    // Get the first available CryptoMaterial for that user
+    Iterator<CryptoMaterial> iter = userMaterial.iterator();
+    return iter.next();
+  }
+  
+  public CryptoMaterial getMaterialLocation(String username, String applicationId)
+      throws FileNotFoundException, InterruptedException, ExecutionException {
+    StorageKey key = new StorageKey(username, applicationId);
     
-    Future<CryptoMaterial> future = futures.remove(username);
+    CryptoMaterial material = null;
+    Future<CryptoMaterial> future = futures.remove(key);
     
     // There is an async operation for this username
     if (future != null) {
       material = future.get();
     } else {
       // Materialization has already been finished
-      material = materialLocation.get(username);
+      material = materialLocation.get(key);
     }
     
     if (material == null) {
@@ -155,6 +189,49 @@ public class CertificateLocalizer {
     }
   
     return material;
+  }
+  
+  private class StorageKey {
+    private final String username;
+    private final String applicationId;
+    
+    public StorageKey(String username, String applicationId) {
+      this.username = username;
+      this.applicationId = applicationId;
+    }
+    
+    public String getUsername() {
+      return username;
+    }
+    
+    public String getApplicationId() {
+      return applicationId;
+    }
+    
+    @Override
+    public boolean equals(Object other) {
+      if (other == this) {
+        return true;
+      }
+  
+      if (!(other instanceof StorageKey)) {
+        return false;
+      }
+  
+      StorageKey otherKey = (StorageKey) other;
+      
+      return Objects.equals(username, otherKey.username)
+          && Objects.equals(applicationId, otherKey.applicationId);
+      
+    }
+    
+    @Override
+    public int hashCode() {
+      int result = 17;
+      result = 31 * result + username.hashCode();
+      result = 31 * result + applicationId.hashCode();
+      return result;
+    }
   }
   
   public class CryptoMaterial {
@@ -202,40 +279,55 @@ public class CertificateLocalizer {
   }
   
   private class Remover implements Runnable {
-    private final String user;
-    private CryptoMaterial material;
+    private final StorageKey key;
+    private final CryptoMaterial material;
     
-    public Remover(String user, CryptoMaterial material) {
-      this.user = user;
+    public Remover(StorageKey key, CryptoMaterial material) {
+      this.key = key;
       this.material = material;
     }
     
     @Override
     public void run() {
-      FileUtils.deleteQuietly(new File(material.getKeyStoreLocation()));
-      FileUtils.deleteQuietly(new File(material.getTrustStoreLocation()));
-      materialLocation.remove(user);
-      material = null;
+      /*FileUtils.deleteQuietly(new File(material.getKeyStoreLocation()));
+      FileUtils.deleteQuietly(new File(material.getTrustStoreLocation()));*/
+      File appDir = Paths.get(materializeDir.toString(), key.getApplicationId())
+          .toFile();
+      FileUtils.deleteQuietly(appDir);
+      Set<CryptoMaterial> userMaterial = usernameToCryptoMaterial.get(key
+          .getUsername());
+      if (null != userMaterial) {
+        userMaterial.remove(material);
+        if (userMaterial.isEmpty()) {
+          usernameToCryptoMaterial.remove(key.getUsername());
+        }
+      }
+      materialLocation.remove(key);
     }
   }
   
   private class Materializer implements Callable<CryptoMaterial> {
-    private final String username;
+    private final StorageKey key;
     private final ByteBuffer kstore;
     private final ByteBuffer tstore;
     
-    public Materializer(String username, ByteBuffer kstore, ByteBuffer tstore) {
-      this.username = username;
+    public Materializer(StorageKey key, ByteBuffer kstore, ByteBuffer tstore) {
+      this.key = key;
       this.kstore = kstore;
       this.tstore = tstore;
     }
     
     @Override
     public CryptoMaterial call() throws IOException {
-      File kstoreFile = Paths.get(materializeDir.toString(), username +
-          "__kstore.jks").toFile();
-      File tstoreFile = Paths.get(materializeDir.toString(), username +
-          "__tstore.jks").toFile();
+      File appDir = Paths.get(materializeDir.toString(), key.getApplicationId())
+          .toFile();
+      if (!appDir.exists()) {
+        appDir.mkdir();
+      }
+      File kstoreFile = Paths.get(materializeDir.toString(), key.getApplicationId(),
+          key.getUsername() + "__kstore.jks").toFile();
+      File tstoreFile = Paths.get(materializeDir.toString(), key.getApplicationId(),
+          key.getUsername() + "__tstore.jks").toFile();
       FileChannel kstoreChannel = new FileOutputStream(kstoreFile, false)
           .getChannel();
       FileChannel tstoreChannel = new FileOutputStream(tstoreFile, false)
@@ -247,8 +339,17 @@ public class CertificateLocalizer {
       
       CryptoMaterial material = new CryptoMaterial(kstoreFile.getAbsolutePath(),
           tstoreFile.getAbsolutePath(), kstore, tstore);
-      materialLocation.put(username, material);
+      materialLocation.put(key, material);
       
+      Set<CryptoMaterial> materialForUser = usernameToCryptoMaterial.get(key
+          .getUsername());
+      if (null != materialForUser) {
+        materialForUser.add(material);
+      } else {
+        Set<CryptoMaterial> tmp = new HashSet<>();
+        tmp.add(material);
+        usernameToCryptoMaterial.put(key.getUsername(), tmp);
+      }
       return material;
     }
   }
