@@ -46,6 +46,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     private static final String KEY_PASSWORD_DEFAULT = "";
     private static final String TRUST_STORE_FILEPATH_DEFAULT = "client.truststore.jks";
     private static final String TRUST_STORE_PASSWORD_DEFAULT = "";
+    private static final String SOCKET_ENABLED_PROTOCOL_DEFAULT = "TLSv1";
     
     private static final String KEYSTORE_SUFFIX = "__kstore.jks";
     private static final String TRUSTSTORE_SUFFIX = "__tstore.jks";
@@ -70,7 +71,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
         KEY_PASSWORD_KEY("client.rpc.ssl.keypassword", KEY_PASSWORD_DEFAULT, PropType.LITERAL),
         TRUST_STORE_FILEPATH_KEY("client.rpc.ssl.truststore.filepath", TRUST_STORE_FILEPATH_DEFAULT, PropType.FILEPATH),
         TRUST_STORE_PASSWORD_KEY("client.rpc.ssl.truststore.password",
-            TRUST_STORE_PASSWORD_DEFAULT, PropType.LITERAL);
+            TRUST_STORE_PASSWORD_DEFAULT, PropType.LITERAL),
+        SOCKET_ENABLED_PROTOCOL("client.rpc.ssl.enabled.protocol",
+            SOCKET_ENABLED_PROTOCOL_DEFAULT, PropType.LITERAL);
 
         private final String value;
         private final String defaultValue;

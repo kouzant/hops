@@ -19,6 +19,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
+import org.apache.hadoop.security.ssl.SSLFactory;
 
 import javax.net.ssl.*;
 import java.io.*;
@@ -219,7 +220,11 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
     public static SSLContext initializeSSLContext(Configuration conf) throws IOException {
         SSLContext sslCtx = null;
         try {
-            sslCtx = SSLContext.getInstance("TLSv1.2");
+            String enabledProtocol = conf.get(HopsSSLSocketFactory.CryptoKeys
+                .SOCKET_ENABLED_PROTOCOL.getValue(),
+                HopsSSLSocketFactory.CryptoKeys.SOCKET_ENABLED_PROTOCOL
+                    .getDefaultValue());
+            sslCtx = SSLContext.getInstance(enabledProtocol);
 
             String keyStoreFilePath = conf.get(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(),
                     HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getDefaultValue());
