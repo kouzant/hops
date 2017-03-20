@@ -107,7 +107,8 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
   public void testGetNextHeartBeatInterval() throws Exception {
     Configuration conf = new Configuration();
     conf.set(YarnConfiguration.RM_NM_HEARTBEAT_INTERVAL_MS, "4000");
-
+    DBUtility.InitializeDB();
+    
     rm = new MockRM(conf);
     rm.start();
 
