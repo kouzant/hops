@@ -79,40 +79,48 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
         }
         return -1;
     }
-
+    
     @Override
     public int read(ReadableByteChannel channel, ByteBuffer buffer)
-            throws IOException {
-        clientNetBuffer.clear();
-        int bytesRead = channel.read(clientNetBuffer);
-        if (bytesRead > 0) {
-            clientNetBuffer.flip();
-            while (clientNetBuffer.hasRemaining()) {
-                clientAppBuffer.clear();
-                SSLEngineResult result = sslEngine.unwrap(clientNetBuffer, clientAppBuffer);
-                switch (result.getStatus()) {
-                    case OK:
-                        clientAppBuffer.flip();
-                        while (clientAppBuffer.hasRemaining()) {
-                            buffer.put(clientAppBuffer.get());
-                        }
-                        break;
-                    case BUFFER_OVERFLOW:
-                        clientAppBuffer = enlargeApplicationBuffer(clientAppBuffer);
-                        break;
-                    case BUFFER_UNDERFLOW:
-                        clientNetBuffer = handleBufferUnderflow(clientNetBuffer);
-                        break;
-                    case CLOSED:
-                        sslEngine.closeOutbound();
-                        doHandshake();
-                        return -1;
-                    default:
-                        throw new IllegalStateException("Invalid SSL status: " + result.getStatus());
-                }
-            }
+        throws IOException {
+        int netRead = channel.read(clientNetBuffer);
+        if (netRead == -1) {
+            return -1;
         }
-        return bytesRead;
+        
+        int read = 0;
+        SSLEngineResult unwrapResult;
+        do {
+            clientNetBuffer.flip();
+            unwrapResult = sslEngine.unwrap(clientNetBuffer, clientAppBuffer);
+            clientNetBuffer.compact();
+            
+            if (unwrapResult.getStatus().equals(SSLEngineResult.Status.OK)) {
+                read += unwrapResult.bytesProduced();
+                clientAppBuffer.flip();
+                while (clientAppBuffer.hasRemaining()) {
+                    buffer.put(clientAppBuffer.get());
+                }
+                clientAppBuffer.compact();
+            } else if (unwrapResult.getStatus().equals(SSLEngineResult.Status
+                .BUFFER_UNDERFLOW)) {
+                read += unwrapResult.bytesProduced();
+                break;
+            } else if (unwrapResult.getStatus().equals(SSLEngineResult.Status
+                .BUFFER_OVERFLOW)) {
+                clientAppBuffer = enlargeApplicationBuffer(clientAppBuffer);
+            } else if (unwrapResult.getStatus().equals(SSLEngineResult.Status
+                .CLOSED)) {
+                sslEngine.closeOutbound();
+                doHandshake();
+                break;
+            } else {
+                throw new IOException("SSLEngine UNWRAP invalid status: " +
+                    unwrapResult.getStatus());
+            }
+        } while (clientNetBuffer.position() != 0);
+        
+        return read;
     }
 
     public X509Certificate getClientCertificate() throws SSLPeerUnverifiedException {

@@ -104,7 +104,7 @@ public abstract class RpcSSLEngineAbstr implements RpcSSLEngine {
                         try {
                             sslEngine.closeInbound();
                         } catch (SSLException ex) {
-                            LOG.error(ex, ex);
+                            //LOG.error(ex, ex);
                         }
                         sslEngine.closeOutbound();
                         handshakeStatus = sslEngine.getHandshakeStatus();
