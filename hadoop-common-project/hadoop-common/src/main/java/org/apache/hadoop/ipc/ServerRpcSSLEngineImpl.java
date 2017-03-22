@@ -84,9 +84,10 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
     public int read(ReadableByteChannel channel, ByteBuffer buffer)
         throws IOException {
         int netRead = channel.read(clientNetBuffer);
-        if (netRead == -1) {
+        /*if (netRead == -1) {
+            LOG.error(">>>> I've read nothing returning -1");
             return -1;
-        }
+        }*/
         
         int read = 0;
         SSLEngineResult unwrapResult;
@@ -113,6 +114,7 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
                 .CLOSED)) {
                 sslEngine.closeOutbound();
                 doHandshake();
+                read = -1;
                 break;
             } else {
                 throw new IOException("SSLEngine UNWRAP invalid status: " +
