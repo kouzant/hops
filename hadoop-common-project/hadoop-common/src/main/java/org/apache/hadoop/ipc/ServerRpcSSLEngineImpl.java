@@ -53,17 +53,18 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
         serverAppBuffer.put(buffer);
         serverAppBuffer.flip();
 
+        int bytesWritten = 0;
         while (serverAppBuffer.hasRemaining()) {
             serverNetBuffer.clear();
             SSLEngineResult result = sslEngine.wrap(serverAppBuffer, serverNetBuffer);
             switch (result.getStatus()) {
                 case OK:
                     serverNetBuffer.flip();
-                    int bytesWritten = 0;
                     while (serverNetBuffer.hasRemaining()) {
                         bytesWritten += channel.write(serverNetBuffer);
                     }
-                    return bytesWritten;
+                    //return bytesWritten;
+                    break;
                 case BUFFER_OVERFLOW:
                     serverNetBuffer = enlargePacketBuffer(serverNetBuffer);
                     break;
@@ -77,17 +78,17 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
                     throw new IllegalStateException("Invalid SSL state: " + result.getStatus());
             }
         }
-        return -1;
+        return bytesWritten;
     }
     
     @Override
     public int read(ReadableByteChannel channel, ByteBuffer buffer)
         throws IOException {
         int netRead = channel.read(clientNetBuffer);
-        /*if (netRead == -1) {
+        if (netRead == -1) {
             LOG.error(">>>> I've read nothing returning -1");
             return -1;
-        }*/
+        }
         
         int read = 0;
         SSLEngineResult unwrapResult;
