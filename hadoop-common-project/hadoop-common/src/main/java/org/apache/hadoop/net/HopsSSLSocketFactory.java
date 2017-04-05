@@ -34,12 +34,13 @@ import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class HopsSSLSocketFactory extends SocketFactory implements Configurable {
 
     public static final String FORCE_CONFIGURE = "client.rpc.ssl.force.configure";
-    public static final boolean DEFAULT_FORCE_CONFIGURE = true;
+    public static final boolean DEFAULT_FORCE_CONFIGURE = false;
     
     private static final String KEY_STORE_FILEPATH_DEFAULT = "client.keystore.jks";
     private static final String KEY_STORE_PASSWORD_DEFAULT = "";
@@ -53,9 +54,10 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     private static final String PASSPHRASE = "adminpw";
     private static final String SOCKET_FACTORY_NAME = HopsSSLSocketFactory
         .class.getCanonicalName();
-    /*private final String CERT_MATERIALIZED_DIR = System.getProperty("java.io.tmpdir",
-        "/tmp/");*/
-    private final String CERT_MATERIALIZED_DIR = "/tmp";
+    
+    // TODO: Read this from the configuration file
+    private final String CERT_MATERIALIZED_DIR = "/srv/hops/domains/domain1/kafkacerts";
+    private final String SERVICE_CERT_DIR = "/tmp";
     
     private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
 
@@ -122,43 +124,6 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Current user's username is: " + username);
             }
-            // First we check if the crypto material has been set in the configuration
-            /*if (!isCryptoMaterialSet(conf, username)
-                && !isHostnameInCryptoMaterial(conf, localHostname)) {
-
-                if (username.matches(userPattern)) {
-                    LOG.error("It's a normal user");
-                    // It's a normal user
-                    // First check for the file in classpath
-                    File fd = new File(username + "__kstore.jks");
-                    if (fd.exists()) {
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Crypto material exist in classpath");
-                        }
-                        configureTlsClient("", username, conf);
-                    } else {
-                        // Otherwise they should be in the materialized directory
-                        if (LOG.isDebugEnabled()) {
-                            LOG.debug("Crypto material exist in /tmp/");
-                        }
-                        configureTlsClient("/tmp/", username, conf);
-                    }
-                } else {
-                    LOG.error("It's superuser");
-                    // It's the superuser
-                    // Set the paths to the host crypto material
-                    // If hostname certificate exists, use that one
-                    File fd = new File(Paths.get("/tmp/", localHostname + "__kstore.jks").toString());
-                    if (fd.exists()) {
-                        configureTlsClient("/tmp/", localHostname, conf);
-                        LOG.error("Kavouri found " + fd.toString());
-                    } else {
-                        // Otherwise use the superuser's certificate
-                        LOG.error("Kavouri not found!!!!! Falling back to glassfish " + fd.toString());
-                        configureTlsClient("/tmp/", username, conf);
-                    }
-                }
-            }*/
             
           String pid = ManagementFactory.getRuntimeMXBean().getName();
           LOG.error("Parent pid is: " + pid);
@@ -212,24 +177,34 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
       
                 // Client from HopsWorks is trying to create a SecureSocket
                 // The crypto material should be in the CERT_MATERIALIZED_DIR
-                File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
+                Path pathToCert = Paths.get(CERT_MATERIALIZED_DIR, username);
+                File fd = Paths.get(pathToCert.toString(), username +
                     KEYSTORE_SUFFIX).toFile();
                 //if (fd.exists() && (isHopsworks || isZeppelin)) {
                 if (fd.exists()) {
                   LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
                       + " called from HopsWorks");
-                  configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);
+                  configureTlsClient(pathToCert.toString(), username, conf);
                 } else {
-                  // Client from other services RM or NM is trying to
-                  // create a SecureSocket. Crypto material is already
-                  // materialized with the CertificateLocalizer
-                  CertificateLocalizer.CryptoMaterial material =
-                      CertificateLocalizer.getInstance()
-                          .getMaterialLocation(username);
-                  setTlsConfiguration(material.getKeyStoreLocation(),
-                      material.getTrustStoreLocation(), conf);
-                  LOG.error("Getting Crypto material from the " +
-                      "CertificateLocalizer");
+                  // Fallback to /tmp directory
+                  // In the future certificates should not exist there
+                  fd = Paths.get("/tmp", username + KEYSTORE_SUFFIX)
+                      .toFile();
+                  if (fd.exists()) {
+                    LOG.error("<Kavouri> Cryptomaterial exist in /tmp");
+                    configureTlsClient("/tmp", username, conf);
+                  } else {
+                    // Client from other services RM or NM is trying to
+                    // create a SecureSocket. Crypto material is already
+                    // materialized with the CertificateLocalizer
+                    CertificateLocalizer.CryptoMaterial material =
+                        CertificateLocalizer.getInstance()
+                            .getMaterialLocation(username);
+                    setTlsConfiguration(material.getKeyStoreLocation(),
+                        material.getTrustStoreLocation(), conf);
+                    LOG.error("Getting Crypto material from the " +
+                        "CertificateLocalizer");
+                  }
                 }
               } else {
                 LOG.error(
@@ -238,17 +213,17 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
               }
             } else {
               // It's a superuser
-              LOG.error("It's superuser");
+              LOG.error("It's superuser - force configure: " + forceConfigure);
               if ((!isCryptoMaterialSet(conf, username)
                   && !isHostnameInCryptoMaterial(conf, localHostname))
                   || forceConfigure) {
                 // First check if the hostname keystore exists
                 File fd = new File(
-                    Paths.get(CERT_MATERIALIZED_DIR, localHostname +
+                    Paths.get(SERVICE_CERT_DIR, localHostname +
                         KEYSTORE_SUFFIX).toString());
                 if (fd.exists()) {
                   LOG.error("Hostname keystore exists!");
-                  configureTlsClient(CERT_MATERIALIZED_DIR,
+                  configureTlsClient(SERVICE_CERT_DIR,
                       localHostname, conf);
                 } else {
                   LOG.error(
@@ -276,6 +251,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
         this.keyStoreFilePath = conf.get(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(),
                 KEY_STORE_FILEPATH_DEFAULT);
         LOG.error("<Kavouri> keystore used: " + keyStoreFilePath);
+        conf.setBoolean(FORCE_CONFIGURE, false);
     }
     
     public static void configureTlsClient(String filePrefix, String username, Configuration conf) {
