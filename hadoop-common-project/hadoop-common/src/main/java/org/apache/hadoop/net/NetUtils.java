@@ -122,7 +122,20 @@ public class NetUtils {
     if ((propValue == null) || (propValue.length() == 0))
       return SocketFactory.getDefault();
     
-    return getSocketFactoryFromProperty(conf, propValue);
+    SocketFactory factory = getSocketFactoryFromProperty(conf, propValue);
+    configureCryptoMaterial(factory, conf);
+    
+    return factory;
+  }
+  
+  private static void configureCryptoMaterial(SocketFactory factory,
+      Configuration conf) {
+    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)
+        && (factory instanceof HopsSSLSocketFactory)) {
+      ((HopsSSLSocketFactory) factory).configureCryptoMaterial(
+          CertificateLocalizationCtx.getInstance().getCertificateLocalization());
+    }
   }
   
   /**

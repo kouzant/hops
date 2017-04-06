@@ -21,7 +21,6 @@ package org.apache.hadoop.util;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.PrintStream;
-import java.io.PrintWriter;
 import java.io.UnsupportedEncodingException;
 import java.lang.management.ManagementFactory;
 import java.lang.management.ThreadInfo;
@@ -40,17 +39,12 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.DataInputBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.Writable;
 import org.apache.hadoop.io.serializer.Deserializer;
 import org.apache.hadoop.io.serializer.SerializationFactory;
 import org.apache.hadoop.io.serializer.Serializer;
-import org.apache.hadoop.net.HopsSSLSocketFactory;
-import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
-
-import javax.net.SocketFactory;
 
 /**
  * General reflection utils
@@ -138,22 +132,8 @@ public class ReflectionUtils {
     } catch (Exception e) {
       throw new RuntimeException(e);
     }
-    setCertificateLocalizationService(result, conf);
     setConf(result, conf);
     return result;
-  }
-  
-  private static void setCertificateLocalizationService(Object factory,
-      Configuration conf) {
-    if (null != conf) {
-      if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)
-          && (factory instanceof HopsSSLSocketFactory)) {
-        ((HopsSSLSocketFactory) factory).setCertificateLocalization(
-            CertificateLocalizationCtx.getInstance()
-                .getCertificateLocalization());
-      }
-    }
   }
   
   static private ThreadMXBean threadBean = 

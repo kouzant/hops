@@ -103,23 +103,22 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
 
     private Configuration conf;
     private String keyStoreFilePath;
-    private CertificateLocalization certificateLocalization;
     
     // Hopsworks project specific username pattern - projectName__username
     private final String userPattern = "\\w*__\\w*";
 
     public HopsSSLSocketFactory() {
     }
-
-    public void setCertificateLocalization(CertificateLocalization
-        certificateLocalization) {
-      this.certificateLocalization = certificateLocalization;
+    
+    @Override
+    public void setConf(Configuration conf) {
+      this.conf = conf;
     }
     
     // TODO(Antonis) Change logging severity
     // TODO(Antonis) Remove Hopsworks testing
-    @Override
-    public void setConf(Configuration conf) {
+    public void configureCryptoMaterial(CertificateLocalization
+        certificateLocalization) {
         try {
             String username =
                 UserGroupInformation.getCurrentUser().getUserName();
@@ -255,8 +254,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
         } catch(Exception ex){
           LOG.error(ex, ex);
         }
-        
-        this.conf = conf;
+      
         // *ClientCache* caches client instances based on their socket factory.
         // In order to distinguish two client with the same socket factory but
         // with different certificates, the hashCode is computed by the
