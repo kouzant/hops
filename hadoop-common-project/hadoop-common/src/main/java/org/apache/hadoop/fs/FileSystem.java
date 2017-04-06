@@ -2828,12 +2828,11 @@ public abstract class FileSystem extends Configured implements Closeable {
         this.unique = unique;
         
         this.ugi = UserGroupInformation.getCurrentUser();
-        String[] fullKeystoreTk = conf.get(HopsSSLSocketFactory.CryptoKeys
+        
+        this.keystoreUsed = conf.get(HopsSSLSocketFactory.CryptoKeys
                 .KEY_STORE_FILEPATH_KEY.getValue(),
             HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
-                .getDefaultValue()).split("/");
-        
-        this.keystoreUsed = fullKeystoreTk[fullKeystoreTk.length - 1];
+                .getDefaultValue());
       }
 
       @Override

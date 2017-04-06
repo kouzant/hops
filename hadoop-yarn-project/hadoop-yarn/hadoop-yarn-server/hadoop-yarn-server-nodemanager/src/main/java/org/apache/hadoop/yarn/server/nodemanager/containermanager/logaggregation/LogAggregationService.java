@@ -179,9 +179,9 @@ public class LogAggregationService extends AbstractService implements
   protected FileSystem getFileSystem(Configuration conf) throws IOException {
     String username = UserGroupInformation.getCurrentUser().getUserName();
     LOG.error("<Dino> Current username is: " + username);
-    conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
+    /*conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
         .getValue(), username + "__kstore.jks");
-    conf.setBoolean(HopsSSLSocketFactory.FORCE_CONFIGURE,true);
+    conf.setBoolean(HopsSSLSocketFactory.FORCE_CONFIGURE,true);*/
     return FileSystem.get(conf);
   }
 
@@ -195,8 +195,14 @@ public class LogAggregationService extends AbstractService implements
       // not match the supplied RPC username glassfish for protocol: org.apache
       // .hadoop.hdfs.protocol.ClientProtocol
       
+      conf.setBoolean(HopsSSLSocketFactory.FORCE_CONFIGURE, true);
+      conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
+          .getValue(), HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
+          .getDefaultValue());
       remoteFS = getFileSystem(conf);
-      LOG.error("<Dino> Keystore used: " + conf.get(HopsSSLSocketFactory
+      LOG.error("Filesystem in verifyAndCreateRemoteLogDir: " + remoteFS.toString());
+      LOG.error("<Dino> Keystore used in verifyAndCreateRemoteLogDir: " + conf
+          .get(HopsSSLSocketFactory
               .CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(),
           HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getDefaultValue()));
     } catch (IOException e) {
@@ -280,6 +286,9 @@ public class LogAggregationService extends AbstractService implements
             // TODO: Reuse FS for user?
             FileSystem remoteFS = getFileSystem(getConfig());
 
+            LOG.error("FileSystem in createAppDir: " + remoteFS);
+            LOG.error("Keystore used in createAppDir: " + getConfig().get
+                (HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue()));
             // Only creating directories if they are missing to avoid
             // unnecessary load on the filesystem from all of the nodes
             Path appDir = LogAggregationUtils.getRemoteAppLogDir(
