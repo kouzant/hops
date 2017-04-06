@@ -24,6 +24,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.http.lib.StaticUserWebFilter;
@@ -32,6 +33,8 @@ import org.apache.hadoop.metrics2.source.JvmMetrics;
 import org.apache.hadoop.security.*;
 import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHandler;
 import org.apache.hadoop.security.authorize.ProxyUsers;
+import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
+import org.apache.hadoop.security.ssl.CertificateLocalizationService;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.service.Service;
@@ -152,6 +155,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   protected QuotaService quotaService;
   protected ContainersLogsService containersLogsService;
   protected PriceMultiplicatiorService priceMultiplicatiorService;
+  protected CertificateLocalizationService certificateLocalizationService;
   protected ReservationSystem reservationSystem;
   private ClientRMService clientRM;
   protected ApplicationMasterService masterService;
@@ -634,6 +638,16 @@ public class ResourceManager extends CompositeService implements Recoverable {
       priceMultiplicatiorService = new PriceMultiplicatiorService(rmContext);
       addIfService(priceMultiplicatiorService);
 
+      if (conf.getBoolean(CommonConfigurationKeysPublic
+          .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
+          .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+        certificateLocalizationService = new CertificateLocalizationService();
+        CertificateLocalizationCtx.getInstance().
+            setCertificateLocalization(certificateLocalizationService);
+        addService(certificateLocalizationService);
+        rmContext.setCertificateLocalizationService(certificateLocalizationService);
+      }
+      
       // creating monitors that handle preemption
       createPolicyMonitors();
 

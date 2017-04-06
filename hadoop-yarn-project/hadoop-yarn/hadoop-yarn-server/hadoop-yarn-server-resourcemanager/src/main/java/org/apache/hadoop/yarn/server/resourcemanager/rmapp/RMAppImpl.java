@@ -42,7 +42,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.ssl.CertificateLocalizer;
+import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -1246,9 +1246,9 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (kstore != null && tstore != null
             && kstore.capacity() > 0 && tstore.capacity() > 0) {
           try {
-            CertificateLocalizer.getInstance().removeMaterial(app.getUser(),
-                app.getApplicationId().toString());
-          } catch (InterruptedException | ExecutionException | IOException ex) {
+            CertificateLocalizationCtx.getInstance().getCertificateLocalization()
+                .removeMaterial(app.getUser(), app.getApplicationId().toString());
+          } catch (InterruptedException | ExecutionException ex) {
             LOG.error("Error while deleting cryptographic material for user " +
                 app.getUser(), ex);
           }

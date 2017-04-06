@@ -50,7 +50,6 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.PolicyProvider;
-import org.apache.hadoop.security.ssl.CertificateLocalizer;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.TokenIdentifier;
@@ -771,7 +770,7 @@ public class ContainerManagerImpl extends CompositeService implements
           "supplied is either null or empty");
     }
     
-    CertificateLocalizer.getInstance().materializeCertificates(user,
+    context.getCertificateLocalizationService().materializeCertificates(user,
         appId.toString(), keyStore, trustStore);
   }
   

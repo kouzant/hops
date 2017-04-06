@@ -51,10 +51,12 @@ import org.apache.commons.net.util.SubnetUtils.SubnetInfo;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.VersionedProtocol;
 import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
 import org.apache.hadoop.util.ReflectionUtils;
 
 import com.google.common.base.Preconditions;
@@ -119,10 +121,10 @@ public class NetUtils {
         CommonConfigurationKeysPublic.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_DEFAULT);
     if ((propValue == null) || (propValue.length() == 0))
       return SocketFactory.getDefault();
-
+    
     return getSocketFactoryFromProperty(conf, propValue);
   }
-
+  
   /**
    * Get the socket factory corresponding to the given proxy URI. If the
    * given proxy URI corresponds to an absence of configuration parameter,

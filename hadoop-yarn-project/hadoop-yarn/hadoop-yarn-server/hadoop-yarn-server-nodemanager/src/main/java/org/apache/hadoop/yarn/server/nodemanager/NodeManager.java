@@ -37,6 +37,8 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.metrics2.lib.DefaultMetricsSystem;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
+import org.apache.hadoop.security.ssl.CertificateLocalizationService;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.util.ExitUtil;
 import org.apache.hadoop.util.GenericOptionsParser;
@@ -92,6 +94,8 @@ public class NodeManager extends CompositeService
   private AtomicBoolean isStopping = new AtomicBoolean(false);
   private boolean rmWorkPreservingRestartEnabled;
   private boolean shouldExitOnShutdownEvent = false;
+  
+  private CertificateLocalizationService certificateLocalizationService;
 
   public NodeManager() {
     super(NodeManager.class.getName());
@@ -257,6 +261,15 @@ public class NodeManager extends CompositeService
     
     DefaultMetricsSystem.initialize("NodeManager");
 
+    if (conf.getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      certificateLocalizationService = new CertificateLocalizationService();
+      CertificateLocalizationCtx.getInstance().setCertificateLocalization
+          (certificateLocalizationService);
+      addService(certificateLocalizationService);
+      ((NMContext) context).setCertificateLocalizationService(certificateLocalizationService);
+    }
+    
     // StatusUpdater should be added last so that it get started last 
     // so that we make sure everything is up before registering with RM. 
     addService(nodeStatusUpdater);
@@ -361,6 +374,7 @@ public class NodeManager extends CompositeService
     private boolean isDecommissioned = false;
     private final boolean isSSLEnabled;
     private NodeStatusUpdater nodeStatusUpdater;
+    private CertificateLocalizationService certificateLocalizationService;
   
     public NMContext(NMContainerTokenSecretManager containerTokenSecretManager,
         NMTokenSecretManagerInNM nmTokenSecretManager,
@@ -385,6 +399,16 @@ public class NodeManager extends CompositeService
       this.isSSLEnabled = isSSLEnabled;
     }
 
+    public void setCertificateLocalizationService
+        (CertificateLocalizationService certificateLocalizationService) {
+      this.certificateLocalizationService = certificateLocalizationService;
+    }
+    
+    @Override
+    public CertificateLocalizationService getCertificateLocalizationService() {
+      return certificateLocalizationService;
+    }
+    
     /**
      * Usable only after ContainerManager is started.
      */

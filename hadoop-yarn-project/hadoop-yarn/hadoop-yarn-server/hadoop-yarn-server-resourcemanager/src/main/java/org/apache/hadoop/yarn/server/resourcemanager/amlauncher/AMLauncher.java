@@ -37,7 +37,7 @@ import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.ssl.CertificateLocalizer;
+import org.apache.hadoop.security.ssl.CertificateLocalizationService;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.util.StringUtils;
@@ -149,9 +149,9 @@ public class AMLauncher implements Runnable {
       String user, String applicationId) throws FileNotFoundException,
       YarnException {
     try {
-      CertificateLocalizer.CryptoMaterial material = CertificateLocalizer
-          .getInstance().getMaterialLocation(user, applicationId);
-      
+      CertificateLocalizationService.CryptoMaterial material = rmContext
+          .getCertificateLocalizationService().getMaterialLocation(user,
+              applicationId);
       request.setKeyStore(material.getKeyStoreMem());
       request.setTrustStore(material.getTrustStoreMem());
     } catch (InterruptedException | ExecutionException e) {
@@ -186,8 +186,8 @@ public class AMLauncher implements Runnable {
         String user = rmContext.getRMApps().get(containerId
             .getApplicationAttemptId().getApplicationId()).getUser();
         try {
-          CertificateLocalizer.getInstance().removeMaterial(user, application
-              .getAppAttemptId().getApplicationId().toString());
+          rmContext.getCertificateLocalizationService().removeMaterial(user,
+              application.getAppAttemptId().getApplicationId().toString());
         } catch (InterruptedException | ExecutionException e) {
           throw new IOException(e);
         }

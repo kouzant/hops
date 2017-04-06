@@ -30,7 +30,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.security.Credentials;
-import org.apache.hadoop.security.ssl.CertificateLocalizer;
+import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
@@ -444,9 +444,9 @@ public class ApplicationImpl implements Application {
       
       if (isSSLEnabled) {
         try {
-          CertificateLocalizer.getInstance().removeMaterial(app.getUser(),
-              appId.toString());
-        } catch (InterruptedException | ExecutionException | IOException ex) {
+          CertificateLocalizationCtx.getInstance().getCertificateLocalization()
+              .removeMaterial(app.getUser(), appId.toString());
+        } catch (InterruptedException | ExecutionException ex) {
           LOG.error("Error while deleting cryptographic material for user " +
               app.getUser());
         }

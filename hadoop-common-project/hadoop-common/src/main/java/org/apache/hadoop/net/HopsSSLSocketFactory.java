@@ -22,7 +22,8 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.RpcSSLEngineAbstr;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.ssl.CertificateLocalizer;
+import org.apache.hadoop.security.ssl.CertificateLocalization;
+import org.apache.hadoop.security.ssl.CertificateLocalizationService;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLContext;
@@ -102,12 +103,19 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
 
     private Configuration conf;
     private String keyStoreFilePath;
+    private CertificateLocalization certificateLocalization;
+    
     // Hopsworks project specific username pattern - projectName__username
     private final String userPattern = "\\w*__\\w*";
 
     public HopsSSLSocketFactory() {
     }
 
+    public void setCertificateLocalization(CertificateLocalization
+        certificateLocalization) {
+      this.certificateLocalization = certificateLocalization;
+    }
+    
     // TODO(Antonis) Change logging severity
     // TODO(Antonis) Remove Hopsworks testing
     @Override
@@ -196,14 +204,19 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                   } else {
                     // Client from other services RM or NM is trying to
                     // create a SecureSocket. Crypto material is already
-                    // materialized with the CertificateLocalizer
-                    CertificateLocalizer.CryptoMaterial material =
-                        CertificateLocalizer.getInstance()
-                            .getMaterialLocation(username);
-                    setTlsConfiguration(material.getKeyStoreLocation(),
-                        material.getTrustStoreLocation(), conf);
-                    LOG.error("Getting Crypto material from the " +
-                        "CertificateLocalizer");
+                    // materialized with the CertificateLocalizerDeprecated
+                    /*CertificateLocalizerDeprecated.CryptoMaterial material =
+                        CertificateLocalizerDeprecated.getInstance()
+                            .getMaterialLocation(username);*/
+                    if (null != certificateLocalization) {
+                      CertificateLocalizationService.CryptoMaterial material =
+                          certificateLocalization.getMaterialLocation(username);
+  
+                      setTlsConfiguration(material.getKeyStoreLocation(),
+                          material.getTrustStoreLocation(), conf);
+                      LOG.error("Getting Crypto material from the " +
+                          "CertificateLocalizationService");
+                    }
                   }
                 }
               } else {

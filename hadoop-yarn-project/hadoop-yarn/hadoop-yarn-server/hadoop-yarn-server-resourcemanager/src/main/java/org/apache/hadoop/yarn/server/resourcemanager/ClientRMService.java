@@ -18,14 +18,10 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.security.AccessControlException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -49,7 +45,6 @@ import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.UserGroupInformation.AuthenticationMethod;
 import org.apache.hadoop.security.authorize.PolicyProvider;
-import org.apache.hadoop.security.ssl.CertificateLocalizer;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.StringUtils;
@@ -575,8 +570,8 @@ public class ClientRMService extends AbstractService implements
               "truststore is empty");
         }
         
-        CertificateLocalizer.getInstance().materializeCertificates(username,
-            applicationId.toString(), kstore, tstore);
+        rmContext.getCertificateLocalizationService().materializeCertificates
+            (username, applicationId.toString(), kstore, tstore);
       } catch (IOException ex) {
         LOG.error(ex, ex);
         RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
