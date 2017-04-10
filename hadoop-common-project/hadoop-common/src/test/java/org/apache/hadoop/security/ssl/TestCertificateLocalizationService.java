@@ -18,8 +18,6 @@
 package org.apache.hadoop.security.ssl;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.log4j.LogManager;
-import org.apache.log4j.Logger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -93,9 +91,9 @@ public class TestCertificateLocalizationService {
     CertificateLocalizationService.CryptoMaterial cryptoMaterial = certLocSrv
         .getMaterialLocation(username, applicationId);
     String materializeDir = certLocSrv.getMaterializeDirectory().toString();
-    String expectedKPath = Paths.get(materializeDir, applicationId, username
+    String expectedKPath = Paths.get(materializeDir, username, username
         + "__kstore.jks").toString();
-    String expectedTPath = Paths.get(materializeDir, applicationId, username
+    String expectedTPath = Paths.get(materializeDir, username, username
         + "__tstore.jks").toString();
     
     assertEquals(expectedKPath, cryptoMaterial.getKeyStoreLocation());
@@ -111,6 +109,60 @@ public class TestCertificateLocalizationService {
   
     // Deletion is asynchronous so we have to wait
     TimeUnit.MILLISECONDS.sleep(10);
+    assertFalse(kfd.exists());
+    assertFalse(tfd.exists());
+  }
+  
+  @Test
+  public void testMaterializationWithMultipleApplications() throws Exception {
+    byte[] randomK = "Some_random_keystore_stuff".getBytes();
+    byte[] randomT = "Some_random_truststore_stuff".getBytes();
+    ByteBuffer bfk = ByteBuffer.wrap(randomK);
+    ByteBuffer bft = ByteBuffer.wrap(randomT);
+    String username = "Dr.Who";
+    String applicationId = "tardis";
+  
+    certLocSrv.materializeCertificates(username, applicationId,
+        bfk, bft);
+  
+    CertificateLocalizationService.CryptoMaterial cryptoMaterial = certLocSrv
+        .getMaterialLocation(username, applicationId);
+    String materializeDir = certLocSrv.getMaterializeDirectory().toString();
+    String expectedKPath = Paths.get(materializeDir, username, username
+        + "__kstore.jks").toString();
+    String expectedTPath = Paths.get(materializeDir, username, username
+        + "__tstore.jks").toString();
+  
+    assertEquals(expectedKPath, cryptoMaterial.getKeyStoreLocation());
+    assertEquals(expectedTPath, cryptoMaterial.getTrustStoreLocation());
+  
+    cryptoMaterial = certLocSrv.getMaterialLocation(username);
+    assertEquals(expectedKPath, cryptoMaterial.getKeyStoreLocation());
+    assertEquals(expectedTPath, cryptoMaterial.getTrustStoreLocation());
+    
+    // Make a second materialize certificates call which happen when a second
+    // application is launched
+    certLocSrv.materializeCertificates(username, applicationId, bfk, bft);
+    cryptoMaterial = certLocSrv.getMaterialLocation(username, applicationId);
+    assertEquals(2, cryptoMaterial.getRequestedApplications());
+    
+    certLocSrv.removeMaterial(username, applicationId);
+    TimeUnit.MILLISECONDS.sleep(10);
+    cryptoMaterial = certLocSrv.getMaterialLocation(username, applicationId);
+    assertEquals(1, cryptoMaterial.getRequestedApplications());
+    assertFalse(cryptoMaterial.isSafeToRemove());
+  
+    File kfd = new File(expectedKPath);
+    File tfd = new File(expectedTPath);
+    assertTrue(kfd.exists());
+    assertTrue(tfd.exists());
+  
+    certLocSrv.removeMaterial(username, applicationId);
+    TimeUnit.MILLISECONDS.sleep(10);
+    
+    rule.expect(FileNotFoundException.class);
+    certLocSrv.getMaterialLocation(username, applicationId);
+    
     assertFalse(kfd.exists());
     assertFalse(tfd.exists());
   }

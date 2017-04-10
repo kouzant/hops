@@ -20,6 +20,7 @@ package org.apache.hadoop.security.ssl;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -73,6 +74,7 @@ public class CertificateLocalizationService extends AbstractService
   protected void serviceInit(Configuration conf) throws Exception {
     // TODO Get the localization directory from conf, for the moment is a
     // random UUID
+    
     super.serviceInit(conf);
   }
   
@@ -94,7 +96,7 @@ public class CertificateLocalizationService extends AbstractService
     materializeDir = Paths.get(tmpDir.getAbsolutePath(), uuid);
     // Random materialization directory should have the default umask
     materializeDir.toFile().mkdir();
-    LOG.error("Initialized at dir: " + materializeDir.toString());
+    LOG.debug("Initialized at dir: " + materializeDir.toString());
     
     super.serviceStart();
   }
@@ -121,8 +123,10 @@ public class CertificateLocalizationService extends AbstractService
   @Override
   public void materializeCertificates(String username, String applicationId,
       ByteBuffer keyStore, ByteBuffer trustStore) throws IOException {
-    StorageKey key = new StorageKey(username, applicationId);
-    if (materialLocation.containsKey(key)) {
+    StorageKey key = new StorageKey(username);
+    CryptoMaterial material = materialLocation.get(key);
+    if (null != material) {
+      material.incrementRequestedApplications();
       return;
     }
   
@@ -131,14 +135,14 @@ public class CertificateLocalizationService extends AbstractService
     futures.put(key, future);
     // Put the CryptoMaterial lazily in the materialLocation map
   
-    LOG.error("<kavouri> Materializing for user " + username + "kstore: " +
+    LOG.debug("Materializing for user " + username + " kstore: " +
         keyStore.capacity() + " tstore: " + trustStore.capacity());
   }
   
   @Override
   public void removeMaterial(String username, String applicationId)
       throws InterruptedException, ExecutionException {
-    StorageKey key = new StorageKey(username, applicationId);
+    StorageKey key = new StorageKey(username);
     CryptoMaterial material = null;
   
     Future<CryptoMaterial> future = futures.remove(key);
@@ -152,7 +156,17 @@ public class CertificateLocalizationService extends AbstractService
       LOG.warn("Certificates do not exists for user " + username);
       return;
     }
-    execPool.execute(new Remover(key, material));
+    
+    material.decrementRequestedApplications();
+    
+    if (material.isSafeToRemove()) {
+      execPool.execute(new Remover(key, material));
+      LOG.debug("Removing crypto material for user " + key.getUsername());
+    } else {
+      LOG.debug("There are " + material.getRequestedApplications()
+          + " applications using the crypto material. " +
+          "They will not be removed now!");
+    }
   }
   
   @Override
@@ -175,7 +189,7 @@ public class CertificateLocalizationService extends AbstractService
   public CryptoMaterial getMaterialLocation(
       String username, String applicationId)
       throws FileNotFoundException, InterruptedException, ExecutionException {
-    StorageKey key = new StorageKey(username, applicationId);
+    StorageKey key = new StorageKey(username);
   
     CryptoMaterial material = null;
     Future<CryptoMaterial> future = futures.remove(key);
@@ -203,6 +217,11 @@ public class CertificateLocalizationService extends AbstractService
     private final int trustStoreSize;
     private final ByteBuffer keyStoreMem;
     private final ByteBuffer trustStoreMem;
+  
+    // Number of applications using the same crypto material
+    // The same user might have multiple applications running
+    // at the same time
+    private int requestedApplications;
     
     public CryptoMaterial(String keyStoreLocation, String trustStoreLocation,
         ByteBuffer kStore, ByteBuffer tstore) {
@@ -213,6 +232,8 @@ public class CertificateLocalizationService extends AbstractService
       
       this.keyStoreMem = kStore.asReadOnlyBuffer();
       this.trustStoreMem = tstore.asReadOnlyBuffer();
+      
+      requestedApplications = 1;
     }
     
     public String getKeyStoreLocation() {
@@ -238,23 +259,33 @@ public class CertificateLocalizationService extends AbstractService
     public ByteBuffer getTrustStoreMem() {
       return trustStoreMem;
     }
+  
+    public int getRequestedApplications() {
+      return requestedApplications;
+    }
+  
+    public void incrementRequestedApplications() {
+      requestedApplications++;
+    }
+  
+    public void decrementRequestedApplications() {
+      requestedApplications--;
+    }
+  
+    public boolean isSafeToRemove() {
+      return requestedApplications == 0;
+    }
   }
   
   private class StorageKey {
     private final String username;
-    private final String applicationId;
     
-    public StorageKey(String username, String applicationId) {
+    public StorageKey(String username) {
       this.username = username;
-      this.applicationId = applicationId;
     }
     
     public String getUsername() {
       return username;
-    }
-    
-    public String getApplicationId() {
-      return applicationId;
     }
     
     @Override
@@ -269,16 +300,13 @@ public class CertificateLocalizationService extends AbstractService
       
       StorageKey otherKey = (StorageKey) other;
       
-      return Objects.equals(username, otherKey.username)
-          && Objects.equals(applicationId, otherKey.applicationId);
-      
+      return Objects.equals(username, otherKey.username);
     }
     
     @Override
     public int hashCode() {
       int result = 17;
       result = 31 * result + username.hashCode();
-      result = 31 * result + applicationId.hashCode();
       return result;
     }
   }
@@ -296,14 +324,14 @@ public class CertificateLocalizationService extends AbstractService
     
     @Override
     public CryptoMaterial call() throws IOException {
-      File appDir = Paths.get(materializeDir.toString(), key.getApplicationId())
+      File appDir = Paths.get(materializeDir.toString(), key.getUsername())
           .toFile();
       if (!appDir.exists()) {
         appDir.mkdir();
       }
-      File kstoreFile = Paths.get(materializeDir.toString(), key.getApplicationId(),
+      File kstoreFile = Paths.get(appDir.getAbsolutePath(),
           key.getUsername() + "__kstore.jks").toFile();
-      File tstoreFile = Paths.get(materializeDir.toString(), key.getApplicationId(),
+      File tstoreFile = Paths.get(appDir.getAbsolutePath(),
           key.getUsername() + "__tstore.jks").toFile();
       FileChannel kstoreChannel = new FileOutputStream(kstoreFile, false)
           .getChannel();
@@ -342,9 +370,7 @@ public class CertificateLocalizationService extends AbstractService
     
     @Override
     public void run() {
-      /*FileUtils.deleteQuietly(new File(material.getKeyStoreLocation()));
-      FileUtils.deleteQuietly(new File(material.getTrustStoreLocation()));*/
-      File appDir = Paths.get(materializeDir.toString(), key.getApplicationId())
+      File appDir = Paths.get(materializeDir.toString(), key.getUsername())
           .toFile();
       FileUtils.deleteQuietly(appDir);
       Set<CryptoMaterial> userMaterial = usernameToCryptoMaterial.get(key

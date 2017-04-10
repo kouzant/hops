@@ -40,6 +40,8 @@ import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
+import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -98,6 +100,7 @@ public class LogAggregationService extends AbstractService implements
   Path remoteRootLogDir;
   String remoteRootLogDirSuffix;
   private NodeId nodeId;
+  private final Configuration sslConf;
 
   private final ConcurrentMap<ApplicationId, AppLogAggregator> appLogAggregators;
 
@@ -116,6 +119,7 @@ public class LogAggregationService extends AbstractService implements
         new ThreadFactoryBuilder()
           .setNameFormat("LogAggregationService #%d")
           .build());
+    sslConf = new Configuration(false);
   }
 
   protected void serviceInit(Configuration conf) throws Exception {
@@ -125,7 +129,9 @@ public class LogAggregationService extends AbstractService implements
     this.remoteRootLogDirSuffix =
         conf.get(YarnConfiguration.NM_REMOTE_APP_LOG_DIR_SUFFIX,
             YarnConfiguration.DEFAULT_NM_REMOTE_APP_LOG_DIR_SUFFIX);
-
+    
+    sslConf.addResource(conf.get(SSLFactory.SSL_SERVER_CONF_KEY,
+        "ssl-server.xml"));
     super.serviceInit(conf);
   }
 
@@ -189,16 +195,26 @@ public class LogAggregationService extends AbstractService implements
     // Checking the existence of the TLD
     FileSystem remoteFS = null;
     try {
-      // TODO(Antonis) This is not how it shoule be but
-      // org.apache.hadoop.ipc.RemoteException(org.apache.hadoop.ipc
-      // .RpcServerException): Client's certificate CN lalakoko__meb10000 did
-      // not match the supplied RPC username glassfish for protocol: org.apache
-      // .hadoop.hdfs.protocol.ClientProtocol
+      // Setting the keystore file path here is necessary to get the correct
+      // cached FileSystem object
+      String kstorePath = sslConf.get(
+          FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+              FileBasedKeyStoresFactory.SSL_KEYSTORE_LOCATION_TPL_KEY));
+      String kstorePass = sslConf.get(
+          FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+              FileBasedKeyStoresFactory.SSL_KEYSTORE_PASSWORD_TPL_KEY));
+      String keyPass = sslConf.get(
+          FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+              FileBasedKeyStoresFactory.SSL_KEYSTORE_KEYPASSWORD_TPL_KEY));
+      String tstorePath = sslConf.get(
+          FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+              FileBasedKeyStoresFactory.SSL_TRUSTSTORE_LOCATION_TPL_KEY));
+      String tstorePass = sslConf.get(
+          FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+              FileBasedKeyStoresFactory.SSL_TRUSTSTORE_PASSWORD_TPL_KEY));
+      HopsSSLSocketFactory.configureTlsClient(kstorePath, kstorePass,
+          keyPass, tstorePath, tstorePass, conf);
       
-      conf.setBoolean(HopsSSLSocketFactory.FORCE_CONFIGURE, true);
-      conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
-          .getValue(), HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
-          .getDefaultValue());
       remoteFS = getFileSystem(conf);
       LOG.error("Filesystem in verifyAndCreateRemoteLogDir: " + remoteFS.toString());
       LOG.error("<Dino> Keystore used in verifyAndCreateRemoteLogDir: " + conf
@@ -284,7 +300,15 @@ public class LogAggregationService extends AbstractService implements
         public Object run() throws Exception {
           try {
             // TODO: Reuse FS for user?
-            FileSystem remoteFS = getFileSystem(getConfig());
+            // Setting the keystore file path here is necessary to get the correct
+            // cached FileSystem object
+            Configuration conf = getConfig();
+            conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
+                .getValue(),
+                context.getCertificateLocalizationService()
+                    .getMaterialLocation(user, appId.toString()).getKeyStoreLocation());
+            
+            FileSystem remoteFS = getFileSystem(conf);
 
             LOG.error("FileSystem in createAppDir: " + remoteFS);
             LOG.error("Keystore used in createAppDir: " + getConfig().get

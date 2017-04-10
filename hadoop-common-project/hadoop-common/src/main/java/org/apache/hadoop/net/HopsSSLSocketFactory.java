@@ -271,6 +271,19 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
             TRUSTSTORE_SUFFIX, conf);
     }
     
+    public static void configureTlsClient(String kstorePath, String
+        kstorePass, String keyPass, String tstorePath, String tstorePass,
+        Configuration conf) {
+      conf.set(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), kstorePath);
+      conf.set(CryptoKeys.KEY_STORE_PASSWORD_KEY.getValue(), kstorePass);
+      conf.set(CryptoKeys.KEY_PASSWORD_KEY.getValue(), keyPass);
+      conf.set(CryptoKeys.TRUST_STORE_FILEPATH_KEY.getValue(), tstorePath);
+      conf.set(CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(), tstorePass);
+      conf.set(CommonConfigurationKeys
+          .HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
+          SOCKET_FACTORY_NAME);
+    }
+    
     private static void setTlsConfiguration(String kstorePath, String
         tstorePath, Configuration conf) {
         conf.set(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(), kstorePath);
