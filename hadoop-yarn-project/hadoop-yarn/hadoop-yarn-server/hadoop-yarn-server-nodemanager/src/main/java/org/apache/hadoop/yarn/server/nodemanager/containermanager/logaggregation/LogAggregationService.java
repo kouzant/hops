@@ -183,11 +183,7 @@ public class LogAggregationService extends AbstractService implements
   }
 
   protected FileSystem getFileSystem(Configuration conf) throws IOException {
-    String username = UserGroupInformation.getCurrentUser().getUserName();
-    LOG.error("<Dino> Current username is: " + username);
-    /*conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
-        .getValue(), username + "__kstore.jks");
-    conf.setBoolean(HopsSSLSocketFactory.FORCE_CONFIGURE,true);*/
+    
     return FileSystem.get(conf);
   }
 
@@ -216,11 +212,6 @@ public class LogAggregationService extends AbstractService implements
           keyPass, tstorePath, tstorePass, conf);
       
       remoteFS = getFileSystem(conf);
-      LOG.error("Filesystem in verifyAndCreateRemoteLogDir: " + remoteFS.toString());
-      LOG.error("<Dino> Keystore used in verifyAndCreateRemoteLogDir: " + conf
-          .get(HopsSSLSocketFactory
-              .CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(),
-          HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getDefaultValue()));
     } catch (IOException e) {
       throw new YarnRuntimeException("Unable to get Remote FileSystem instance", e);
     }
@@ -309,10 +300,7 @@ public class LogAggregationService extends AbstractService implements
                     .getMaterialLocation(user, appId.toString()).getKeyStoreLocation());
             
             FileSystem remoteFS = getFileSystem(conf);
-
-            LOG.error("FileSystem in createAppDir: " + remoteFS);
-            LOG.error("Keystore used in createAppDir: " + getConfig().get
-                (HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue()));
+            
             // Only creating directories if they are missing to avoid
             // unnecessary load on the filesystem from all of the nodes
             Path appDir = LogAggregationUtils.getRemoteAppLogDir(

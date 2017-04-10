@@ -107,6 +107,7 @@ public class CertificateLocalizationService extends AbstractService
       FileUtils.deleteQuietly(materializeDir.toFile());
     }
     
+    LOG.debug("Stopped CertificateLocalization service");
     super.serviceStop();
   }
   
@@ -173,6 +174,7 @@ public class CertificateLocalizationService extends AbstractService
   // HopSSLSocketFactory has no notion of Application ID
   public CryptoMaterial getMaterialLocation(
       String username) throws FileNotFoundException {
+    assert isInState(STATE.STARTED);
     Set<CryptoMaterial> userMaterial = usernameToCryptoMaterial.get
         (username);
     if (userMaterial == null || userMaterial.isEmpty()) {
@@ -298,9 +300,7 @@ public class CertificateLocalizationService extends AbstractService
         return false;
       }
       
-      StorageKey otherKey = (StorageKey) other;
-      
-      return Objects.equals(username, otherKey.username);
+      return username.equals(((StorageKey) other).getUsername());
     }
     
     @Override
@@ -355,6 +355,7 @@ public class CertificateLocalizationService extends AbstractService
         tmp.add(material);
         usernameToCryptoMaterial.put(key.getUsername(), tmp);
       }
+      futures.remove(key);
       return material;
     }
   }

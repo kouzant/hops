@@ -37,9 +37,6 @@ public class CertificateLocalizationCtx {
   
   public synchronized void setCertificateLocalization
       (CertificateLocalization certificateLocalization) {
-    if (this.certificateLocalization != null) {
-      return;
-    }
     this.certificateLocalization = certificateLocalization;
   }
   
