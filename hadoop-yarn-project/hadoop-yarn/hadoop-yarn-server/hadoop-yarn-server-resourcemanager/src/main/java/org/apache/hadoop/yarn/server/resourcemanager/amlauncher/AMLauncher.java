@@ -150,8 +150,7 @@ public class AMLauncher implements Runnable {
       YarnException {
     try {
       CertificateLocalizationService.CryptoMaterial material = rmContext
-          .getCertificateLocalizationService().getMaterialLocation(user,
-              applicationId);
+          .getCertificateLocalizationService().getMaterialLocation(user);
       request.setKeyStore(material.getKeyStoreMem());
       request.setTrustStore(material.getTrustStoreMem());
     } catch (InterruptedException | ExecutionException e) {
@@ -186,8 +185,7 @@ public class AMLauncher implements Runnable {
         String user = rmContext.getRMApps().get(containerId
             .getApplicationAttemptId().getApplicationId()).getUser();
         try {
-          rmContext.getCertificateLocalizationService().removeMaterial(user,
-              application.getAppAttemptId().getApplicationId().toString());
+          rmContext.getCertificateLocalizationService().removeMaterial(user);
         } catch (InterruptedException | ExecutionException e) {
           throw new IOException(e);
         }

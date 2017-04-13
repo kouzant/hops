@@ -58,8 +58,6 @@ public class CertificateLocalizationService extends AbstractService
   
   private final Map<StorageKey, CryptoMaterial> materialLocation =
       new ConcurrentHashMap<>();
-  private final Map<String, Set<CryptoMaterial>> usernameToCryptoMaterial =
-      new ConcurrentHashMap<>();
   private final Map<StorageKey, Future<CryptoMaterial>> futures =
       new ConcurrentHashMap<>();
   private final ExecutorService execPool = Executors.newFixedThreadPool(5);
@@ -122,7 +120,7 @@ public class CertificateLocalizationService extends AbstractService
   }
   
   @Override
-  public void materializeCertificates(String username, String applicationId,
+  public void materializeCertificates(String username,
       ByteBuffer keyStore, ByteBuffer trustStore) throws IOException {
     StorageKey key = new StorageKey(username);
     CryptoMaterial material = materialLocation.get(key);
@@ -141,7 +139,7 @@ public class CertificateLocalizationService extends AbstractService
   }
   
   @Override
-  public void removeMaterial(String username, String applicationId)
+  public void removeMaterial(String username)
       throws InterruptedException, ExecutionException {
     StorageKey key = new StorageKey(username);
     CryptoMaterial material = null;
@@ -171,25 +169,7 @@ public class CertificateLocalizationService extends AbstractService
   }
   
   @Override
-  // HopSSLSocketFactory has no notion of Application ID
-  public CryptoMaterial getMaterialLocation(
-      String username) throws FileNotFoundException {
-    assert isInState(STATE.STARTED);
-    Set<CryptoMaterial> userMaterial = usernameToCryptoMaterial.get
-        (username);
-    if (userMaterial == null || userMaterial.isEmpty()) {
-      throw new FileNotFoundException("Materialized crypto material for user "
-          + username + " could not be found");
-    }
-  
-    // Get the first available CryptoMaterial for that user
-    Iterator<CryptoMaterial> iter = userMaterial.iterator();
-    return iter.next();
-  }
-  
-  @Override
-  public CryptoMaterial getMaterialLocation(
-      String username, String applicationId)
+  public CryptoMaterial getMaterialLocation(String username)
       throws FileNotFoundException, InterruptedException, ExecutionException {
     StorageKey key = new StorageKey(username);
   
@@ -345,16 +325,6 @@ public class CertificateLocalizationService extends AbstractService
       CryptoMaterial material = new CryptoMaterial(kstoreFile.getAbsolutePath(),
           tstoreFile.getAbsolutePath(), kstore, tstore);
       materialLocation.put(key, material);
-      
-      Set<CryptoMaterial> materialForUser = usernameToCryptoMaterial.get(key
-          .getUsername());
-      if (null != materialForUser) {
-        materialForUser.add(material);
-      } else {
-        Set<CryptoMaterial> tmp = new HashSet<>();
-        tmp.add(material);
-        usernameToCryptoMaterial.put(key.getUsername(), tmp);
-      }
       futures.remove(key);
       return material;
     }
@@ -374,14 +344,6 @@ public class CertificateLocalizationService extends AbstractService
       File appDir = Paths.get(materializeDir.toString(), key.getUsername())
           .toFile();
       FileUtils.deleteQuietly(appDir);
-      Set<CryptoMaterial> userMaterial = usernameToCryptoMaterial.get(key
-          .getUsername());
-      if (null != userMaterial) {
-        userMaterial.remove(material);
-        if (userMaterial.isEmpty()) {
-          usernameToCryptoMaterial.remove(key.getUsername());
-        }
-      }
       materialLocation.remove(key);
     }
   }

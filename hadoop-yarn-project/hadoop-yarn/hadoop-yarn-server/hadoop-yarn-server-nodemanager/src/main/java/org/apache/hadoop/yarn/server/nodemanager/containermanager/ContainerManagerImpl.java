@@ -771,7 +771,7 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     
     context.getCertificateLocalizationService().materializeCertificates(user,
-        appId.toString(), keyStore, trustStore);
+        keyStore, trustStore);
   }
   
   private ContainerManagerApplicationProto buildAppProto(ApplicationId appId,

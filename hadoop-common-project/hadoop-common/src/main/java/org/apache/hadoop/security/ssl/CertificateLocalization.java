@@ -23,16 +23,12 @@ import java.nio.ByteBuffer;
 import java.util.concurrent.ExecutionException;
 
 public interface CertificateLocalization {
-  void materializeCertificates(String username, String applicationId,
+  void materializeCertificates(String username,
       ByteBuffer keyStore, ByteBuffer trustStore) throws IOException;
   
-  void removeMaterial(String username, String applicationId)
+  void removeMaterial(String username)
     throws InterruptedException, ExecutionException;
   
   CertificateLocalizationService.CryptoMaterial getMaterialLocation(String username)
-    throws FileNotFoundException;
-  
-  CertificateLocalizationService.CryptoMaterial getMaterialLocation(String username,
-      String applicationId) throws FileNotFoundException, InterruptedException,
-      ExecutionException;
+      throws FileNotFoundException, InterruptedException, ExecutionException;
 }

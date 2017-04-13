@@ -1247,7 +1247,7 @@ public class RMAppImpl implements RMApp, Recoverable {
             && kstore.capacity() > 0 && tstore.capacity() > 0) {
           try {
             CertificateLocalizationCtx.getInstance().getCertificateLocalization()
-                .removeMaterial(app.getUser(), app.getApplicationId().toString());
+                .removeMaterial(app.getUser());
           } catch (InterruptedException | ExecutionException ex) {
             LOG.error("Error while deleting cryptographic material for user " +
                 app.getUser(), ex);

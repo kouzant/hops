@@ -571,7 +571,7 @@ public class ClientRMService extends AbstractService implements
         }
         
         rmContext.getCertificateLocalizationService().materializeCertificates
-            (username, applicationId.toString(), kstore, tstore);
+            (username, kstore, tstore);
       } catch (IOException ex) {
         LOG.error(ex, ex);
         RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,

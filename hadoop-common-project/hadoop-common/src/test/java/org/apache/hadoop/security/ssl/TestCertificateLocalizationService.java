@@ -85,11 +85,10 @@ public class TestCertificateLocalizationService {
     String username = "Dr.Who";
     String applicationId = "tardis";
     
-    certLocSrv.materializeCertificates(username, applicationId,
-        bfk, bft);
+    certLocSrv.materializeCertificates(username, bfk, bft);
   
     CertificateLocalizationService.CryptoMaterial cryptoMaterial = certLocSrv
-        .getMaterialLocation(username, applicationId);
+        .getMaterialLocation(username);
     String materializeDir = certLocSrv.getMaterializeDirectory().toString();
     String expectedKPath = Paths.get(materializeDir, username, username
         + "__kstore.jks").toString();
@@ -103,7 +102,7 @@ public class TestCertificateLocalizationService {
     assertEquals(expectedKPath, cryptoMaterial.getKeyStoreLocation());
     assertEquals(expectedTPath, cryptoMaterial.getTrustStoreLocation());
     
-    certLocSrv.removeMaterial(username, applicationId);
+    certLocSrv.removeMaterial(username);
     File kfd = new File(expectedKPath);
     File tfd = new File(expectedTPath);
   
@@ -122,11 +121,10 @@ public class TestCertificateLocalizationService {
     String username = "Dr.Who";
     String applicationId = "tardis";
   
-    certLocSrv.materializeCertificates(username, applicationId,
-        bfk, bft);
+    certLocSrv.materializeCertificates(username, bfk, bft);
   
     CertificateLocalizationService.CryptoMaterial cryptoMaterial = certLocSrv
-        .getMaterialLocation(username, applicationId);
+        .getMaterialLocation(username);
     String materializeDir = certLocSrv.getMaterializeDirectory().toString();
     String expectedKPath = Paths.get(materializeDir, username, username
         + "__kstore.jks").toString();
@@ -142,13 +140,13 @@ public class TestCertificateLocalizationService {
     
     // Make a second materialize certificates call which happen when a second
     // application is launched
-    certLocSrv.materializeCertificates(username, applicationId, bfk, bft);
-    cryptoMaterial = certLocSrv.getMaterialLocation(username, applicationId);
+    certLocSrv.materializeCertificates(username, bfk, bft);
+    cryptoMaterial = certLocSrv.getMaterialLocation(username);
     assertEquals(2, cryptoMaterial.getRequestedApplications());
     
-    certLocSrv.removeMaterial(username, applicationId);
+    certLocSrv.removeMaterial(username);
     TimeUnit.MILLISECONDS.sleep(10);
-    cryptoMaterial = certLocSrv.getMaterialLocation(username, applicationId);
+    cryptoMaterial = certLocSrv.getMaterialLocation(username);
     assertEquals(1, cryptoMaterial.getRequestedApplications());
     assertFalse(cryptoMaterial.isSafeToRemove());
   
@@ -157,11 +155,11 @@ public class TestCertificateLocalizationService {
     assertTrue(kfd.exists());
     assertTrue(tfd.exists());
   
-    certLocSrv.removeMaterial(username, applicationId);
+    certLocSrv.removeMaterial(username);
     TimeUnit.MILLISECONDS.sleep(10);
     
     rule.expect(FileNotFoundException.class);
-    certLocSrv.getMaterialLocation(username, applicationId);
+    certLocSrv.getMaterialLocation(username);
     
     assertFalse(kfd.exists());
     assertFalse(tfd.exists());
@@ -170,6 +168,6 @@ public class TestCertificateLocalizationService {
   @Test
   public void testMaterialNotFound() throws Exception {
     rule.expect(FileNotFoundException.class);
-    certLocSrv.getMaterialLocation("username", "applicationId");
+    certLocSrv.getMaterialLocation("username");
   }
 }
