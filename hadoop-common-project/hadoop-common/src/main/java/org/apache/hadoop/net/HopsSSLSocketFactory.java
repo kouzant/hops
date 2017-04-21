@@ -58,7 +58,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     
     // TODO: Read this from the configuration file
     private final String CERT_MATERIALIZED_DIR = "/srv/hops/domains/domain1/kafkacerts";
-    private final String SERVICE_CERT_DIR = "/tmp";
+    private final String SERVICE_CERT_DIR = "/srv/hops/kagent-certs/keystores";
     
     private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
 
