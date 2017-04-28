@@ -327,8 +327,9 @@ public class YarnClientImpl extends YarnClient {
     String username = UserGroupInformation.getCurrentUser().getUserName();
     
     ByteBuffer[] material = new ByteBuffer[2];
-    Path kStore = Paths.get("/tmp", username + "__kstore.jks");
-    Path tStore = Paths.get("/tmp", username + "__tstore.jks");
+    Path kStore = Paths.get("/srv/hops/domains/domain1/kafkacerts",
+        username + "__kstore.jks");
+    Path tStore = Paths.get("/srv/hops/domains/domain1/kafkacerts", username + "__tstore.jks");
     
     if (!kStore.toFile().exists() || !tStore.toFile().exists()) {
       throw new IOException("Crypto material for user " + username

@@ -59,7 +59,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     // TODO: Read this from the configuration file
     private final String CERT_MATERIALIZED_DIR = "/srv/hops/domains/domain1/kafkacerts";
     private final String SERVICE_CERT_DIR = "/srv/hops/kagent-certs/keystores";
-    
+    // Hopsworks project specific username pattern - projectName__username
+    public static final String USERNAME_PATTERN = "\\w*__\\w*";
+  
     private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
 
     private enum PropType {
@@ -103,9 +105,6 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
 
     private Configuration conf;
     private String keyStoreFilePath;
-    
-    // Hopsworks project specific username pattern - projectName__username
-    private final String userPattern = "\\w*__\\w*";
 
     public HopsSSLSocketFactory() {
     }
@@ -175,7 +174,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
           } else {
             LOG.error("<Kavouri> I DID NOT find kstore in localized " +
                 "directory");
-            if (username.matches(userPattern) ||
+            if (username.matches(USERNAME_PATTERN) ||
                 !username.equals("glassfish")) {
               // It's a normal user
               LOG.error("It's a normal user");
@@ -204,9 +203,6 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                     // Client from other services RM or NM is trying to
                     // create a SecureSocket. Crypto material is already
                     // materialized with the CertificateLocalizerDeprecated
-                    /*CertificateLocalizerDeprecated.CryptoMaterial material =
-                        CertificateLocalizerDeprecated.getInstance()
-                            .getMaterialLocation(username);*/
                     if (null != certificateLocalization) {
                       CertificateLocalizationService.CryptoMaterial material =
                           certificateLocalization.getMaterialLocation(username);
