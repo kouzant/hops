@@ -812,7 +812,7 @@ public abstract class Server {
         count = -1; //so that the (count < 0) block is executed
       }
       if (count < 0) {
-        LOG.error(">>> Closing connection: " + c.getHostAddress() + ":" + c.remotePort);
+        //LOG.error(">>> Closing connection: " + c.getHostAddress() + ":" + c.remotePort);
         closeConnection(c);
         c = null;
       }

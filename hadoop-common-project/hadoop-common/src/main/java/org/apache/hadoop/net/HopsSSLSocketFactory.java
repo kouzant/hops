@@ -183,14 +183,14 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
       
                 // Client from HopsWorks is trying to create a SecureSocket
                 // The crypto material should be in the CERT_MATERIALIZED_DIR
-                Path pathToCert = Paths.get(CERT_MATERIALIZED_DIR, username);
-                File fd = Paths.get(pathToCert.toString(), username +
+                //Path pathToCert = Paths.get(CERT_MATERIALIZED_DIR, username);
+                File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
                     KEYSTORE_SUFFIX).toFile();
                 //if (fd.exists() && (isHopsworks || isZeppelin)) {
                 if (fd.exists()) {
                   LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
                       + " called from HopsWorks");
-                  configureTlsClient(pathToCert.toString(), username, conf);
+                  configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);
                 } else {
                   // Fallback to /tmp directory
                   // In the future certificates should not exist there
