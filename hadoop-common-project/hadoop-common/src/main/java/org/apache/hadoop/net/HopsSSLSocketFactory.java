@@ -30,12 +30,10 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import java.io.File;
 import java.io.IOException;
-import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.UnknownHostException;
-import java.nio.file.Path;
 import java.nio.file.Paths;
 
 public class HopsSSLSocketFactory extends SocketFactory implements Configurable {
@@ -56,9 +54,11 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     private static final String SOCKET_FACTORY_NAME = HopsSSLSocketFactory
         .class.getCanonicalName();
     
-    // TODO: Read this from the configuration file
-    private final String CERT_MATERIALIZED_DIR = "/srv/hops/domains/domain1/kafkacerts";
-    private final String SERVICE_CERT_DIR = "/srv/hops/kagent-certs/keystores";
+    private static final String SERVICE_CERTS_DIR_DEFAULT =
+        "/srv/hops/kagent-certs/keystores";
+    private static final String CLIENT_MATERIALIZE_DIR_DEFAULT =
+        "/srv/hops/domains/domain1/kafkacerts";
+    
     // Hopsworks project specific username pattern - projectName__username
     public static final String USERNAME_PATTERN = "\\w*__\\w*";
   
@@ -78,7 +78,11 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
         TRUST_STORE_PASSWORD_KEY("client.rpc.ssl.truststore.password",
             TRUST_STORE_PASSWORD_DEFAULT, PropType.LITERAL),
         SOCKET_ENABLED_PROTOCOL("client.rpc.ssl.enabled.protocol",
-            SOCKET_ENABLED_PROTOCOL_DEFAULT, PropType.LITERAL);
+            SOCKET_ENABLED_PROTOCOL_DEFAULT, PropType.LITERAL),
+        SERVICE_CERTS_DIR("hops.service.certificates.directory",
+            SERVICE_CERTS_DIR_DEFAULT, PropType.LITERAL),
+        CLIENT_MATERIALIZE_DIR("client.materialize.directory",
+            CLIENT_MATERIALIZE_DIR_DEFAULT, PropType.LITERAL);
 
         private final String value;
         private final String defaultValue;
@@ -130,37 +134,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
             if (LOG.isDebugEnabled()) {
                 LOG.debug("Current user's username is: " + username);
             }
-            
-          String pid = ManagementFactory.getRuntimeMXBean().getName();
-          LOG.error("Parent pid is: " + pid);
-  
-          StackTraceElement[] stackTraceElements = Thread.currentThread()
-              .getStackTrace();
-  
-          boolean isHopsworks = false;
-          boolean isZeppelin = false;
-          for (StackTraceElement elem : stackTraceElements) {
-            if (elem.toString().contains("zeppelin")) {
-              isZeppelin = true;
-              break;
-            }
-            if (elem.toString().contains("hopsworks")) {
-              isHopsworks = true;
-              break;
-            }
-          }
           
-          if (isHopsworks) {
-            LOG.error("<kavouri> It's HopsWorks");
-          } else {
-            LOG.error("<Kavouri> It's NOT HopsWorks");
-          }
-          
-          if (isZeppelin) {
-            LOG.error("<kavouri> It's Zeppelin");
-          } else {
-            LOG.error("<Kavouri> It's NOT Zeppelin");
-          }
           // Application running in a container is trying to create a
           // SecureSocket. The crypto material should have already been
           // localized.
@@ -180,17 +154,20 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
               LOG.error("It's a normal user");
               if (!isCryptoMaterialSet(conf, username)
                   || forceConfigure) {
-      
+  
+                String hopsworksMaterializeDir = conf.get(CryptoKeys
+                    .CLIENT_MATERIALIZE_DIR.getValue(), CryptoKeys
+                    .CLIENT_MATERIALIZE_DIR.getDefaultValue());
+                
                 // Client from HopsWorks is trying to create a SecureSocket
                 // The crypto material should be in the CERT_MATERIALIZED_DIR
                 //Path pathToCert = Paths.get(CERT_MATERIALIZED_DIR, username);
-                File fd = Paths.get(CERT_MATERIALIZED_DIR, username +
+                File fd = Paths.get(hopsworksMaterializeDir, username +
                     KEYSTORE_SUFFIX).toFile();
-                //if (fd.exists() && (isHopsworks || isZeppelin)) {
                 if (fd.exists()) {
-                  LOG.error("CryptoMaterial exist in " + CERT_MATERIALIZED_DIR
+                  LOG.error("CryptoMaterial exist in " + hopsworksMaterializeDir
                       + " called from HopsWorks");
-                  configureTlsClient(CERT_MATERIALIZED_DIR, username, conf);
+                  configureTlsClient(hopsworksMaterializeDir, username, conf);
                 } else {
                   // Fallback to /tmp directory
                   // In the future certificates should not exist there
@@ -225,21 +202,19 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
               if ((!isCryptoMaterialSet(conf, username)
                   && !isHostnameInCryptoMaterial(conf, localHostname))
                   || forceConfigure) {
+                
+                String serviceCertificateDir = conf.get(CryptoKeys
+                    .SERVICE_CERTS_DIR.getValue(), CryptoKeys
+                    .SERVICE_CERTS_DIR.getDefaultValue());
+                
                 // First check if the hostname keystore exists
                 File fd = new File(
-                    Paths.get(SERVICE_CERT_DIR, localHostname +
+                    Paths.get(serviceCertificateDir, localHostname +
                         KEYSTORE_SUFFIX).toString());
                 if (fd.exists()) {
                   LOG.error("Hostname keystore exists!");
-                  configureTlsClient(SERVICE_CERT_DIR,
+                  configureTlsClient(serviceCertificateDir,
                       localHostname, conf);
-                } else {
-                  LOG.error(
-                      "Hostname keystore does not exist, falling " +
-                          "back to superuser");
-                  configureTlsClient(CERT_MATERIALIZED_DIR,
-                      username,
-                      conf);
                 }
               } else {
                 LOG.error(

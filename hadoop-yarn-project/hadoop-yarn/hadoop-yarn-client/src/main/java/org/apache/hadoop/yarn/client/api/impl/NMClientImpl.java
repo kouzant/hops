@@ -237,19 +237,10 @@ public class NMClientImpl extends NMClient {
     }
   }
   
-  // TODO(Antonis): Remove hard-coded path
   private void setupCryptoMaterial(StartContainersRequest request, String user)
       throws IOException {
     Path kStorePath = Paths.get("k_certificate");
     Path tStorePath = Paths.get("t_certificate");
-    
-    // Zeppelin does not add the crypto material as local resources.
-    // This fix assumes that the certificates exist in the machine that
-    // Zeppelin is running.
-    if (!kStorePath.toFile().exists() || !tStorePath.toFile().exists()) {
-      kStorePath = Paths.get("/tmp", user + "__kstore.jks");
-      tStorePath = Paths.get("/tmp", user + "__tstore.jks");
-    }
     
     ByteBuffer kStore = ByteBuffer.wrap(Files.readAllBytes(kStorePath));
     ByteBuffer tStore = ByteBuffer.wrap(Files.readAllBytes(tStorePath));

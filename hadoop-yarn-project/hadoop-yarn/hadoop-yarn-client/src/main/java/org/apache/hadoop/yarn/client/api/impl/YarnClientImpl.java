@@ -42,6 +42,7 @@ import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.ipc.RPC;
+import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
@@ -236,7 +237,6 @@ public class YarnClientImpl extends YarnClient {
   }
 
   @Override
-  // TODO(Antonis) Remove hardcoded paths
   public ApplicationId
       submitApplication(ApplicationSubmissionContext appContext)
           throws YarnException, IOException {
@@ -322,18 +322,21 @@ public class YarnClientImpl extends YarnClient {
     return applicationId;
   }
   
-  // TODO(Antonis): Remove hard-coded stuff
   private ByteBuffer[] getCryptoMaterial() throws IOException {
     String username = UserGroupInformation.getCurrentUser().getUserName();
     
+    String clientMaterializeDir = getConfig().get(HopsSSLSocketFactory
+        .CryptoKeys.CLIENT_MATERIALIZE_DIR.getValue(),
+        HopsSSLSocketFactory.CryptoKeys.CLIENT_MATERIALIZE_DIR
+            .getDefaultValue());
+    
     ByteBuffer[] material = new ByteBuffer[2];
-    Path kStore = Paths.get("/srv/hops/domains/domain1/kafkacerts",
-        username + "__kstore.jks");
-    Path tStore = Paths.get("/srv/hops/domains/domain1/kafkacerts", username + "__tstore.jks");
+    Path kStore = Paths.get(clientMaterializeDir, username + "__kstore.jks");
+    Path tStore = Paths.get(clientMaterializeDir, username + "__tstore.jks");
     
     if (!kStore.toFile().exists() || !tStore.toFile().exists()) {
       throw new IOException("Crypto material for user " + username
-          + " could not be found in /tmp/");
+          + " could not be found in " + clientMaterializeDir);
     }
     
     material[0] = ByteBuffer.wrap(Files.readAllBytes(kStore));
