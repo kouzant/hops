@@ -119,9 +119,8 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     }
     
     // TODO(Antonis) Change logging severity
-    // TODO(Antonis) Remove Hopsworks testing
     public void configureCryptoMaterial(CertificateLocalization
-        certificateLocalization) {
+        certificateLocalization, String proxySuperuser) {
         try {
             String username =
                 UserGroupInformation.getCurrentUser().getUserName();
@@ -149,7 +148,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
             LOG.error("<Kavouri> I DID NOT find kstore in localized " +
                 "directory");
             if (username.matches(USERNAME_PATTERN) ||
-                !username.equals("glassfish")) {
+                !username.equals(proxySuperuser)) {
               // It's a normal user
               LOG.error("It's a normal user");
               if (!isCryptoMaterialSet(conf, username)

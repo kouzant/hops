@@ -56,6 +56,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.ipc.VersionedProtocol;
 import org.apache.hadoop.security.SecurityUtil;
+import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
 import org.apache.hadoop.util.ReflectionUtils;
 
@@ -133,8 +134,11 @@ public class NetUtils {
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)
         && (factory instanceof HopsSSLSocketFactory)) {
-      ((HopsSSLSocketFactory) factory).configureCryptoMaterial(
-          CertificateLocalizationCtx.getInstance().getCertificateLocalization());
+      CertificateLocalizationCtx certLocCtx = CertificateLocalizationCtx
+          .getInstance();
+      certLocCtx.setProxySuperuser(conf);
+      ((HopsSSLSocketFactory) factory).configureCryptoMaterial(certLocCtx.
+          getCertificateLocalization(), certLocCtx.getProxySuperuser());
     }
   }
   
