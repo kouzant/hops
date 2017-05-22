@@ -15,9 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.security.ssl;
+package org.apache.hadoop.yarn.server.security;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.security.ssl.CryptoMaterial;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -87,7 +88,7 @@ public class TestCertificateLocalizationService {
     
     certLocSrv.materializeCertificates(username, bfk, bft);
   
-    CertificateLocalizationService.CryptoMaterial cryptoMaterial = certLocSrv
+    CryptoMaterial cryptoMaterial = certLocSrv
         .getMaterialLocation(username);
     String materializeDir = certLocSrv.getMaterializeDirectory().toString();
     String expectedKPath = Paths.get(materializeDir, username, username
@@ -123,7 +124,7 @@ public class TestCertificateLocalizationService {
   
     certLocSrv.materializeCertificates(username, bfk, bft);
   
-    CertificateLocalizationService.CryptoMaterial cryptoMaterial = certLocSrv
+    CryptoMaterial cryptoMaterial = certLocSrv
         .getMaterialLocation(username);
     String materializeDir = certLocSrv.getMaterializeDirectory().toString();
     String expectedKPath = Paths.get(materializeDir, username, username

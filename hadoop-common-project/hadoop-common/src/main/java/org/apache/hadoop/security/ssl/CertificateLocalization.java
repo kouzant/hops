@@ -29,6 +29,6 @@ public interface CertificateLocalization {
   void removeMaterial(String username)
     throws InterruptedException, ExecutionException;
   
-  CertificateLocalizationService.CryptoMaterial getMaterialLocation(String username)
+  CryptoMaterial getMaterialLocation(String username)
       throws FileNotFoundException, InterruptedException, ExecutionException;
 }

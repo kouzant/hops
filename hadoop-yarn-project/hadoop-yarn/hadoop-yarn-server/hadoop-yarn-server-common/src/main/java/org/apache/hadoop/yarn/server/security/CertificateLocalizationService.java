@@ -15,12 +15,13 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.security.ssl;
+package org.apache.hadoop.yarn.server.security;
 
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.net.HopsSSLSocketFactory;
+import org.apache.hadoop.security.ssl.CertificateLocalization;
+import org.apache.hadoop.security.ssl.CryptoMaterial;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -33,11 +34,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.HashSet;
-import java.util.Iterator;
 import java.util.Map;
-import java.util.Objects;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
@@ -192,72 +189,7 @@ public class CertificateLocalizationService extends AbstractService
     return material;
   }
   
-  public class CryptoMaterial {
-    private final String keyStoreLocation;
-    private final int keyStoreSize;
-    private final String trustStoreLocation;
-    private final int trustStoreSize;
-    private final ByteBuffer keyStoreMem;
-    private final ByteBuffer trustStoreMem;
   
-    // Number of applications using the same crypto material
-    // The same user might have multiple applications running
-    // at the same time
-    private int requestedApplications;
-    
-    public CryptoMaterial(String keyStoreLocation, String trustStoreLocation,
-        ByteBuffer kStore, ByteBuffer tstore) {
-      this.keyStoreLocation = keyStoreLocation;
-      this.keyStoreSize = kStore.capacity();
-      this.trustStoreLocation = trustStoreLocation;
-      this.trustStoreSize = tstore.capacity();
-      
-      this.keyStoreMem = kStore.asReadOnlyBuffer();
-      this.trustStoreMem = tstore.asReadOnlyBuffer();
-      
-      requestedApplications = 1;
-    }
-    
-    public String getKeyStoreLocation() {
-      return keyStoreLocation;
-    }
-    
-    public int getKeyStoreSize() {
-      return keyStoreSize;
-    }
-    
-    public String getTrustStoreLocation() {
-      return trustStoreLocation;
-    }
-    
-    public int getTrustStoreSize() {
-      return trustStoreSize;
-    }
-    
-    public ByteBuffer getKeyStoreMem() {
-      return keyStoreMem;
-    }
-    
-    public ByteBuffer getTrustStoreMem() {
-      return trustStoreMem;
-    }
-  
-    public int getRequestedApplications() {
-      return requestedApplications;
-    }
-  
-    public void incrementRequestedApplications() {
-      requestedApplications++;
-    }
-  
-    public void decrementRequestedApplications() {
-      requestedApplications--;
-    }
-  
-    public boolean isSafeToRemove() {
-      return requestedApplications == 0;
-    }
-  }
   
   private class StorageKey {
     private final String username;

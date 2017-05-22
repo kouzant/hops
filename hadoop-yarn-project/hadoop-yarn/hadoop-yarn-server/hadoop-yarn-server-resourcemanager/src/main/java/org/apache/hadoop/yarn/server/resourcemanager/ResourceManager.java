@@ -34,7 +34,7 @@ import org.apache.hadoop.security.*;
 import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHandler;
 import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
-import org.apache.hadoop.security.ssl.CertificateLocalizationService;
+import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.service.Service;

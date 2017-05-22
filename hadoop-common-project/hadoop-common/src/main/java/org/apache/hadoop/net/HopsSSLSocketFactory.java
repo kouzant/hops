@@ -23,7 +23,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.RpcSSLEngineAbstr;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.ssl.CertificateLocalization;
-import org.apache.hadoop.security.ssl.CertificateLocalizationService;
+import org.apache.hadoop.security.ssl.CryptoMaterial;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLContext;
@@ -181,7 +181,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                     // create a SecureSocket. Crypto material is already
                     // materialized with the CertificateLocalizerDeprecated
                     if (null != certificateLocalization) {
-                      CertificateLocalizationService.CryptoMaterial material =
+                      CryptoMaterial material =
                           certificateLocalization.getMaterialLocation(username);
   
                       setTlsConfiguration(material.getKeyStoreLocation(),
