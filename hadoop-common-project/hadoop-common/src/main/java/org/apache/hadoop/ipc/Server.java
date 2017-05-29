@@ -812,7 +812,6 @@ public abstract class Server {
         count = -1; //so that the (count < 0) block is executed
       }
       if (count < 0) {
-        //LOG.error(">>> Closing connection: " + c.getHostAddress() + ":" + c.remotePort);
         closeConnection(c);
         c = null;
       }
@@ -1814,8 +1813,10 @@ public abstract class Server {
       }
       try {
         String user = protocolUser.getUserName();
-        LOG.error("<Kavouri> Authenticating user: " + user + " for protocol "
-            + protocolName + " from " + hostAddress + ":" + remotePort);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Authenticating user: " + user + " for protocol "
+              + protocolName + " from " + hostAddress + ":" + remotePort);
+        }
         
         if (LOG.isDebugEnabled()) {
           LOG.debug("Authentication via certificate CN");
@@ -1832,18 +1833,12 @@ public abstract class Server {
         }
         String cn = cnTokens[1];
 
-        // TODO: Only for testing
-        if (protocolUser.getUserName() != null
-                && !protocolUser.getUserName().equals(cn)
-                && cn.equals(proxySuperuser)) {
-          LOG.error("Server at: " + port + "*****>>>>>> ABUSING SUPERUSER <<<<<<<<****** user is: " + protocolUser.getUserName()
-                  + " for protocol: " + protocolName);
-        }
-
         // If the CN of the certificate is equals to Hops superuser,
         // let it go through
         if (cn.equals(proxySuperuser)) {
-          LOG.error("SSL authentication: CN is superuser");
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("SSL authentication: CN is superuser");
+          }
           return;
         }
 
@@ -1852,7 +1847,9 @@ public abstract class Server {
         // same as the RPC username, let it go through as well
         if (protocolUser.getUserName() != null
                 && protocolUser.getUserName().equals(cn)) {
-          LOG.error("SSL authentication: CN equals the RPC username");
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("SSL authentication: CN equals the RPC username");
+          }
           return;
         }
 
@@ -1861,7 +1858,10 @@ public abstract class Server {
         // Assume that reverse DNS will succeed only for machines that we
         // trust
           if (trustedHostnames.contains(cn)) {
-            LOG.error("SSL authentication: CN is hostname and hostname already authenticated");
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("SSL authentication: CN is hostname and hostname " +
+                  "already authenticated");
+            }
             return;
           }
 
@@ -1869,7 +1869,10 @@ public abstract class Server {
             String remoteHostname = InetAddress.getByName(cn).getHostName();
             if (remoteHostname.equals(cn)) {
               trustedHostnames.add(cn);
-              LOG.error("SSL authentication: CN is hostname but just authenticated");
+              if (LOG.isDebugEnabled()) {
+                LOG.debug("SSL authentication: CN is hostname but just " +
+                        "authenticated");
+              }
               return;
             }
           } catch (UnknownHostException ex) {

@@ -86,7 +86,6 @@ public class ServerRpcSSLEngineImpl extends RpcSSLEngineAbstr {
         throws IOException {
         int netRead = channel.read(clientNetBuffer);
         if (netRead == -1) {
-            LOG.error(">>>> I've read nothing returning -1");
             return -1;
         }
         

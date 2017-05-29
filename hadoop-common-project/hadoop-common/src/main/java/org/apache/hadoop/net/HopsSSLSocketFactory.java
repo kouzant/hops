@@ -117,8 +117,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     public void setConf(Configuration conf) {
       this.conf = conf;
     }
-    
-    // TODO(Antonis) Change logging severity
+  
     public void configureCryptoMaterial(CertificateLocalization
         certificateLocalization, String proxySuperuser) {
         try {
@@ -127,11 +126,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
             String localHostname = NetUtils.getLocalHostname();
             boolean forceConfigure = conf.getBoolean(FORCE_CONFIGURE,
                 DEFAULT_FORCE_CONFIGURE);
-    
-            LOG.error("Current user's username is: " + username);
-            LOG.error("Hostname of machine is: " + localHostname);
+          
             if (LOG.isDebugEnabled()) {
-                LOG.debug("Current user's username is: " + username);
+              LOG.debug("Current user: " + username + " - Hostname: " + localHostname);
             }
           
           // Application running in a container is trying to create a
@@ -141,16 +138,15 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
           // trustStore -> t_certificate
           File localized = new File("k_certificate");
           if (localized.exists()) {
-            LOG.error("<Kavouri> I found kstore in localized directory");
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("Crypto material found in NM localized directory");
+            }
             setTlsConfiguration("k_certificate",
                 "t_certificate", conf);
           } else {
-            LOG.error("<Kavouri> I DID NOT find kstore in localized " +
-                "directory");
             if (username.matches(USERNAME_PATTERN) ||
                 !username.equals(proxySuperuser)) {
               // It's a normal user
-              LOG.error("It's a normal user");
               if (!isCryptoMaterialSet(conf, username)
                   || forceConfigure) {
   
@@ -164,8 +160,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                 File fd = Paths.get(hopsworksMaterializeDir, username +
                     KEYSTORE_SUFFIX).toFile();
                 if (fd.exists()) {
-                  LOG.error("CryptoMaterial exist in " + hopsworksMaterializeDir
-                      + " called from HopsWorks");
+                  if (LOG.isDebugEnabled()) {
+                    LOG.debug("Crypto material exists found in " + hopsworksMaterializeDir);
+                  }
                   configureTlsClient(hopsworksMaterializeDir, username, conf);
                 } else {
                   // Fallback to /tmp directory
@@ -173,7 +170,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                   fd = Paths.get("/tmp", username + KEYSTORE_SUFFIX)
                       .toFile();
                   if (fd.exists()) {
-                    LOG.error("<Kavouri> Cryptomaterial exist in /tmp");
+                    if (LOG.isDebugEnabled()) {
+                      LOG.debug("Crypto material exists in /tmp");
+                    }
                     configureTlsClient("/tmp", username, conf);
                   } else {
                     // Client from other services RM or NM is trying to
@@ -183,21 +182,21 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                       CryptoMaterial material =
                           certificateLocalization.getMaterialLocation(username);
   
+                      if (LOG.isDebugEnabled()) {
+                        LOG.debug("Gotten crypto material from the " +
+                            "CertificateLocalizationService");
+                      }
                       setTlsConfiguration(material.getKeyStoreLocation(),
                           material.getTrustStoreLocation(), conf);
-                      LOG.error("Getting Crypto material from the " +
-                          "CertificateLocalizationService");
                     }
                   }
                 }
-              } else {
-                LOG.error(
-                    "Crypto material for normal user already " +
-                        "set");
               }
             } else {
               // It's a superuser
-              LOG.error("It's superuser - force configure: " + forceConfigure);
+              if (LOG.isDebugEnabled()) {
+                LOG.debug("It's superuser - force configure: " + forceConfigure);
+              }
               if ((!isCryptoMaterialSet(conf, username)
                   && !isHostnameInCryptoMaterial(conf, localHostname))
                   || forceConfigure) {
@@ -211,13 +210,12 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                     Paths.get(serviceCertificateDir, localHostname +
                         KEYSTORE_SUFFIX).toString());
                 if (fd.exists()) {
-                  LOG.error("Hostname keystore exists!");
+                  if (LOG.isDebugEnabled()) {
+                    LOG.debug("Found crypto material with the hostname");
+                  }
                   configureTlsClient(serviceCertificateDir,
                       localHostname, conf);
                 }
-              } else {
-                LOG.error(
-                    "Crypto material for superuser already set");
               }
             }
           }
@@ -231,7 +229,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
         // keystore filepath as well
         this.keyStoreFilePath = conf.get(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(),
                 KEY_STORE_FILEPATH_DEFAULT);
-        LOG.error("<Kavouri> keystore used: " + keyStoreFilePath);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Finally, the keystore that is used is: " + keyStoreFilePath);
+        }
         conf.setBoolean(FORCE_CONFIGURE, false);
     }
     
