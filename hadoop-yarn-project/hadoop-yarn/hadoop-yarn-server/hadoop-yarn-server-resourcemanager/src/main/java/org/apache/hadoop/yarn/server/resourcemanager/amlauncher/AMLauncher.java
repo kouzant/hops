@@ -37,7 +37,8 @@ import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.ssl.CertificateLocalizationService;
+import org.apache.hadoop.security.ssl.CryptoMaterial;
+import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.util.StringUtils;
@@ -149,7 +150,7 @@ public class AMLauncher implements Runnable {
       String user, String applicationId) throws FileNotFoundException,
       YarnException {
     try {
-      CertificateLocalizationService.CryptoMaterial material = rmContext
+      CryptoMaterial material = rmContext
           .getCertificateLocalizationService().getMaterialLocation(user);
       request.setKeyStore(material.getKeyStoreMem());
       request.setTrustStore(material.getTrustStoreMem());
