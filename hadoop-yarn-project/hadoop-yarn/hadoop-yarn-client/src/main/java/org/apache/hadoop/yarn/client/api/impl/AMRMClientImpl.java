@@ -121,16 +121,24 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
   /**
    * Class compares Resource by memory then cpu in reverse order
    */
-  class ResourceReverseMemoryThenCpuComparator implements Comparator<Resource> {
+  class ResourceReverseMemoryThenCpuThenGpuComparator implements Comparator<Resource> {
     @Override
     public int compare(Resource arg0, Resource arg1) {
       long mem0 = arg0.getMemorySize();
       long mem1 = arg1.getMemorySize();
       long cpu0 = arg0.getVirtualCores();
       long cpu1 = arg1.getVirtualCores();
+      int gpu0 = arg0.getGPUs();
+      int gpu1 = arg1.getGPUs();
       if(mem0 == mem1) {
         if(cpu0 == cpu1) {
-          return 0;
+          if(gpu0 == gpu1) {
+            return 0;
+          }
+          if(gpu0 < gpu1) {
+            return 1;
+          }
+          return -1;
         }
         if(cpu0 < cpu1) {
           return 1;
@@ -149,8 +157,10 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
     long mem1 = arg1.getMemorySize();
     long cpu0 = arg0.getVirtualCores();
     long cpu1 = arg1.getVirtualCores();
+    int gpu0 = arg0.getGPUs();
+    int gpu1 = arg1.getGPUs();
     
-    return (mem0 <= mem1 && cpu0 <= cpu1);
+    return (mem0 <= mem1 && cpu0 <= cpu1 && gpu0 <= gpu1);
   }
   
   //Key -> Priority
@@ -775,7 +785,7 @@ public class AMRMClientImpl<T extends ContainerRequest> extends AMRMClient<T> {
     if (reqMap == null) {
       // capabilities are stored in reverse sorted order. smallest last.
       reqMap = new TreeMap<Resource, ResourceRequestInfo>(
-          new ResourceReverseMemoryThenCpuComparator());
+          new ResourceReverseMemoryThenCpuThenGpuComparator());
       remoteRequests.put(resourceName, reqMap);
     }
     ResourceRequestInfo resourceRequestInfo = reqMap.get(capability);

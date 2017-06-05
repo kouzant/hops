@@ -55,6 +55,9 @@ public abstract class Resource implements Comparable<Resource> {
 
   @Public
   @Stable
+  /**
+   * Backwards compatibility without GPUs
+   */
   public static Resource newInstance(int memory, int vCores) {
     Resource resource = Records.newRecord(Resource.class);
     resource.setMemorySize(memory);
@@ -68,6 +71,17 @@ public abstract class Resource implements Comparable<Resource> {
     Resource resource = Records.newRecord(Resource.class);
     resource.setMemorySize(memory);
     resource.setVirtualCores(vCores);
+    resource.setGPUs(0);
+    return resource;
+  }
+  
+  @Public
+  @Stable
+  public static Resource newInstance(int memory, int vCores, int gpus) {
+    Resource resource = Records.newRecord(Resource.class);
+    resource.setMemory(memory);
+    resource.setVirtualCores(vCores);
+    resource.setGPUs(gpus);
     return resource;
   }
 
@@ -140,6 +154,16 @@ public abstract class Resource implements Comparable<Resource> {
   @Public
   @Evolving
   public abstract void setVirtualCores(int vCores);
+  
+  @Public
+  @Evolving
+  public abstract void setGPUs(int gpus);
+  
+  @Public
+  @Evolving
+  public abstract int getGPUs();
+  
+  
 
   @Override
   public int hashCode() {
@@ -148,6 +172,7 @@ public abstract class Resource implements Comparable<Resource> {
     int result = (int) (939769357
         + getMemorySize()); // prime * result = 939769357 initially
     result = prime * result + getVirtualCores();
+    result = prime * result + getGPUs();
     return result;
   }
 
@@ -161,7 +186,8 @@ public abstract class Resource implements Comparable<Resource> {
       return false;
     Resource other = (Resource) obj;
     if (getMemorySize() != other.getMemorySize() ||
-        getVirtualCores() != other.getVirtualCores()) {
+        getVirtualCores() != other.getVirtualCores()||
+        getGPUs() != other.getGPUs()) {
       return false;
     }
     return true;
@@ -169,6 +195,7 @@ public abstract class Resource implements Comparable<Resource> {
 
   @Override
   public String toString() {
-    return "<memory:" + getMemorySize() + ", vCores:" + getVirtualCores() + ">";
+    return "<memory:" + getMemorySize() + ", vCores:" + getVirtualCores() + ">"+
+        "gpus:" + getGPUs() + ">";
   }
 }

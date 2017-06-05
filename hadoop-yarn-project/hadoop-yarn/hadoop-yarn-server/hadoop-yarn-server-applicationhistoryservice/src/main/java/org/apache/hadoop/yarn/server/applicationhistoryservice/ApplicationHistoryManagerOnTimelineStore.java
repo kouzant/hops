@@ -334,13 +334,17 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
             ApplicationMetricsConstants.APP_CPU_METRICS);
         long memorySeconds = parseLong(entityInfo,
             ApplicationMetricsConstants.APP_MEM_METRICS);
+        long gpuseconds=Long.parseLong(entityInfo.get(
+            ApplicationMetricsConstants.APP_GPU_METRICS).toString());
         long preemptedMemorySeconds = parseLong(entityInfo,
             ApplicationMetricsConstants.APP_MEM_PREEMPT_METRICS);
         long preemptedVcoreSeconds = parseLong(entityInfo,
             ApplicationMetricsConstants.APP_CPU_PREEMPT_METRICS);
+        long preemptedgpuSeconds = parseLong(entityInfo,
+            ApplicationMetricsConstants.APP_GPU_PREEMPT_METRICS);
         appResources = ApplicationResourceUsageReport.newInstance(0, 0, null,
-            null, null, memorySeconds, vcoreSeconds, 0, 0,
-            preemptedMemorySeconds, preemptedVcoreSeconds);
+            null, null, memorySeconds, vcoreSeconds, gpuSeconds, 0, 0,
+            preemptedMemorySeconds, preemptedVcoreSeconds, preemptedGPUSeconds);
       }
 
       if (entityInfo.containsKey(ApplicationMetricsConstants.APP_TAGS_INFO)) {
@@ -550,6 +554,7 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
       TimelineEntity entity, String serverHttpAddress, String user) {
     int allocatedMem = 0;
     int allocatedVcore = 0;
+    int allocatedGpu = 0;
     String allocatedHost = null;
     int allocatedPort = -1;
     int allocatedPriority = 0;
@@ -571,6 +576,11 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
         allocatedVcore = (Integer) entityInfo.get(
                 ContainerMetricsConstants.ALLOCATED_VCORE_ENTITY_INFO);
       }
+      if(entityInfo
+      .containsKey(ContainerMetricsConstants.ALLOCATED_GPU_ENTITY_INFO)) {
+                allocatedGpu = (Integer) entityInfo.get(
+                           ContainerMetricsConstants.ALLOCATED_GPU_ENTITY_INFO);
+              }
       if (entityInfo
           .containsKey(ContainerMetricsConstants.ALLOCATED_HOST_ENTITY_INFO)) {
         allocatedHost =
@@ -644,7 +654,7 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
     }
     return ContainerReport.newInstance(
         ContainerId.fromString(entity.getEntityId()),
-        Resource.newInstance(allocatedMem, allocatedVcore), allocatedNode,
+        Resource.newInstance(allocatedMem, allocatedVcore, allocatedGpu), allocatedNode,
         Priority.newInstance(allocatedPriority),
         createdTime, finishedTime, diagnosticsInfo, logUrl, exitStatus, state,
         nodeHttpAddress);

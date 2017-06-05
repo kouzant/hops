@@ -415,8 +415,8 @@ public class BuilderUtils {
   public static ApplicationResourceUsageReport newApplicationResourceUsageReport(
       int numUsedContainers, int numReservedContainers, Resource usedResources,
       Resource reservedResources, Resource neededResources, long memorySeconds, 
-      long vcoreSeconds, long preemptedMemorySeconds,
-      long preemptedVcoreSeconds) {
+      long vcoreSeconds, long gpuSeconds, long preemptedMemorySeconds,
+      long preemptedVcoreSeconds, long preemptedGPUSeconds) {
     ApplicationResourceUsageReport report =
         recordFactory.newRecordInstance(ApplicationResourceUsageReport.class);
     report.setNumUsedContainers(numUsedContainers);
@@ -426,8 +426,10 @@ public class BuilderUtils {
     report.setNeededResources(neededResources);
     report.setMemorySeconds(memorySeconds);
     report.setVcoreSeconds(vcoreSeconds);
+    report.setGPUSeconds(gpuSeconds);
     report.setPreemptedMemorySeconds(preemptedMemorySeconds);
     report.setPreemptedVcoreSeconds(preemptedVcoreSeconds);
+	report.setPreemptedGPUSeconds(preemptedGPUSeconds);
     return report;
   }
 
@@ -435,6 +437,15 @@ public class BuilderUtils {
     Resource resource = recordFactory.newRecordInstance(Resource.class);
     resource.setMemorySize(memory);
     resource.setVirtualCores(vCores);
+    resource.setGPUs(0);
+    return resource;
+  }
+  
+  public static Resource newResource(int memory, int vCores, int gpus) {
+    Resource resource = recordFactory.newRecordInstance(Resource.class);
+    resource.setMemory(memory);
+    resource.setVirtualCores(vCores);
+    resource.setGPUs(gpus);
     return resource;
   }
 

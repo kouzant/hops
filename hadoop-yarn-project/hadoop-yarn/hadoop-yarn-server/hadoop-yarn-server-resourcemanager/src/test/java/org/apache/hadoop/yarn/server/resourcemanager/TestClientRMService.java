@@ -304,6 +304,7 @@ public class TestClientRMService {
           report.getApplicationResourceUsageReport();
       Assert.assertEquals(10, usageReport.getMemorySeconds());
       Assert.assertEquals(3, usageReport.getVcoreSeconds());
+      Assert.assertEquals(3, usageReport.getGPUSeconds());
       Assert.assertEquals("<Not set>", report.getAmNodeLabelExpression());
       Assert.assertEquals("<Not set>", report.getAppNodeLabelExpression());
 
@@ -989,9 +990,9 @@ public class TestClientRMService {
     apps.put(applicationId1, getRMApp(rmContext, yarnScheduler, applicationId1,
         config, "testqueue", 10, 3,null,null));
     apps.put(applicationId2, getRMApp(rmContext, yarnScheduler, applicationId2,
-        config, "a", 20, 2,null,""));
+        config, "a", 20, 2, 2, null,""));
     apps.put(applicationId3, getRMApp(rmContext, yarnScheduler, applicationId3,
-        config, "testqueue", 40, 5,"high-mem","high-mem"));
+        config, "testqueue", 40, 5, 5, "high-mem","high-mem"));
     return apps;
   }
   
@@ -1014,7 +1015,7 @@ public class TestClientRMService {
 
   private RMAppImpl getRMApp(RMContext rmContext, YarnScheduler yarnScheduler,
       ApplicationId applicationId3, YarnConfiguration config, String queueName,
-      final long memorySeconds, final long vcoreSeconds,
+      final long memorySeconds, final long vcoreSeconds, final long gpuSeconds,
       String appNodeLabelExpression, String amNodeLabelExpression) {
     ApplicationSubmissionContext asContext = mock(ApplicationSubmissionContext.class);
     when(asContext.getMaxAppAttempts()).thenReturn(1);
@@ -1025,7 +1026,7 @@ public class TestClientRMService {
             System.currentTimeMillis(), "YARN", null,
             BuilderUtils.newResourceRequest(
                 RMAppAttemptImpl.AM_CONTAINER_PRIORITY, ResourceRequest.ANY,
-                Resource.newInstance(1024, 1), 1)){
+                Resource.newInstance(1024, 1, 1), 1)){
                   @Override
                   public ApplicationReport createAndGetApplicationReport(
                       String clientUserName, boolean allowAccess) {
@@ -1035,6 +1036,7 @@ public class TestClientRMService {
                         report.getApplicationResourceUsageReport();
                     usageReport.setMemorySeconds(memorySeconds);
                     usageReport.setVcoreSeconds(vcoreSeconds);
+                    usageReport.setGPUSeconds(gpuSeconds);
                     report.setApplicationResourceUsageReport(usageReport);
                     return report;
                   }
@@ -1105,7 +1107,7 @@ public class TestClientRMService {
     MockRM rm = new MockRM(conf);
     rm.start();
     try {
-      rm.registerNode("127.0.0.1:1", 102400, 100);
+      rm.registerNode("127.0.0.1:1", 102400, 100, 100);
       // allow plan follower to synchronize
       Thread.sleep(1050);
     } catch (Exception e) {

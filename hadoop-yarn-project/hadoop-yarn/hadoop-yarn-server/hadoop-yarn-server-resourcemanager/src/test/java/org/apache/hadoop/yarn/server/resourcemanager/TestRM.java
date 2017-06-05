@@ -21,6 +21,14 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 import com.google.common.base.Supplier;
 import org.apache.hadoop.test.GenericTestUtils;
 import org.junit.Before;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
+
+import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
+import org.junit.*;
+
 import static org.mockito.Matchers.argThat;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.spy;
@@ -105,6 +113,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
     Logger rootLogger = LogManager.getRootLogger();
     rootLogger.setLevel(Level.DEBUG);
     MockRM rm = new MockRM(conf);
+    Assume.assumeFalse(rm.getResourceScheduler() instanceof FairScheduler);
     rm.start();
     
     GetNewApplicationResponse resp = rm.getNewAppId();
@@ -118,6 +127,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
     Logger rootLogger = LogManager.getRootLogger();
     rootLogger.setLevel(Level.DEBUG);
     MockRM rm = new MockRM(conf);
+    Assume.assumeFalse(rm.getResourceScheduler() instanceof FairScheduler);
     rm.start();
     MockNM nm1 = rm.registerNode("h1:1234", 5120);
     
@@ -141,6 +151,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
     rootLogger.setLevel(Level.DEBUG);
     conf.set("yarn.scheduler.capacity.node-locality-delay", "-1");
     MockRM rm = new MockRM(conf);
+    Assume.assumeFalse(rm.getResourceScheduler() instanceof FairScheduler);
     rm.start();
     MockNM nm1 = rm.registerNode("h1:1234", 5120);
     MockNM nm2 = rm.registerNode("h2:5678", 10240);
@@ -201,6 +212,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
     conf.set(YarnConfiguration.RM_SCHEDULER,
         CapacityScheduler.class.getCanonicalName());
     MockRM rm = new MockRM(conf);
+    Assume.assumeFalse(rm.getResourceScheduler() instanceof FairScheduler);
     rm.start();
     MockNM nm1 = rm.registerNode("h1:1234", 5120);
     RMApp app = rm.submitApp(2000);
@@ -250,6 +262,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
   public void testNMToken() throws Exception {
     MockRM rm = new MockRM(conf);
     try {
+      Assume.assumeFalse(rm.getResourceScheduler() instanceof FairScheduler);
       rm.start();
       MockNM nm1 = rm.registerNode("h1:1234", 10000);
       
@@ -433,6 +446,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
   @Test (timeout = 300000)
   public void testActivatingApplicationAfterAddingNM() throws Exception {
     MockRM rm1 = new MockRM(conf);
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
 
     // start like normal because state is empty
     rm1.start();
@@ -479,6 +493,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
   public void testInvalidateAMHostPortWhenAMFailedOrKilled() throws Exception {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
     MockRM rm1 = new MockRM(conf);
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     rm1.start();
 
     // a succeeded app
@@ -533,6 +548,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     nm1.registerNode();
 
     // a failed app
@@ -611,7 +627,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
         };
       }
     };
-
+    Assume.assumeFalse(rm.getResourceScheduler() instanceof FairScheduler);
     // test metrics
     final QueueMetrics metrics = rm.getResourceScheduler().getRootQueueMetrics();
     final int appsKilled = metrics.getAppsKilled();
@@ -719,6 +735,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
         };
       }
     };
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
@@ -794,6 +811,7 @@ public class TestRM extends ParameterizedSchedulerTestBase {
         };
       }
     };
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());

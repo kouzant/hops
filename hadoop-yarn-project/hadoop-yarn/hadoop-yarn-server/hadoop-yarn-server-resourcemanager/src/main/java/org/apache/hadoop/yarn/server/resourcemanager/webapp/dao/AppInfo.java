@@ -87,15 +87,18 @@ public class AppInfo {
   private String amRPCAddress;
   protected long allocatedMB;
   protected long allocatedVCores;
+  protected int allocatedGPUs;
   protected int runningContainers;
   protected long memorySeconds;
   protected long vcoreSeconds;
+  protected long gpuSeconds;
   protected float queueUsagePercentage;
   protected float clusterUsagePercentage;
 
   // preemption info fields
   protected long preemptedResourceMB;
   protected long preemptedResourceVCores;
+  protected int preemptedResourceGPUs;
   protected int numNonAMContainerPreempted;
   protected int numAMContainerPreempted;
   private long preemptedMemorySeconds;
@@ -184,6 +187,7 @@ public class AppInfo {
             Resource usedResources = resourceReport.getUsedResources();
             allocatedMB = usedResources.getMemorySize();
             allocatedVCores = usedResources.getVirtualCores();
+            allocatedGPUs = usedResources.getGPUs();
             runningContainers = resourceReport.getNumUsedContainers();
             queueUsagePercentage = resourceReport.getQueueUsagePercentage();
             clusterUsagePercentage = resourceReport.getClusterUsagePercentage();
@@ -203,10 +207,14 @@ public class AppInfo {
           appMetrics.getNumNonAMContainersPreempted();
       preemptedResourceVCores =
           appMetrics.getResourcePreempted().getVirtualCores();
+      preemptedResourceGPUs =
+          appMetrics.getResourcePreempted().getGPUs();
       memorySeconds = appMetrics.getMemorySeconds();
       vcoreSeconds = appMetrics.getVcoreSeconds();
+      gpuSeconds = appMetrics.getGPUSeconds();
       preemptedMemorySeconds = appMetrics.getPreemptedMemorySeconds();
       preemptedVcoreSeconds = appMetrics.getPreemptedVcoreSeconds();
+      preemptedGPUSeconds = appMetrics.getPreemptedGPUSeconds();
       unmanagedApplication =
           appSubmissionContext.getUnmanagedAM();
       appNodeLabelExpression =
@@ -349,12 +357,20 @@ public class AppInfo {
     return this.allocatedVCores;
   }
   
+  public int getAllocatedGPUs() {
+    return this.allocatedGPUs;
+  }
+  
   public long getPreemptedMB() {
     return preemptedResourceMB;
   }
 
   public long getPreemptedVCores() {
     return preemptedResourceVCores;
+  }
+  
+  public int getPreemptedGPUs() {
+    return preemptedResourceGPUs;
   }
 
   public int getNumNonAMContainersPreempted() {
@@ -371,6 +387,10 @@ public class AppInfo {
 
   public long getVcoreSeconds() {
     return vcoreSeconds;
+  }
+  
+  public long getGPUSeconds() {
+    return gpuSeconds;
   }
 
   public long getPreemptedMemorySeconds() {

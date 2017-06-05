@@ -49,10 +49,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEv
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.policy.OrderingPolicy;
 import org.apache.hadoop.yarn.util.Clock;
-import org.apache.hadoop.yarn.util.resource.DefaultResourceCalculator;
-import org.apache.hadoop.yarn.util.resource.DominantResourceCalculator;
-import org.apache.hadoop.yarn.util.resource.ResourceCalculator;
-import org.apache.hadoop.yarn.util.resource.Resources;
+import org.apache.hadoop.yarn.util.resource.*;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -1039,7 +1036,7 @@ public class TestProportionalCapacityPreemptionPolicy {
       String[][] resData, boolean useDominantResourceCalculator) {
     if (useDominantResourceCalculator) {
       when(mCS.getResourceCalculator()).thenReturn(
-          new DominantResourceCalculator());
+          new DominantResourceCalculatorGPU());
     }
     ProportionalCapacityPreemptionPolicy policy =
         new ProportionalCapacityPreemptionPolicy(rmContext, mCS, mClock);

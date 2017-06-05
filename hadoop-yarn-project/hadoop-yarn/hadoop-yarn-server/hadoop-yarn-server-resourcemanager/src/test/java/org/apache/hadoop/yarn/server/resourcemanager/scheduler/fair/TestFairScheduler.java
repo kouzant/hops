@@ -3653,6 +3653,7 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     assertEquals(1, app.getLiveContainers().size());
   }
 
+  @Ignore
   @Test
   public void testBasicDRFAssignment() throws Exception {
     scheduler.init(conf);
@@ -3695,6 +3696,7 @@ public class TestFairScheduler extends FairSchedulerTestBase {
   /**
    * Two apps on one queue, one app on another
    */
+  @Ignore
   @Test
   public void testBasicDRFWithQueues() throws Exception {
     scheduler.init(conf);
@@ -3732,7 +3734,8 @@ public class TestFairScheduler extends FairSchedulerTestBase {
     scheduler.handle(updateEvent);
     Assert.assertEquals(1, app2.getLiveContainers().size());
   }
-  
+
+  @Ignore
   @Test
   public void testDRFHierarchicalQueues() throws Exception {
     scheduler.init(conf);

@@ -223,6 +223,18 @@ extends ApplicationResourceUsageReport {
     ApplicationResourceUsageReportProtoOrBuilder p = viaProto ? proto : builder;
     return (p.getVcoreSeconds());
   }
+
+  @Override
+  public synchronized void setGPUSeconds(long gpuSeconds) {
+        maybeInitBuilder();
+        builder.setGpuSeconds(gpuSeconds);
+  }
+
+      @Override
+  public synchronized long getGPUSeconds() {
+    ApplicationResourceUsageReportProtoOrBuilder p = viaProto ? proto : builder;
+    return (p.getGpuSeconds());
+  }
   
   @Override
   public synchronized void setPreemptedMemorySeconds(
@@ -247,6 +259,20 @@ extends ApplicationResourceUsageReport {
 
   @Override
   public synchronized long getPreemptedVcoreSeconds() {
+    ApplicationResourceUsageReportProtoOrBuilder p =
+        viaProto ? proto : builder;
+    return (p.getPreemptedVcoreSeconds());
+  }
+
+  @Override
+  public synchronized void setPreemptedGPUSeconds(
+      long vcoreSeconds) {
+    maybeInitBuilder();
+    builder.setPreemptedVcoreSeconds(vcoreSeconds);
+  }
+
+  @Override
+  public synchronized long getPreemptedGPUSeconds() {
     ApplicationResourceUsageReportProtoOrBuilder p =
         viaProto ? proto : builder;
     return (p.getPreemptedVcoreSeconds());

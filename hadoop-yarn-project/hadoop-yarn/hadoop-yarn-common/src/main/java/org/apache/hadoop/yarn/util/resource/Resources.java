@@ -63,10 +63,21 @@ public class Resources {
     }
 
     @Override
+    public int getGPUs() {
+      return 0;
+    }
+
+    @Override
+    public void setGPUs(int gpus) { throw new RuntimeException("NONE cannot be modified!"); }
+  
+    @Override
     public int compareTo(Resource o) {
       long diff = 0 - o.getMemorySize();
       if (diff == 0) {
         diff = 0 - o.getVirtualCores();
+        if(diff == 0) {
+          diff = 0 - o.getGPUs();
+        }
       }
       return Long.signum(diff);
     }
@@ -106,12 +117,23 @@ public class Resources {
     public void setVirtualCores(int cores) {
       throw new RuntimeException("UNBOUNDED cannot be modified!");
     }
-
+  
+    @Override
+    public void setGPUs(int gpus) { throw new RuntimeException("NONE cannot be modified!"); }
+  
+    @Override
+    public int getGPUs() {
+      return Integer.MAX_VALUE;
+    }
+  
     @Override
     public int compareTo(Resource o) {
       long diff = Long.MAX_VALUE - o.getMemorySize();
       if (diff == 0) {
         diff = Integer.MAX_VALUE - o.getVirtualCores();
+        if(diff == 0) {
+          diff = Integer.MAX_VALUE - o.getGPUs();
+        }
       }
       return Long.signum(diff);
     }
@@ -119,7 +141,7 @@ public class Resources {
   };
 
   public static Resource createResource(int memory) {
-    return createResource(memory, (memory > 0) ? 1 : 0);
+    return createResource(memory, (memory > 0) ? 1 : 0, 0);
   }
 
   public static Resource createResource(int memory, int cores) {
@@ -137,8 +159,18 @@ public class Resources {
     Resource resource = Records.newRecord(Resource.class);
     resource.setMemorySize(memory);
     resource.setVirtualCores(cores);
+    resource.setGPUs(0);
     return resource;
   }
+
+  public static Resource createResource(int memory, int cores, int gpus) {
+    Resource resource = Records.newRecord(Resource.class);
+    resource.setMemory(memory);
+    resource.setVirtualCores(cores);
+    resource.setGPUs(gpus);
+    return resource;
+  }
+
 
   public static Resource none() {
     return NONE;
@@ -149,12 +181,13 @@ public class Resources {
   }
 
   public static Resource clone(Resource res) {
-    return createResource(res.getMemorySize(), res.getVirtualCores());
+    return createResource(res.getMemorySize(), res.getVirtualCores(), res.getGPUs());
   }
 
   public static Resource addTo(Resource lhs, Resource rhs) {
     lhs.setMemorySize(lhs.getMemorySize() + rhs.getMemorySize());
     lhs.setVirtualCores(lhs.getVirtualCores() + rhs.getVirtualCores());
+    lhs.setGPUs(lhs.getGPUs() + rhs.getGPUs());
     return lhs;
   }
 
@@ -165,6 +198,7 @@ public class Resources {
   public static Resource subtractFrom(Resource lhs, Resource rhs) {
     lhs.setMemorySize(lhs.getMemorySize() - rhs.getMemorySize());
     lhs.setVirtualCores(lhs.getVirtualCores() - rhs.getVirtualCores());
+    lhs.setGPUs(lhs.getGPUs() - rhs.getGPUs());
     return lhs;
   }
 
@@ -197,6 +231,7 @@ public class Resources {
   public static Resource multiplyTo(Resource lhs, double by) {
     lhs.setMemorySize((long)(lhs.getMemorySize() * by));
     lhs.setVirtualCores((int)(lhs.getVirtualCores() * by));
+    lhs.setGPUs((int)(lhs.getGPUs() * by));
     return lhs;
   }
 
@@ -230,6 +265,7 @@ public class Resources {
     Resource out = clone(lhs);
     out.setMemorySize((long)(lhs.getMemorySize() * by));
     out.setVirtualCores((int)(lhs.getVirtualCores() * by));
+    out.setGPUs((int)(lhs.getGPUs() * by));
     return out;
   }
   
@@ -318,7 +354,8 @@ public class Resources {
   
   public static boolean fitsIn(Resource smaller, Resource bigger) {
     return smaller.getMemorySize() <= bigger.getMemorySize() &&
-        smaller.getVirtualCores() <= bigger.getVirtualCores();
+        smaller.getVirtualCores() <= bigger.getVirtualCores() &&
+            smaller.getGPUs() <= bigger.getGPUs();
   }
 
   public static boolean fitsIn(ResourceCalculator rc, Resource cluster,
@@ -328,11 +365,13 @@ public class Resources {
   
   public static Resource componentwiseMin(Resource lhs, Resource rhs) {
     return createResource(Math.min(lhs.getMemorySize(), rhs.getMemorySize()),
-        Math.min(lhs.getVirtualCores(), rhs.getVirtualCores()));
+        Math.min(lhs.getVirtualCores(), rhs.getVirtualCores()),
+            Math.min(lhs.getGPUs(), rhs.getGPUs()));
   }
   
   public static Resource componentwiseMax(Resource lhs, Resource rhs) {
     return createResource(Math.max(lhs.getMemorySize(), rhs.getMemorySize()),
-        Math.max(lhs.getVirtualCores(), rhs.getVirtualCores()));
+        Math.max(lhs.getVirtualCores(), rhs.getVirtualCores()),
+            Math.max(lhs.getGPUs(), rhs.getGPUs()));
   }
 }

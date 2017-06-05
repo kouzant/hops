@@ -25,6 +25,7 @@ import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.util.ResourceCalculatorPlugin;
+import org.mortbay.log.Log;
 
 /**
  * Helper class to determine hardware related characteristics such as the
@@ -310,4 +311,26 @@ public class NodeManagerHardwareUtils {
     }
     return memoryMb;
   }
+  
+  public static int getNodeGPUs(ResourceCalculatorPlugin plugin,
+      Configuration conf) {
+    int configuredGPUs = conf.getInt(YarnConfiguration.NM_GPUS,
+            YarnConfiguration.DEFAULT_NM_GPUS);
+    if(configuredGPUs <= 0) {
+      return 0;
+    }
+    int discoveredGPUs = plugin.getNumGPUs();
+    if(configuredGPUs > discoveredGPUs) {
+      Log.warn("Could not find " + configuredGPUs + " GPUs as configured." +
+          " Only discovered " + discoveredGPUs + " GPUs" );
+    }
+    int numGPUs = Math.min(discoveredGPUs, configuredGPUs);
+    return numGPUs;
+  }
+  
+  public static int getNodeGPUs(Configuration conf) {
+        ResourceCalculatorPlugin plugin =
+                ResourceCalculatorPlugin.getResourceCalculatorPlugin(null, conf);
+        return NodeManagerHardwareUtils.getNodeGPUs(plugin, conf);
+      }
 }

@@ -91,10 +91,25 @@ public class ResourcePBImpl extends Resource {
   }
 
   @Override
+  public int getGPUs() {
+    ResourceProtoOrBuilder p = viaProto ? proto : builder;
+    return (p.getGpus());
+  }
+  
+  @Override
+  public void setGPUs(int gpus) {
+    maybeInitBuilder();
+    builder.setGpus((gpus));
+  }
+  
+  @Override
   public int compareTo(Resource other) {
     long diff = this.getMemorySize() - other.getMemorySize();
     if (diff == 0) {
       diff = this.getVirtualCores() - other.getVirtualCores();
+      if(diff == 0) {
+        diff = this.getGPUs() - other.getGPUs();
+      }
     }
     return diff == 0 ? 0 : (diff > 0 ? 1 : -1);
   }

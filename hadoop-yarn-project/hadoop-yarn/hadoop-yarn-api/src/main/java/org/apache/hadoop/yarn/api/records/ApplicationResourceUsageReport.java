@@ -36,7 +36,7 @@ public abstract class ApplicationResourceUsageReport {
   public static ApplicationResourceUsageReport newInstance(
       int numUsedContainers, int numReservedContainers, Resource usedResources,
       Resource reservedResources, Resource neededResources, long memorySeconds,
-      long vcoreSeconds, float queueUsagePerc, float clusterUsagePerc,
+      long vcoreSeconds, long gpuSeconds, float queueUsagePerc, float clusterUsagePerc,
       long preemptedMemorySeconds, long preemptedVcoresSeconds) {
     ApplicationResourceUsageReport report =
         Records.newRecord(ApplicationResourceUsageReport.class);
@@ -51,6 +51,7 @@ public abstract class ApplicationResourceUsageReport {
     report.setClusterUsagePercentage(clusterUsagePerc);
     report.setPreemptedMemorySeconds(preemptedMemorySeconds);
     report.setPreemptedVcoreSeconds(preemptedVcoresSeconds);
+    report.setGPUSeconds(gpuSeconds);
     return report;
   }
 
@@ -158,6 +159,14 @@ public abstract class ApplicationResourceUsageReport {
   @Unstable
   public abstract long getVcoreSeconds();
 
+  @Private
+  @Unstable
+  public abstract void setGPUSeconds(long gpuSeconds);
+
+  @Public
+  @Unstable
+  public abstract long getGPUSeconds();
+
   /**
    * Get the percentage of resources of the queue that the app is using.
    * @return the percentage of resources of the queue that the app is using.
@@ -229,4 +238,22 @@ public abstract class ApplicationResourceUsageReport {
   @Public
   @Unstable
   public abstract long getPreemptedVcoreSeconds();
+
+  /**
+   * Set the aggregated number of gpu preempted that the application has
+   * allocated times the number of seconds the application has been running.
+   * @param gpuSeconds the aggregated number of vcore seconds
+   */
+  @Private
+  @Unstable
+  public abstract void setPreemptedGPUSeconds(long gpuSeconds);
+
+  /**
+   * Get the aggregated number of gpu preempted that the application has
+   * allocated times the number of seconds the application has been running.
+   * @return the aggregated number of gpu seconds
+   */
+  @Public
+  @Unstable
+  public abstract long getPreemptedGPUSeconds();
 }

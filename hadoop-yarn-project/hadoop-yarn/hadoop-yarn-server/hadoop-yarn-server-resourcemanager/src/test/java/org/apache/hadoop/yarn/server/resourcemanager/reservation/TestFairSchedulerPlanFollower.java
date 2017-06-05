@@ -51,11 +51,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairSchedule
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairSchedulerTestBase;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 import org.apache.hadoop.yarn.util.Clock;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Rule;
-import org.junit.Test;
+import org.junit.*;
 import org.junit.rules.TestName;
 import org.mockito.Matchers;
 import org.mockito.Mockito;
@@ -117,6 +113,7 @@ public class TestFairSchedulerPlanFollower extends
     policy.init(reservationQ, allocConf);
   }
 
+  @Ignore
   @Test
   public void testWithMoveOnExpiry() throws PlanningException,
       InterruptedException, AccessControlException {
@@ -124,6 +121,7 @@ public class TestFairSchedulerPlanFollower extends
     testPlanFollower(true);
   }
 
+  @Ignore
   @Test
   public void testWithKillOnExpiry() throws PlanningException,
       InterruptedException, AccessControlException {

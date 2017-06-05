@@ -66,6 +66,7 @@ import org.codehaus.jettison.json.JSONObject;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.Test;
+import org.mortbay.log.Log;
 import org.w3c.dom.Document;
 import org.w3c.dom.Element;
 import org.w3c.dom.NodeList;
@@ -130,6 +131,12 @@ public class TestNMWebServices extends JerseyTestBase {
         public long getVCoresAllocatedForContainers() {
           return new Long("4000");
         }
+  
+        @Override
+        public long getGPUsAllocatedForContainers() {
+          return new Long("4000");
+        }
+  
         @Override
         public boolean isVmemCheckEnabled() {
           return true;
@@ -384,6 +391,8 @@ public class TestNMWebServices extends JerseyTestBase {
               "totalPmemAllocatedContainersMB"),
           WebServicesTestUtils.getXmlLong(element,
               "totalVCoresAllocatedContainers"),
+          WebServicesTestUtils.getXmlLong(element,
+              "totalGPUsAllocatedContainers"),
           WebServicesTestUtils.getXmlBoolean(element, "vmemCheckEnabled"),
           WebServicesTestUtils.getXmlBoolean(element, "pmemCheckEnabled"),
           WebServicesTestUtils.getXmlLong(element, "lastNodeUpdateTime"),
@@ -407,6 +416,7 @@ public class TestNMWebServices extends JerseyTestBase {
         info.getLong("totalVmemAllocatedContainersMB"),
         info.getLong("totalPmemAllocatedContainersMB"),
         info.getLong("totalVCoresAllocatedContainers"),
+        info.getLong(("totalGPUsAllocatedContainers")),
         info.getBoolean("vmemCheckEnabled"),
         info.getBoolean("pmemCheckEnabled"),
         info.getLong("lastNodeUpdateTime"), info.getBoolean("nodeHealthy"),
@@ -420,7 +430,7 @@ public class TestNMWebServices extends JerseyTestBase {
 
   public void verifyNodeInfoGeneric(String id, String healthReport,
       long totalVmemAllocatedContainersMB, long totalPmemAllocatedContainersMB,
-      long totalVCoresAllocatedContainers,
+      long totalVCoresAllocatedContainers, long totalGPUsAllocatedContainers,
       boolean vmemCheckEnabled, boolean pmemCheckEnabled,
       long lastNodeUpdateTime, Boolean nodeHealthy, String nodeHostName,
       String hadoopVersionBuiltOn, String hadoopBuildVersion,
@@ -436,6 +446,8 @@ public class TestNMWebServices extends JerseyTestBase {
         totalPmemAllocatedContainersMB);
     assertEquals("totalVCoresAllocatedContainers incorrect", 4000,
         totalVCoresAllocatedContainers);
+    assertEquals("totalGPUsAllocatedContainers incorrect", 4000,
+        totalGPUsAllocatedContainers);
     assertEquals("vmemCheckEnabled incorrect",  true, vmemCheckEnabled);
     assertEquals("pmemCheckEnabled incorrect",  true, pmemCheckEnabled);
     assertTrue("lastNodeUpdateTime incorrect", lastNodeUpdateTime == nmContext

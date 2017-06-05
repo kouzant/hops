@@ -707,8 +707,11 @@ public class RMContainerImpl implements RMContainer, Comparable<RMContainer> {
                               * usedMillis / DateUtils.MILLIS_PER_SECOND;
         long vcoreSeconds = resource.getVirtualCores()
                              * usedMillis / DateUtils.MILLIS_PER_SECOND;
+        long gpuSeconds = resource.getGPUs() * usedMillis / DateUtils
+            .MILLIS_PER_SECOND;
         rmAttempt.getRMAppAttemptMetrics()
-                  .updateAggregateAppResourceUsage(memorySeconds,vcoreSeconds);
+                  .updateAggregateAppResourceUsage(memorySeconds,vcoreSeconds,
+                  gpuSeconds);
         // If this is a preempted container, update preemption metrics
         if (ContainerExitStatus.PREEMPTED == container.finishedStatus
                 .getExitStatus()) {
@@ -716,7 +719,7 @@ public class RMContainerImpl implements RMContainer, Comparable<RMContainer> {
                   container);
           rmAttempt.getRMAppAttemptMetrics()
                   .updateAggregatePreemptedAppResourceUsage(memorySeconds,
-                          vcoreSeconds);
+                          vcoreSeconds, gpuSeconds);
         }
       }
     }

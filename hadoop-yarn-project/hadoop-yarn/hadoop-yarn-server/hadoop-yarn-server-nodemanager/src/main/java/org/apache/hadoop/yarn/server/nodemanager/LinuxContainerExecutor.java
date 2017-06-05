@@ -277,7 +277,12 @@ public class LinuxContainerExecutor extends ContainerExecutor {
           " (exitCode=" + exitCode + ") with output: " + e.getOutput(), e);
     }
   }
-
+  
+  @Override
+  public void recoverDeviceControlSystem(ContainerId containerId) {
+    resourcesHandler.recoverDeviceControlSystem(containerId);
+  }
+  
   @VisibleForTesting
   public void buildMainArgs(List<String> command, String user, String appId,
       String locId, InetSocketAddress nmAddr, List<String> localDirs) {
@@ -308,6 +313,8 @@ public class LinuxContainerExecutor extends ContainerExecutor {
     String resourcesOptions = resourcesHandler.getResourcesOption(
             containerId);
     String tcCommandFile = null;
+    
+    LOG.info("The resourcesOptions " + resourcesOptions);
 
     try {
       if (resourceHandlerChain != null) {

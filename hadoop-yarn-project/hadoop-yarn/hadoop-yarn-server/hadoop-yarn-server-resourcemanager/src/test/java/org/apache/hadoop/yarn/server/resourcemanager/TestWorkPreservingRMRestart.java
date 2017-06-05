@@ -96,10 +96,7 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
+import org.junit.*;
 import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import com.google.common.base.Supplier;
@@ -183,6 +180,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
 
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -618,6 +616,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     setupQueueConfiguration(csConf);
     rm1 = new MockRM(csConf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     MockNM nm2 =
@@ -781,6 +780,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     setupQueueConfiguration(csConf);
     rm1 = new MockRM(csConf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm =
         new MockNM("127.1.1.1:4321", 8192, rm1.getResourceTrackerService());
     nm.registerNode();
@@ -825,6 +825,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     setupQueueConfiguration(csConf);
     rm1 = new MockRM(csConf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     MockNM nm2 =
@@ -878,6 +879,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     conf.setLong(YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS, 0);
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -929,6 +931,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   public void testContainersNotRecoveredForCompletedApps() throws Exception {
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -967,6 +970,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     // start RM
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -996,6 +1000,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   public void testAMContainerStatusWithRMRestart() throws Exception {  
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -1030,6 +1035,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     // start RM
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -1061,6 +1067,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   public void testReleasedContainerNotRecovered() throws Exception {
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 = new MockNM("h1:1234", 15120, rm1.getResourceTrackerService());
     nm1.registerNode();
     
@@ -1157,6 +1164,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
       YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS, 4000);
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -1211,6 +1219,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     // start RM
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -1244,6 +1253,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     UserGroupInformation.setConfiguration(conf);
     MockRM rm1 = new TestSecurityMockRM(conf, null);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -1289,6 +1299,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   public void testAppFailToValidateResourceRequestOnRecovery() throws Exception{
     rm1 = new MockRM(conf);
     rm1.start();
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 8192, rm1.getResourceTrackerService());
     nm1.registerNode();
@@ -1381,6 +1392,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     };
     memStore.init(conf);
     rm1 = new MockRM(conf);
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
     rm1.start();
     rm1.setRMStateStore(memStore);
     memStore.start();

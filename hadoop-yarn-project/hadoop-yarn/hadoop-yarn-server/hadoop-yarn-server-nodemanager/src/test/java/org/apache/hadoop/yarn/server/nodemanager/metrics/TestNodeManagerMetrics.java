@@ -35,15 +35,19 @@ public class TestNodeManagerMetrics {
     Resource total = Records.newRecord(Resource.class);
     total.setMemorySize(8*GiB);
     total.setVirtualCores(16);
+    total.setGPUs(16);
     Resource resource = Records.newRecord(Resource.class);
     resource.setMemorySize(512); //512MiB
     resource.setVirtualCores(2);
+    resource.setGPUs(1);
     Resource largerResource = Records.newRecord(Resource.class);
     largerResource.setMemorySize(1024);
     largerResource.setVirtualCores(2);
+    largerResource.setGPUs(2);
     Resource smallerResource = Records.newRecord(Resource.class);
     smallerResource.setMemorySize(256);
     smallerResource.setVirtualCores(1);
+    smallerResource.setGPUs(1);
 
     metrics.addResource(total);
 
@@ -83,13 +87,13 @@ public class TestNodeManagerMetrics {
     // while allocatedGB is expected to be ceiled.
     // allocatedGB: 3.75GB allocated memory is shown as 4GB
     // availableGB: 4.25GB available memory is shown as 4GB
-    checkMetrics(10, 1, 1, 1, 1, 1, 4, 7, 4, 13, 3);
+    checkMetrics(10, 1, 1, 1, 1, 1, 4, 7, 4, 13, 3, 9);
   }
 
   private void checkMetrics(int launched, int completed, int failed, int killed,
       int initing, int running, int allocatedGB,
       int allocatedContainers, int availableGB, int allocatedVCores,
-      int availableVCores) {
+      int availableVCores, int availableGPUs) {
     MetricsRecordBuilder rb = getMetrics("NodeManagerMetrics");
     assertCounter("ContainersLaunched", launched, rb);
     assertCounter("ContainersCompleted", completed, rb);
@@ -102,6 +106,7 @@ public class TestNodeManagerMetrics {
     assertGauge("AllocatedContainers", allocatedContainers, rb);
     assertGauge("AvailableGB", availableGB, rb);
     assertGauge("AvailableVCores",availableVCores, rb);
+    assertGauge("AvailableGPUs", availableGPUs, rb);
 
   }
 }

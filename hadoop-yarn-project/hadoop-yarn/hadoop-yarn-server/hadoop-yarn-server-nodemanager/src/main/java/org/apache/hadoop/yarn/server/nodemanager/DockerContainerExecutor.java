@@ -127,7 +127,7 @@ public class DockerContainerExecutor extends ContainerExecutor {
         "Invalid docker exec path: " + dockerExecutor);
     }
   }
-
+  
   @Override
   public synchronized void startLocalizer(LocalizerStartContext ctx)
     throws IOException, InterruptedException {
@@ -162,8 +162,13 @@ public class DockerContainerExecutor extends ContainerExecutor {
     // TODO: DO it over RPC for maintaining similarity?
     localizer.runLocalization(nmAddr);
   }
-
-
+  
+  @Override
+  public void recoverDeviceControlSystem(ContainerId containerId) {
+    LOG.info("Device recovery is not supported for docker");
+  }
+  
+  
   @Override
   public int launchContainer(ContainerStartContext ctx) throws IOException {
     Container container = ctx.getContainer();

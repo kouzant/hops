@@ -46,6 +46,7 @@ public class ContainerMetrics implements MetricsSource {
   public static final String PMEM_LIMIT_METRIC_NAME = "pMemLimitMBs";
   public static final String VMEM_LIMIT_METRIC_NAME = "vMemLimitMBs";
   public static final String VCORE_LIMIT_METRIC_NAME = "vCoreLimit";
+  public static final String GPU_LIMIT_METRIC_NAME = "gpuLimit";
   public static final String PMEM_USAGE_METRIC_NAME = "pMemUsageMBs";
   public static final String LAUNCH_DURATION_METRIC_NAME = "launchDurationMs";
   public static final String LOCALIZATION_DURATION_METRIC_NAME =
@@ -77,6 +78,9 @@ public class ContainerMetrics implements MetricsSource {
 
   @Metric
   public MutableGaugeInt cpuVcoreLimit;
+  
+  @Metric
+  public MutableGaugeInt gpuLimit;
 
   @Metric
   public MutableGaugeLong launchDurationMs;
@@ -139,6 +143,8 @@ public class ContainerMetrics implements MetricsSource {
         VMEM_LIMIT_METRIC_NAME, "Virtual memory limit in MBs", 0);
     this.cpuVcoreLimit = registry.newGauge(
         VCORE_LIMIT_METRIC_NAME, "CPU limit in number of vcores", 0);
+    this.gpuLimit = registry.newGauge(
+        GPU_LIMIT_METRIC_NAME, "GPU limit in number of GPUs", 0);
     this.launchDurationMs = registry.newGauge(
         LAUNCH_DURATION_METRIC_NAME, "Launch duration in MS", 0L);
     this.localizationDurationMs = registry.newGauge(
@@ -241,10 +247,12 @@ public class ContainerMetrics implements MetricsSource {
     registry.tag(PROCESSID_INFO, processId);
   }
 
-  public void recordResourceLimit(int vmemLimit, int pmemLimit, int cpuVcores) {
+  public void recordResourceLimit(int vmemLimit, int pmemLimit, int
+      cpuVcores, int gpus) {
     this.vMemLimitMbs.set(vmemLimit);
     this.pMemLimitMbs.set(pmemLimit);
     this.cpuVcoreLimit.set(cpuVcores);
+    this.gpuLimit.set(gpus);
   }
 
   public void recordStateChangeDurations(long launchDuration,

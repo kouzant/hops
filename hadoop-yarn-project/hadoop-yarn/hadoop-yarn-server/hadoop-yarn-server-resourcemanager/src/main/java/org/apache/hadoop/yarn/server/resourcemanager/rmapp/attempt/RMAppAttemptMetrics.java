@@ -50,8 +50,10 @@ public class RMAppAttemptMetrics {
   private WriteLock writeLock;
   private AtomicLong finishedMemorySeconds = new AtomicLong(0);
   private AtomicLong finishedVcoreSeconds = new AtomicLong(0);
+  private AtomicLong finishedGPUSeconds = new AtomicLong(0);
   private AtomicLong preemptedMemorySeconds = new AtomicLong(0);
   private AtomicLong preemptedVcoreSeconds = new AtomicLong(0);
+  private AtomicLong preemptedGPUSeconds = new AtomicLong(0);
   private RMContext rmContext;
 
   private int[][] localityStatistics =
@@ -108,6 +110,10 @@ public class RMAppAttemptMetrics {
     return preemptedVcoreSeconds.get();
   }
 
+  public long getPreemptedGPU() {
+    return preemptedGPUSeconds.get();
+  }
+
   public int getNumNonAMContainersPreempted() {
     return numNonAMContainersPreempted.get();
   }
@@ -123,6 +129,7 @@ public class RMAppAttemptMetrics {
   public AggregateAppResourceUsage getAggregateAppResourceUsage() {
     long memorySeconds = finishedMemorySeconds.get();
     long vcoreSeconds = finishedVcoreSeconds.get();
+    long gpuSeconds = finishedGPUSeconds.get();
 
     // Only add in the running containers if this is the active attempt.
     RMAppAttempt currentAttempt = rmContext.getRMApps()
@@ -133,21 +140,26 @@ public class RMAppAttemptMetrics {
       if (appResUsageReport != null) {
         memorySeconds += appResUsageReport.getMemorySeconds();
         vcoreSeconds += appResUsageReport.getVcoreSeconds();
+        gpuSeconds += appResUsageReport.getGPUSeconds();
       }
     }
-    return new AggregateAppResourceUsage(memorySeconds, vcoreSeconds);
+    return new AggregateAppResourceUsage(memorySeconds, vcoreSeconds, gpuSeconds);
   }
 
   public void updateAggregateAppResourceUsage(long finishedMemorySeconds,
-                                        long finishedVcoreSeconds) {
+                                        long finishedVcoreSeconds,
+                                        long finishedGPUSeconds) {
     this.finishedMemorySeconds.addAndGet(finishedMemorySeconds);
     this.finishedVcoreSeconds.addAndGet(finishedVcoreSeconds);
+    this.finishedGPUSeconds.addAndGet(finishedGPUSeconds);
   }
 
   public void updateAggregatePreemptedAppResourceUsage(
-      long preemptedMemorySeconds, long preemptedVcoreSeconds) {
+      long preemptedMemorySeconds, long preemptedVcoreSeconds,
+      long preemptedGPUSeconds) {
     this.preemptedMemorySeconds.addAndGet(preemptedMemorySeconds);
     this.preemptedVcoreSeconds.addAndGet(preemptedVcoreSeconds);
+    this.preemptedGPUSeconds.addAndGet(preemptedGPUSeconds);
   }
 
   public void incNumAllocatedContainers(NodeType containerType,

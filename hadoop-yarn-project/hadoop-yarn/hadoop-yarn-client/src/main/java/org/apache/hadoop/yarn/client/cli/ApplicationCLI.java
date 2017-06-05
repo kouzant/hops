@@ -636,11 +636,14 @@ public class ApplicationCLI extends YarnCLI {
         //completed app report in the timeline server doesn't have usage report
         appReportStr.print(usageReport.getMemorySeconds() + " MB-seconds, ");
         appReportStr.println(usageReport.getVcoreSeconds() + " vcore-seconds");
+        appReportStr.println(usageReport.getGPUSeconds() + " gpu-seconds");
         appReportStr.print("\tAggregate Resource Preempted : ");
         appReportStr.print(usageReport.getPreemptedMemorySeconds() +
             " MB-seconds, ");
         appReportStr.println(usageReport.getPreemptedVcoreSeconds() +
             " vcore-seconds");
+            appReportStr.println(usageReport.getPreemptedgpuSeconds() +
+            " gpu-seconds");
       } else {
         appReportStr.println("N/A");
         appReportStr.print("\tAggregate Resource Preempted : ");

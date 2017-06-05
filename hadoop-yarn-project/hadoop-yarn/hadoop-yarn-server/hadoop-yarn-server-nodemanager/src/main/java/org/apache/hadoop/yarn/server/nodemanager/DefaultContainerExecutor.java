@@ -98,7 +98,7 @@ public class DefaultContainerExecutor extends ContainerExecutor {
   public void init() throws IOException {
     // nothing to do or verify here
   }
-
+  
   @Override
   public void startLocalizer(LocalizerStartContext ctx)
       throws IOException, InterruptedException {
@@ -151,6 +151,12 @@ public class DefaultContainerExecutor extends ContainerExecutor {
     return localizer;
   }
 
+  
+  @Override
+  public void recoverDeviceControlSystem(ContainerId containerId) {
+    LOG.info("Device recovery not working when Cgroups is disabled");
+  }
+  
   @Override
   public int launchContainer(ContainerStartContext ctx) throws IOException {
     Container container = ctx.getContainer();

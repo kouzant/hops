@@ -40,8 +40,8 @@ public abstract class ApplicationAttemptStateData {
       Credentials attemptTokens, long startTime, RMAppAttemptState finalState,
       String finalTrackingUrl, String diagnostics,
       FinalApplicationStatus amUnregisteredFinalStatus, int exitStatus,
-      long finishTime, long memorySeconds, long vcoreSeconds,
-      long preemptedMemorySeconds, long preemptedVcoreSeconds, String trackingUrl) {
+      long finishTime, long memorySeconds, long vcoreSeconds,long gpuSeconds ,
+      long preemptedMemorySeconds, long preemptedVcoreSeconds,long preemptedGPUSeconds, String trackingUrl) {
     ApplicationAttemptStateData attemptStateData =
         Records.newRecord(ApplicationAttemptStateData.class);
     attemptStateData.setAttemptId(attemptId);
@@ -56,8 +56,10 @@ public abstract class ApplicationAttemptStateData {
     attemptStateData.setFinishTime(finishTime);
     attemptStateData.setMemorySeconds(memorySeconds);
     attemptStateData.setVcoreSeconds(vcoreSeconds);
+	attemptStateData.setGPUSeconds(gpuSeconds);
     attemptStateData.setPreemptedMemorySeconds(preemptedMemorySeconds);
     attemptStateData.setPreemptedVcoreSeconds(preemptedVcoreSeconds);
+    attemptStateData.setPreemptedGPUSeconds(preemptedGPUSeconds);
     attemptStateData.setTrackingUrl(trackingUrl);
     return attemptStateData;
   }
@@ -65,12 +67,12 @@ public abstract class ApplicationAttemptStateData {
   public static ApplicationAttemptStateData newInstance(
       ApplicationAttemptId attemptId, Container masterContainer,
       Credentials attemptTokens, long startTime, long memorySeconds,
-      long vcoreSeconds, long preemptedMemorySeconds,
-      long preemptedVcoreSeconds, String trackingUrl) {
+      long vcoreSeconds, long gpuSeconds, long preemptedMemorySeconds,
+      long preemptedVcoreSeconds, long preemtedGPUSeconds, String trackingUrl) {
     return newInstance(attemptId, masterContainer, attemptTokens,
         startTime, null, "N/A", "", null, ContainerExitStatus.INVALID, 0,
-        memorySeconds, vcoreSeconds,
-        preemptedMemorySeconds, preemptedVcoreSeconds, trackingUrl);
+        memorySeconds, vcoreSeconds, gpuSeconds
+        preemptedMemorySeconds, preemptedVcoreSeconds, preemptedGPUSeconds, trackingUrl);
     }
 
 
@@ -205,6 +207,14 @@ public abstract class ApplicationAttemptStateData {
   @Unstable
   public abstract void setVcoreSeconds(long vcoreSeconds);
 
+  @Public
+  @Unstable
+  public abstract long getGPUSeconds();
+  
+  @Public
+  @Unstable
+  public abstract void setGPUSeconds(long gpuSeconds);
+  
   /**
    * Get the <em>preempted memory seconds</em>
    * (in MB seconds) of the application.
@@ -232,4 +242,18 @@ public abstract class ApplicationAttemptStateData {
   @Public
   @Unstable
   public abstract void setPreemptedVcoreSeconds(long vcoreSeconds);
+
+/**
+   * Get the <em>preempted gpu seconds</em>
+   * of the application.
+   * @return <em>preempted gpu seconds</em>
+   * of the application
+   */
+  @Public
+  @Unstable
+  public abstract long getPreemptedGPUSeconds();
+
+  @Public
+  @Unstable
+  public abstract void setPreemptedGPUSeconds(long gpuSeconds);
 }

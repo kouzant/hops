@@ -130,6 +130,9 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
   
   public static final String FIFO_ORDERING_POLICY = "fifo";
 
+  public static final String MAXIMUM_ALLOCATION_GPUS =
+      "maximum-allocation-gpus";
+
   public static final String FAIR_ORDERING_POLICY = "fair";
 
   public static final String DEFAULT_ORDERING_POLICY = FIFO_ORDERING_POLICY;
@@ -661,7 +664,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     int minimumCores = getInt(
         YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES);
-    return Resources.createResource(minimumMemory, minimumCores);
+    int minimumGPUs = getInt(
+        YarnConfiguration.RM_SCHEDULER_MINIMUM_ALLOCATION_GPUS,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_GPUS);
+    return Resources.createResource(minimumMemory, minimumCores, minimumGPUs);
   }
 
   public Resource getMaximumAllocation() {
@@ -671,7 +677,10 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
     int maximumCores = getInt(
         YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES,
         YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_VCORES);
-    return Resources.createResource(maximumMemory, maximumCores);
+    int maximumGPUs = getInt(
+        YarnConfiguration.RM_SCHEDULER_MAXIMUM_ALLOCATION_GPUS,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_MAXIMUM_ALLOCATION_GPUS);
+    return Resources.createResource(maximumMemory, maximumCores, maximumGPUs);
   }
 
   /**
@@ -688,11 +697,15 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
         (int)UNDEFINED);
     int maxAllocationVcoresPerQueue = getInt(
         queuePrefix + MAXIMUM_ALLOCATION_VCORES, (int)UNDEFINED);
+    int maxAllocationGPUsPerQueue = getInt(
+        queuePrefix + MAXIMUM_ALLOCATION_GPUS, (int)UNDEFINED);
     if (LOG.isDebugEnabled()) {
       LOG.debug("max alloc mb per queue for " + queue + " is "
           + maxAllocationMbPerQueue);
       LOG.debug("max alloc vcores per queue for " + queue + " is "
           + maxAllocationVcoresPerQueue);
+      LOG.debug("max alloc gpus per queue for " + queue + " is "
+          + maxAllocationGPUsPerQueue);
     }
     Resource clusterMax = getMaximumAllocation();
     if (maxAllocationMbPerQueue == (int)UNDEFINED) {
@@ -703,10 +716,15 @@ public class CapacitySchedulerConfiguration extends ReservationSchedulerConfigur
        LOG.info("max alloc vcore per queue for " + queue + " is undefined");
       maxAllocationVcoresPerQueue = clusterMax.getVirtualCores();
     }
+    if (maxAllocationGPUsPerQueue == (int)UNDEFINED) {
+       LOG.info("max alloc gpus per queue for " + queue + " is undefined");
+       maxAllocationGPUsPerQueue = clusterMax.getGPUs();
+    }
     Resource result = Resources.createResource(maxAllocationMbPerQueue,
-        maxAllocationVcoresPerQueue);
+        maxAllocationVcoresPerQueue, maxAllocationGPUsPerQueue);
     if (maxAllocationMbPerQueue > clusterMax.getMemorySize()
-        || maxAllocationVcoresPerQueue > clusterMax.getVirtualCores()) {
+        || maxAllocationVcoresPerQueue > clusterMax.getVirtualCores()
+        || maxAllocationGPUsPerQueue > clusterMax.getGPUs()) {
       throw new IllegalArgumentException(
           "Queue maximum allocation cannot be larger than the cluster setting"
           + " for queue " + queue

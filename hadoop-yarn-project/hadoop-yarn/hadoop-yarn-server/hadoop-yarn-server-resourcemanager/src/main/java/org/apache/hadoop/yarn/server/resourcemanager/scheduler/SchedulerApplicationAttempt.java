@@ -93,6 +93,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
   protected long lastMemoryAggregateAllocationUpdateTime = 0;
   private long lastMemorySeconds = 0;
   private long lastVcoreSeconds = 0;
+  private long lastGpuSeconds = 0;
 
   protected final AppSchedulingInfo appSchedulingInfo;
   protected ApplicationAttemptId attemptId;
@@ -681,6 +682,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
         > MEM_AGGREGATE_ALLOCATION_CACHE_MSECS) {
       long memorySeconds = 0;
       long vcoreSeconds = 0;
+      long gpuSeconds = 0;
       for (RMContainer rmContainer : this.liveContainers.values()) {
         long usedMillis = currentTimeMillis - rmContainer.getCreationTime();
         Resource resource = rmContainer.getContainer().getResource();
@@ -688,13 +690,17 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
             DateUtils.MILLIS_PER_SECOND;
         vcoreSeconds += resource.getVirtualCores() * usedMillis  
             / DateUtils.MILLIS_PER_SECOND;
+        gpuSeconds += resource.getGPUs() * usedMillis
+            / DateUtils.MILLIS_PER_SECOND;
       }
 
       lastMemoryAggregateAllocationUpdateTime = currentTimeMillis;
       lastMemorySeconds = memorySeconds;
       lastVcoreSeconds = vcoreSeconds;
+      lastGpuSeconds = gpuSeconds;
     }
-    return new AggregateAppResourceUsage(lastMemorySeconds, lastVcoreSeconds);
+    return new AggregateAppResourceUsage(lastMemorySeconds, lastVcoreSeconds,
+        lastGpuSeconds);
   }
 
   public synchronized ApplicationResourceUsageReport getResourceUsageReport() {
@@ -718,7 +724,8 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
         reservedContainers.size(), usedResourceClone, reservedResourceClone,
         Resources.add(usedResourceClone, reservedResourceClone),
         runningResourceUsage.getMemorySeconds(),
-        runningResourceUsage.getVcoreSeconds(), queueUsagePerc,
+        runningResourceUsage.getVcoreSeconds(),
+        runningResourceUsage.getGPUSeconds(), queueUsagePerc,
         clusterUsagePerc, 0, 0);
   }
 

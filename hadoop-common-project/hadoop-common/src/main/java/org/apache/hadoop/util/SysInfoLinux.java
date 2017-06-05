@@ -66,7 +66,9 @@ public class SysInfoLinux extends SysInfo {
   private static final String HUGEPAGESTOTAL_STRING = "HugePages_Total";
   private static final String HUGEPAGESIZE_STRING = "Hugepagesize";
 
-
+  private GPUManagementLibrary gpuManagementLibrary;
+  private static final String GPU_MANAGEMENT_LIBRARY_CLASSNAME = "io.hops" +
+      ".management.nvidia.NvidiaManagementLibrary";
 
   /**
    * Patterns for parsing /proc/cpuinfo.
@@ -720,5 +722,30 @@ public class SysInfoLinux extends SysInfo {
 
   public long getJiffyLengthInMillis() {
     return this.jiffyLengthInMillis;
+  }
+  
+  /** {@inheritDoc} */
+  @Override
+  public int getNumGPUs() {
+    try {
+      gpuManagementLibrary =
+          GPUManagementLibraryLoader.load(GPU_MANAGEMENT_LIBRARY_CLASSNAME);
+      if(gpuManagementLibrary == null) {
+        return 0;
+      }
+      if(!gpuManagementLibrary.initialize()) {
+        LOG.debug("Could not initialize GPU Management Library, offering 0 GPUs");
+        return 0;
+      }
+      int numGPUs = gpuManagementLibrary.getNumGPUs();
+      if(!gpuManagementLibrary.shutDown()) {
+        LOG.debug("Could not shutdown GPU Management Library");
+      }
+      return numGPUs;
+    } catch(GPUManagementLibraryException gpue) {
+      LOG.info("Could not load GPU management library, assuming no GPUs on " +
+          "this machine");
+    }
+    return 0;
   }
 }

@@ -117,7 +117,12 @@ public class TestNMWebServicesContainers extends JerseyTestBase {
         public long getVCoresAllocatedForContainers() {
           return new Long("4000");
         }
-
+  
+        @Override
+        public long getGPUsAllocatedForContainers() {
+          return new Long("4000");
+        }
+  
         @Override
         public boolean isVmemCheckEnabled() {
           return true;
@@ -493,6 +498,7 @@ public class TestNMWebServicesContainers extends JerseyTestBase {
           WebServicesTestUtils.getXmlString(element, "nodeId"),
           WebServicesTestUtils.getXmlInt(element, "totalMemoryNeededMB"),
           WebServicesTestUtils.getXmlInt(element, "totalVCoresNeeded"),
+          WebServicesTestUtils.getXmlInt(element, "totalGPUsNeeded"),
           WebServicesTestUtils.getXmlString(element, "containerLogsLink"));
       // verify that the container log files element exists
       List<String> containerLogFiles =
@@ -513,7 +519,7 @@ public class TestNMWebServicesContainers extends JerseyTestBase {
         info.getString("state"), info.getString("user"),
         info.getInt("exitCode"), info.getString("diagnostics"),
         info.getString("nodeId"), info.getInt("totalMemoryNeededMB"),
-        info.getInt("totalVCoresNeeded"),
+        info.getInt("totalVCoresNeeded"), info.getInt("totalGPUsNeeded"),
         info.getString("containerLogsLink"));
     // verify that the container log files element exists
     JSONArray containerLogFilesArr = info.getJSONArray("containerLogFiles");
@@ -529,7 +535,7 @@ public class TestNMWebServicesContainers extends JerseyTestBase {
   public void verifyNodeContainerInfoGeneric(Container cont, String id,
       String state, String user, int exitCode, String diagnostics,
       String nodeId, int totalMemoryNeededMB, int totalVCoresNeeded,
-      String logsLink)
+      int totalGpusNeeded, String logsLink)
       throws JSONException, Exception {
     WebServicesTestUtils.checkStringMatch("id", cont.getContainerId()
         .toString(), id);
@@ -549,6 +555,9 @@ public class TestNMWebServicesContainers extends JerseyTestBase {
     assertEquals("totalVCoresNeeded wrong",
       YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_VCORES,
       totalVCoresNeeded);
+    assertEquals("totalGPUsNeeded wrong",
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_MINIMUM_ALLOCATION_GPUS,
+        totalGpusNeeded);
     String shortLink =
         ujoin("containerlogs", cont.getContainerId().toString(),
             cont.getUser());

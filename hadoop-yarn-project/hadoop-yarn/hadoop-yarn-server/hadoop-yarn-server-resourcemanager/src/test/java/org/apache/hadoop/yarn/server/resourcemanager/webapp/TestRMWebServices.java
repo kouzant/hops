@@ -413,6 +413,10 @@ public class TestRMWebServices extends JerseyTestBase {
           WebServicesTestUtils.getXmlInt(element, "availableVirtualCores"),
           WebServicesTestUtils.getXmlInt(element, "allocatedVirtualCores"),
           WebServicesTestUtils.getXmlInt(element, "totalVirtualCores"),
+          WebServicesTestUtils.getXmlInt(element, "reservedGPUs"),
+          WebServicesTestUtils.getXmlInt(element, "availableGPUs"),
+          WebServicesTestUtils.getXmlInt(element, "allocatedGPUs"),
+          WebServicesTestUtils.getXmlInt(element, "totalGPUs"),
           WebServicesTestUtils.getXmlInt(element, "containersAllocated"),
           WebServicesTestUtils.getXmlInt(element, "totalMB"),
           WebServicesTestUtils.getXmlInt(element, "totalNodes"),
@@ -429,13 +433,15 @@ public class TestRMWebServices extends JerseyTestBase {
       Exception {
     assertEquals("incorrect number of elements", 1, json.length());
     JSONObject clusterinfo = json.getJSONObject("clusterMetrics");
-    assertEquals("incorrect number of elements", 25, clusterinfo.length());
+    assertEquals("incorrect number of elements", 27, clusterinfo.length());
     verifyClusterMetrics(
         clusterinfo.getInt("appsSubmitted"), clusterinfo.getInt("appsCompleted"),
         clusterinfo.getInt("reservedMB"), clusterinfo.getInt("availableMB"),
         clusterinfo.getInt("allocatedMB"),
         clusterinfo.getInt("reservedVirtualCores"), clusterinfo.getInt("availableVirtualCores"),
         clusterinfo.getInt("allocatedVirtualCores"), clusterinfo.getInt("totalVirtualCores"),
+        clusterinfo.getInt("reservedGPUs"), clusterinfo.getInt("availableGPUs"),
+        clusterinfo.getInt("allocatedGPUs"), clusterinfo.getInt("totalGPUs"),
         clusterinfo.getInt("containersAllocated"),
         clusterinfo.getInt("totalMB"), clusterinfo.getInt("totalNodes"),
         clusterinfo.getInt("lostNodes"), clusterinfo.getInt("unhealthyNodes"),
@@ -445,8 +451,10 @@ public class TestRMWebServices extends JerseyTestBase {
   }
 
   public void verifyClusterMetrics(int submittedApps, int completedApps,
+<<<<<<< 148a0a977329e7fc809a271883aabc1e77a06051
       int reservedMB, int availableMB, int allocMB, int reservedVirtualCores,
       int availableVirtualCores, int allocVirtualCores, int totalVirtualCores,
+      int reservedGPUs, int availableGPUs, int allocGPUs, int totalGPUs,
       int containersAlloc, int totalMB, int totalNodes, int lostNodes,
       int unhealthyNodes, int decommissionedNodes, int rebootedNodes,
       int activeNodes, int shutdownNodes) throws JSONException, Exception {
@@ -459,6 +467,8 @@ public class TestRMWebServices extends JerseyTestBase {
         metrics.getAvailableMB() + metrics.getAllocatedMB();
     long totalVirtualCoresExpect = 
         metrics.getAvailableVirtualCores() + metrics.getAllocatedVirtualCores();
+    long totalGPUsExpect =
+        metrics.getAvailableGPUs() + metrics.getAllocatedGPUs();
     assertEquals("appsSubmitted doesn't match", 
         metrics.getAppsSubmitted(), submittedApps);
     assertEquals("appsCompleted doesn't match", 
@@ -475,6 +485,12 @@ public class TestRMWebServices extends JerseyTestBase {
         metrics.getAvailableVirtualCores(), availableVirtualCores);
     assertEquals("allocatedVirtualCores doesn't match",
         totalVirtualCoresExpect, allocVirtualCores);
+    assertEquals("reservedGPUs doesn't match",
+        metrics.getReservedGPUs(), reservedGPUs);
+    assertEquals("availableGPUs doesn't match",
+        metrics.getAvailableGPUs(), availableGPUs);
+    assertEquals("allocatedGPUs doesn't match",
+        totalGPUsExpect, allocGPUs);
     assertEquals("containersAllocated doesn't match", 0, containersAlloc);
     assertEquals("totalMB doesn't match", totalMBExpect, totalMB);
     assertEquals(
