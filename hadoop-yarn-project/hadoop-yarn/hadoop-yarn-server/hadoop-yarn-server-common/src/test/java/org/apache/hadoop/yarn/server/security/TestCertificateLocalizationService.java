@@ -18,6 +18,7 @@
 package org.apache.hadoop.yarn.server.security;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.security.ssl.CertificateLocalization;
 import org.apache.hadoop.security.ssl.CryptoMaterial;
 import org.junit.After;
 import org.junit.Before;
@@ -47,9 +48,9 @@ public class TestCertificateLocalizationService {
   @Before
   public void setUp() throws Exception {
     conf = new Configuration();
-    certLocSrv = new CertificateLocalizationService();
+    /*certLocSrv = new CertificateLocalizationService(false, false);
     certLocSrv.serviceInit(conf);
-    certLocSrv.serviceStart();
+    certLocSrv.serviceStart();*/
   }
   
   @After
@@ -59,6 +60,28 @@ public class TestCertificateLocalizationService {
       File fd = certLocSrv.getMaterializeDirectory().toFile();
       assertFalse(fd.exists());
     }
+  }
+  
+  @Test
+  public void testMaterialSyncService() throws Exception {
+    CertificateLocalizationService certSyncLeader = new CertificateLocalizationService
+        (true, true);
+    certSyncLeader.serviceInit(conf);
+    certSyncLeader.serviceStart();
+    
+    CertificateLocalizationService certSyncSlave = new
+        CertificateLocalizationService(false, true);
+    certSyncSlave.serviceInit(conf);
+    certSyncSlave.serviceStart();
+    
+    String username = "Dr.Who";
+    ByteBuffer kstore = ByteBuffer.wrap("some bytes".getBytes());
+    ByteBuffer tstore = ByteBuffer.wrap("some bytes".getBytes());
+    certSyncLeader.materializeCertificates(username, kstore, tstore);
+    
+    TimeUnit.SECONDS.sleep(2);
+    certSyncSlave.serviceStop();
+    certSyncLeader.serviceStop();
   }
   
   @Test

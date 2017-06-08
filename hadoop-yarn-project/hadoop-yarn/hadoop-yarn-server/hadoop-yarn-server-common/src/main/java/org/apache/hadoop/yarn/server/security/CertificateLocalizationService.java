@@ -20,9 +20,22 @@ package org.apache.hadoop.yarn.server.security;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.ssl.CertificateLocalization;
 import org.apache.hadoop.security.ssl.CryptoMaterial;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.yarn.client.ClientRMProxy;
+import org.apache.hadoop.yarn.client.RMProxy;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.exceptions.YarnException;
+import org.apache.hadoop.yarn.exceptions.YarnRuntimeException;
+import org.apache.hadoop.yarn.factories.RecordFactory;
+import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
+import org.apache.hadoop.yarn.ipc.YarnRPC;
+import org.apache.hadoop.yarn.server.api.CertificateLocalizationProtocol;
+import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysResponse;
+import org.apache.hadoop.yarn.util.Records;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
 
@@ -30,6 +43,7 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Path;
@@ -44,7 +58,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
 public class CertificateLocalizationService extends AbstractService
-    implements CertificateLocalization {
+    implements CertificateLocalization, CertificateLocalizationProtocol {
+  
   private final Logger LOG = LogManager.getLogger
       (CertificateLocalizationService.class);
   
@@ -58,15 +73,34 @@ public class CertificateLocalizationService extends AbstractService
   private final Map<StorageKey, Future<CryptoMaterial>> futures =
       new ConcurrentHashMap<>();
   private final ExecutorService execPool = Executors.newFixedThreadPool(5);
+  private final boolean isLeader;
+  private final boolean isHAEnabled;
   
   private File tmpDir;
   
-  public CertificateLocalizationService() {
+  private InetSocketAddress resourceManagerAddress;
+  private Server server;
+  private RecordFactory recordFactory;
+  private CertificateLocalizationProtocol localizationProtocol;
+  
+  public CertificateLocalizationService(boolean isLeader, boolean isHAEnabled) {
     super(CertificateLocalizationService.class.getName());
+    this.isLeader = isLeader;
+    this.isHAEnabled = isHAEnabled;
   }
   
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
+    /*resourceManagerAddress = conf.getSocketAddr(YarnConfiguration.RM_BIND_HOST,
+        YarnConfiguration.RM_SCHEDULER_ADDRESS,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_ADDRESS,
+        YarnConfiguration.DEFAULT_RM_SCHEDULER_PORT);*/
+    resourceManagerAddress = conf.getSocketAddr(YarnConfiguration.RM_BIND_HOST,
+        "rm.certificate.localizer.address",
+        "0.0.0.0:8812",
+        8812);
+    recordFactory = RecordFactoryProvider.getRecordFactory(conf);
+    
     // TODO Get the localization directory from conf, for the moment is a
     // random UUID
     
@@ -93,11 +127,38 @@ public class CertificateLocalizationService extends AbstractService
     materializeDir.toFile().mkdir();
     LOG.debug("Initialized at dir: " + materializeDir.toString());
     
+    if (isHAEnabled) {
+      if (isLeader) {
+        startSyncClient();
+      } else {
+        startSyncService();
+      }
+    }
     super.serviceStart();
+  }
+  
+  private void startSyncService() {
+    Configuration conf = getConfig();
+    YarnRPC rpc = YarnRPC.create(conf);
+    this.server = rpc.getServer(CertificateLocalizationProtocol.class, this,
+        resourceManagerAddress, conf, null, 20);
+    this.server.start();
+  }
+  
+  private void startSyncClient() {
+    Configuration conf = getConfig();
+    YarnRPC rpc = YarnRPC.create(getConfig());
+    localizationProtocol = (CertificateLocalizationProtocol) rpc.getProxy
+        (CertificateLocalizationProtocol.class,
+            resourceManagerAddress, conf);
   }
   
   @Override
   protected void serviceStop() throws Exception {
+    if (null != this.server) {
+      this.server.stop();
+    }
+    
     if (null != materializeDir) {
       FileUtils.deleteQuietly(materializeDir.toFile());
     }
@@ -189,6 +250,17 @@ public class CertificateLocalizationService extends AbstractService
     return material;
   }
   
+  @Override
+  public MaterializeCryptoKeysResponse materializeCrypto(
+      MaterializeCryptoKeysRequest request) throws YarnException, IOException {
+    LOG.error("Received *materializeCrypto* request " + request);
+    
+    MaterializeCryptoKeysResponse response = recordFactory.newRecordInstance
+        (MaterializeCryptoKeysResponse.class);
+    response.setSuccess(true);
+    
+    return response;
+  }
   
   
   private class StorageKey {
@@ -258,6 +330,22 @@ public class CertificateLocalizationService extends AbstractService
           tstoreFile.getAbsolutePath(), kstore, tstore);
       materialLocation.put(key, material);
       futures.remove(key);
+      
+      if (null != localizationProtocol) {
+        MaterializeCryptoKeysRequest request = Records.newRecord
+            (MaterializeCryptoKeysRequest.class);
+        request.setKeystoreName(kstoreFile.toString());
+        request.setTruststoreName(tstoreFile.toString());
+        try {
+          MaterializeCryptoKeysResponse response = localizationProtocol
+              .materializeCrypto(request);
+          if (!response.getSuccess()) {
+            LOG.error("Could not sync crypto material");
+          }
+        } catch (YarnException ex) {
+          LOG.error("Error while syncing crypto material: " + ex, ex);
+        }
+      }
       return material;
     }
   }

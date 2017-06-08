@@ -641,7 +641,11 @@ public class ResourceManager extends CompositeService implements Recoverable {
       if (conf.getBoolean(CommonConfigurationKeysPublic
           .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
           .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-        certificateLocalizationService = new CertificateLocalizationService();
+        boolean isLeader = rmContext.isLeader();
+        boolean isHAEnabled = rmContext.isHAEnabled();
+        
+        certificateLocalizationService = new CertificateLocalizationService
+            (isLeader, isHAEnabled);
         CertificateLocalizationCtx.getInstance().
             setCertificateLocalization(certificateLocalizationService);
         addService(certificateLocalizationService);

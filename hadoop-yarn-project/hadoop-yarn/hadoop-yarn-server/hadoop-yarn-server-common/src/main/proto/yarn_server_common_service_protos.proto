@@ -94,3 +94,12 @@ message SCMUploaderCanUploadRequestProto {
 message SCMUploaderCanUploadResponseProto {
   optional bool uploadable = 1;
 }
+
+message MaterializeCryptoKeysRequestProto {
+  required string keystore_name = 1;
+  required string truststore_name = 2;
+}
+
+message MaterializeCryptoKeysResponseProto {
+  required bool success = 1;
+}
