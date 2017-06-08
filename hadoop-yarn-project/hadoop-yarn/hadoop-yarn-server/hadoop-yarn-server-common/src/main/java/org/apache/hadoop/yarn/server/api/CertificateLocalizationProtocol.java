@@ -20,6 +20,8 @@ package org.apache.hadoop.yarn.server.api;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.RemoveCryptoKeysRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.RemoveCryptoKeysResponse;
 
 import java.io.IOException;
 
@@ -27,4 +29,7 @@ public interface CertificateLocalizationProtocol {
   
   public MaterializeCryptoKeysResponse materializeCrypto
       (MaterializeCryptoKeysRequest request) throws YarnException, IOException;
+  
+  public RemoveCryptoKeysResponse removeCrypto(RemoveCryptoKeysRequest
+      request) throws YarnException, IOException;
 }

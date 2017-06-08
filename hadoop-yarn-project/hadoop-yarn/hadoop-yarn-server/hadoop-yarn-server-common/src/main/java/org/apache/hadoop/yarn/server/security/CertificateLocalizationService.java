@@ -35,6 +35,8 @@ import org.apache.hadoop.yarn.ipc.YarnRPC;
 import org.apache.hadoop.yarn.server.api.CertificateLocalizationProtocol;
 import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.RemoveCryptoKeysRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.RemoveCryptoKeysResponse;
 import org.apache.hadoop.yarn.util.Records;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -254,7 +256,7 @@ public class CertificateLocalizationService extends AbstractService
   @Override
   public MaterializeCryptoKeysResponse materializeCrypto(
       MaterializeCryptoKeysRequest request) throws YarnException, IOException {
-    LOG.error("Received *materializeCrypto* request " + request);
+    LOG.debug("Received *materializeCrypto* request " + request);
     MaterializeCryptoKeysResponse response = recordFactory.newRecordInstance
         (MaterializeCryptoKeysResponse.class);
     
@@ -264,6 +266,26 @@ public class CertificateLocalizationService extends AbstractService
       response.setSuccess(true);
     } catch (IOException ex) {
       response.setSuccess(false);
+      LOG.error("Could not sync crypto material materialization " + ex, ex);
+    }
+    
+    return response;
+  }
+  
+  // CertificateLocalizationService RPC
+  @Override
+  public RemoveCryptoKeysResponse removeCrypto(RemoveCryptoKeysRequest request)
+      throws YarnException, IOException {
+    LOG.debug("Received *removeCrypto* request " + request);
+    RemoveCryptoKeysResponse response = recordFactory.newRecordInstance
+        (RemoveCryptoKeysResponse.class);
+    
+    try {
+      removeMaterial(request.getUsername());
+      response.setSuccess(true);
+    } catch (InterruptedException | ExecutionException ex) {
+      response.setSuccess(false);
+      LOG.error("Could not sync crypto material removal " + ex, ex);
     }
     
     return response;
@@ -348,10 +370,11 @@ public class CertificateLocalizationService extends AbstractService
           MaterializeCryptoKeysResponse response = localizationProtocol
               .materializeCrypto(request);
           if (!response.getSuccess()) {
-            LOG.error("Could not sync crypto material");
+            LOG.error("Could not sync materialization of crypto material");
           }
         } catch (YarnException ex) {
-          LOG.error("Error while syncing crypto material: " + ex, ex);
+          LOG.error("Error while syncing materialization of crypto material:" +
+              " " + ex, ex);
         }
       }
       return material;
@@ -373,6 +396,22 @@ public class CertificateLocalizationService extends AbstractService
           .toFile();
       FileUtils.deleteQuietly(appDir);
       materialLocation.remove(key);
+      
+      if (null != localizationProtocol) {
+        RemoveCryptoKeysRequest request = Records.newRecord
+            (RemoveCryptoKeysRequest.class);
+        request.setUsername(key.username);
+        try {
+          RemoveCryptoKeysResponse response = localizationProtocol
+              .removeCrypto(request);
+          if (!response.getSuccess()) {
+            LOG.error("Could not sync removal of crypto material");
+          }
+        } catch (YarnException | IOException ex) {
+          LOG.error("Error while syncing removal of crypto material: " + ex,
+              ex);
+        }
+      }
     }
   }
 }

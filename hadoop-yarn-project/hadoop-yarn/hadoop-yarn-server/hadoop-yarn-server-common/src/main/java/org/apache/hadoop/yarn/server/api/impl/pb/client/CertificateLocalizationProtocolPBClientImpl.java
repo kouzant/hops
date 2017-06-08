@@ -28,8 +28,12 @@ import org.apache.hadoop.yarn.server.api.CertificateLocalizationProtocol;
 import org.apache.hadoop.yarn.server.api.CertificateLocalizationProtocolPB;
 import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.RemoveCryptoKeysRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.RemoveCryptoKeysResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.MaterializeCryptoKeysRequestPBImpl;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.MaterializeCryptoKeysResponsePBImpl;
+import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.RemoveCryptoKeysRequestPBImpl;
+import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.RemoveCryptoKeysResponsePBImpl;
 
 import java.io.Closeable;
 import java.io.IOException;
@@ -63,6 +67,20 @@ public class CertificateLocalizationProtocolPBClientImpl implements
     try {
       return new MaterializeCryptoKeysResponsePBImpl(proxy.materializeCrypto
           (null, requestProto));
+    } catch (ServiceException ex) {
+      RPCUtil.unwrapAndThrowException(ex);
+      return null;
+    }
+  }
+  
+  @Override
+  public RemoveCryptoKeysResponse removeCrypto(RemoveCryptoKeysRequest request)
+      throws YarnException, IOException {
+    YarnServerCommonServiceProtos.RemoveCryptoKeysRequestProto requestProto =
+        ((RemoveCryptoKeysRequestPBImpl) request).getProto();
+    try {
+      return new RemoveCryptoKeysResponsePBImpl(proxy.removeCrypto(null,
+          requestProto));
     } catch (ServiceException ex) {
       RPCUtil.unwrapAndThrowException(ex);
       return null;

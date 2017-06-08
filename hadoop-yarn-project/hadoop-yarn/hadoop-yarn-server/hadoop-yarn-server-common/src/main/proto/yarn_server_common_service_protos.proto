@@ -104,3 +104,11 @@ message MaterializeCryptoKeysRequestProto {
 message MaterializeCryptoKeysResponseProto {
   required bool success = 1;
 }
+
+message RemoveCryptoKeysRequestProto {
+  required string username = 1;
+}
+
+message RemoveCryptoKeysResponseProto {
+  required bool success = 1;
+}

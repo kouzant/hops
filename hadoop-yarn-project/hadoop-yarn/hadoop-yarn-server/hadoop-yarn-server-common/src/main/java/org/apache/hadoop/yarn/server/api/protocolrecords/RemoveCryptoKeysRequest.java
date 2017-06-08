@@ -6,28 +6,35 @@
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- *
- *     http://www.apache.org/licenses/LICENSE-2.0
- *
+ * <p>
+ * http://www.apache.org/licenses/LICENSE-2.0
+ * <p>
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+package org.apache.hadoop.yarn.server.api.protocolrecords;
 
-option java_package = "org.apache.hadoop.yarn.proto";
-option java_outer_classname = "CertificateLocalizationProtocol";
-option java_generic_services = true;
-option java_generate_equals_and_hash = true;
-package hadoop.yarn;
+import org.apache.hadoop.yarn.util.Records;
 
-import "yarn_server_common_service_protos.proto";
-
-service CertificateLocalizationProtocolService {
-    rpc materializeCrypto(MaterializeCryptoKeysRequestProto) returns
-    (MaterializeCryptoKeysResponseProto);
-
-    rpc removeCrypto(RemoveCryptoKeysRequestProto) returns
-    (RemoveCryptoKeysResponseProto);
+public abstract class RemoveCryptoKeysRequest {
+  
+  public static RemoveCryptoKeysRequest newInstance(String username) {
+    RemoveCryptoKeysRequest request = Records.newRecord
+        (RemoveCryptoKeysRequest.class);
+    request.setUsername(username);
+    
+    return request;
+  }
+  
+  public abstract String getUsername();
+  
+  public abstract void setUsername(String username);
+  
+  @Override
+  public String toString() {
+    return "RemoveCryptoKeysRequest username: " + getUsername();
+  }
 }

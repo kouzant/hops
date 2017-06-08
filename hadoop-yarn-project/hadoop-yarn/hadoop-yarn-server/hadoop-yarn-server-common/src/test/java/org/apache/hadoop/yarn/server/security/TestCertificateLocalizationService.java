@@ -85,6 +85,26 @@ public class TestCertificateLocalizationService {
     certSyncLeader.materializeCertificates(username, kstore, tstore);
     
     TimeUnit.SECONDS.sleep(2);
+    
+    String slaveCertLoc = certSyncSlave.getMaterializeDirectory().toString();
+    String expectedKPath = Paths.get(slaveCertLoc, username, username +
+        "__kstore.jks").toString();
+    String expectedTPath = Paths.get(slaveCertLoc, username, username +
+        "__tstore.jks").toString();
+    CryptoMaterial material = certSyncSlave.getMaterialLocation(username);
+    assertEquals(expectedKPath, material.getKeyStoreLocation());
+    assertEquals(expectedTPath, material.getTrustStoreLocation());
+    
+    certSyncLeader.removeMaterial(username);
+    
+    TimeUnit.SECONDS.sleep(2);
+    
+    File kfd = new File(expectedKPath);
+    File tfd = new File(expectedTPath);
+    
+    assertFalse(kfd.exists());
+    assertFalse(tfd.exists());
+    
     certSyncSlave.serviceStop();
     certSyncLeader.serviceStop();
   }
