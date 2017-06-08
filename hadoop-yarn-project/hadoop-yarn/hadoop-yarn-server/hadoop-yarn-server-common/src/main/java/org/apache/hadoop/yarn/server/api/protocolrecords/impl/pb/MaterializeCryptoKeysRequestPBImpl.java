@@ -17,8 +17,11 @@
  */
 package org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb;
 
+import org.apache.hadoop.yarn.api.records.impl.pb.ProtoUtils;
 import org.apache.hadoop.yarn.proto.YarnServerCommonServiceProtos;
 import org.apache.hadoop.yarn.server.api.protocolrecords.MaterializeCryptoKeysRequest;
+
+import java.nio.ByteBuffer;
 
 public class MaterializeCryptoKeysRequestPBImpl extends
     MaterializeCryptoKeysRequest {
@@ -64,38 +67,64 @@ public class MaterializeCryptoKeysRequestPBImpl extends
   }
   
   @Override
-  public String getKeystoreName() {
+  public String getUsername() {
     YarnServerCommonServiceProtos.MaterializeCryptoKeysRequestProtoOrBuilder p =
         viaProto ? proto : builder;
     
-    return (p.hasKeystoreName()) ? p.getKeystoreName() : null;
+    return (p.hasUsername()) ? p.getUsername() : null;
   }
   
   @Override
-  public void setKeystoreName(String keystoreName) {
+  public void setUsername(String username) {
     maybeInitBuilder();
-    if (keystoreName == null) {
-      builder.clearKeystoreName();
+    if (username == null) {
+      builder.clearUsername();
       return;
     }
-    builder.setKeystoreName(keystoreName);
+    builder.setUsername(username);
   }
   
   @Override
-  public String getTruststoreName() {
+  public ByteBuffer getKeystore() {
     YarnServerCommonServiceProtos.MaterializeCryptoKeysRequestProtoOrBuilder p =
         viaProto ? proto : builder;
     
-    return (p.hasTruststoreName()) ? p.getTruststoreName() : null;
+    if (!p.hasKeystore()) {
+      return null;
+    }
+    
+    return ProtoUtils.convertFromProtoFormat(p.getKeystore());
   }
   
   @Override
-  public void setTruststoreName(String truststoreName) {
+  public void setKeystore(ByteBuffer keystore) {
     maybeInitBuilder();
-    if (truststoreName == null) {
-      builder.clearTruststoreName();
+    if (keystore == null) {
+      builder.clearKeystore();
       return;
     }
-    builder.setTruststoreName(truststoreName);
+    builder.setKeystore(ProtoUtils.convertToProtoFormat(keystore));
+  }
+  
+  @Override
+  public ByteBuffer getTruststore() {
+    YarnServerCommonServiceProtos.MaterializeCryptoKeysRequestProtoOrBuilder p =
+        viaProto ? proto : builder;
+    
+    if (!p.hasTruststore()) {
+      return null;
+    }
+    
+    return ProtoUtils.convertFromProtoFormat(p.getTruststore());
+  }
+  
+  @Override
+  public void setTruststore(ByteBuffer truststore) {
+    maybeInitBuilder();
+    if (truststore == null) {
+      builder.clearTruststore();
+      return;
+    }
+    builder.setTruststore(ProtoUtils.convertToProtoFormat(truststore));
   }
 }

@@ -250,14 +250,21 @@ public class CertificateLocalizationService extends AbstractService
     return material;
   }
   
+  // CertificateLocalizationService RPC
   @Override
   public MaterializeCryptoKeysResponse materializeCrypto(
       MaterializeCryptoKeysRequest request) throws YarnException, IOException {
     LOG.error("Received *materializeCrypto* request " + request);
-    
     MaterializeCryptoKeysResponse response = recordFactory.newRecordInstance
         (MaterializeCryptoKeysResponse.class);
-    response.setSuccess(true);
+    
+    try {
+      materializeCertificates(request.getUsername(), request.getKeystore(),
+          request.getTruststore());
+      response.setSuccess(true);
+    } catch (IOException ex) {
+      response.setSuccess(false);
+    }
     
     return response;
   }
@@ -334,8 +341,9 @@ public class CertificateLocalizationService extends AbstractService
       if (null != localizationProtocol) {
         MaterializeCryptoKeysRequest request = Records.newRecord
             (MaterializeCryptoKeysRequest.class);
-        request.setKeystoreName(kstoreFile.toString());
-        request.setTruststoreName(tstoreFile.toString());
+        request.setUsername(key.getUsername());
+        request.setKeystore(kstore);
+        request.setTruststore(tstore);
         try {
           MaterializeCryptoKeysResponse response = localizationProtocol
               .materializeCrypto(request);

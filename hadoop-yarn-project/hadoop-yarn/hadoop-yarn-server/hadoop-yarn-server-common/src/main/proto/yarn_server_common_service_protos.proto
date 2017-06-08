@@ -96,8 +96,9 @@ message SCMUploaderCanUploadResponseProto {
 }
 
 message MaterializeCryptoKeysRequestProto {
-  required string keystore_name = 1;
-  required string truststore_name = 2;
+  required string username = 1;
+  required bytes keystore = 2;
+  required bytes truststore = 3;
 }
 
 message MaterializeCryptoKeysResponseProto {

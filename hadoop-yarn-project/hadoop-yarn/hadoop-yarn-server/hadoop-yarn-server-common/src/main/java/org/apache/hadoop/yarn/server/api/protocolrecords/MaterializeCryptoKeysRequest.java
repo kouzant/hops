@@ -19,29 +19,37 @@ package org.apache.hadoop.yarn.server.api.protocolrecords;
 
 import org.apache.hadoop.yarn.util.Records;
 
+import java.nio.ByteBuffer;
+
 public abstract class MaterializeCryptoKeysRequest {
   
-  public static MaterializeCryptoKeysRequest newInstance(String keystoreName,
-      String trustStoreName) {
+  public static MaterializeCryptoKeysRequest newInstance(String username,
+      ByteBuffer keystore, ByteBuffer truststore) {
     MaterializeCryptoKeysRequest request = Records.newRecord
         (MaterializeCryptoKeysRequest.class);
-    request.setKeystoreName(keystoreName);
-    request.setTruststoreName(trustStoreName);
+    request.setUsername(username);
+    request.setKeystore(keystore);
+    request.setTruststore(truststore);
     
     return request;
   }
   
-  public abstract String getKeystoreName();
+  public abstract String getUsername();
   
-  public abstract void setKeystoreName(String keystoreName);
+  public abstract void setUsername(String username);
   
-  public abstract String getTruststoreName();
+  public abstract ByteBuffer getKeystore();
   
-  public abstract void setTruststoreName(String truststoreName);
+  public abstract void setKeystore(ByteBuffer keystore);
+  
+  public abstract ByteBuffer getTruststore();
+  
+  public abstract void setTruststore(ByteBuffer truststore);
   
   @Override
   public String toString() {
-    return "MaterializeCryptoRequest keystore: " + getKeystoreName() + " " +
-        "truststore: " + getTruststoreName();
+    return "MaterializeCryptoRequest username: " + getUsername() + " " +
+        "Keystore size: " + getKeystore().position() + " Truststore size: " +
+        getTruststore().position();
   }
 }

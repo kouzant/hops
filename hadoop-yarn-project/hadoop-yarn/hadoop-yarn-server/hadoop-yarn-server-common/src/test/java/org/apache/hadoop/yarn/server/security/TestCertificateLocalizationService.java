@@ -48,9 +48,9 @@ public class TestCertificateLocalizationService {
   @Before
   public void setUp() throws Exception {
     conf = new Configuration();
-    /*certLocSrv = new CertificateLocalizationService(false, false);
+    certLocSrv = new CertificateLocalizationService(false, false);
     certLocSrv.serviceInit(conf);
-    certLocSrv.serviceStart();*/
+    certLocSrv.serviceStart();
   }
   
   @After
@@ -64,6 +64,11 @@ public class TestCertificateLocalizationService {
   
   @Test
   public void testMaterialSyncService() throws Exception {
+    // Stop the Service started without HA
+    if (null != certLocSrv) {
+      certLocSrv.serviceStop();
+    }
+    
     CertificateLocalizationService certSyncLeader = new CertificateLocalizationService
         (true, true);
     certSyncLeader.serviceInit(conf);
