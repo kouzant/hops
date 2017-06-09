@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.security;
 import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.ssl.CertificateLocalization;
@@ -78,6 +79,8 @@ public class CertificateLocalizationService extends AbstractService
       new ConcurrentHashMap<>();
   private final ExecutorService execPool = Executors.newFixedThreadPool(5);
   private final boolean isHAEnabled;
+  private final List<CertificateLocalizationProtocol> clients = new
+      ArrayList<>();
   
   private File tmpDir;
   
@@ -127,7 +130,7 @@ public class CertificateLocalizationService extends AbstractService
   public void transitionToActive() {
     if (isHAEnabled) {
       stopServer();
-      clients.clear();
+      stopClients();
       startSyncClients();
     }
   }
@@ -135,14 +138,22 @@ public class CertificateLocalizationService extends AbstractService
   public void transitionToStandby() {
     if (isHAEnabled) {
       stopServer();
-      clients.clear();
+      stopClients();
       startSyncService();
     }
+  }
+  
+  private void stopClients() {
+    for (CertificateLocalizationProtocol client : clients) {
+      RPC.stopProxy(client);
+    }
+    clients.clear();
   }
   
   private void stopServer() {
     if (null != this.server) {
       this.server.stop();
+      this.server = null;
     }
   }
   
@@ -153,14 +164,13 @@ public class CertificateLocalizationService extends AbstractService
     InetSocketAddress resourceManagerAddress =
         conf.getSocketAddr(YarnConfiguration.RM_BIND_HOST,
             YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + "." + rmId,
-            "0.0.0.0:8812",
-            8812);
+            YarnConfiguration.DEFAULT_RM_HA_CERT_LOC_ADDRESS,
+            YarnConfiguration.DEFAULT_CERTIFICATE_LOCALIZER_PORT);
     this.server = rpc.getServer(CertificateLocalizationProtocol.class, this,
         resourceManagerAddress, conf, null, 3);
     this.server.start();
   }
   
-  private List<CertificateLocalizationProtocol> clients = new ArrayList<>();
   private void startSyncClients() {
     Configuration conf = getConfig();
     YarnRPC rpc = YarnRPC.create(getConfig());
@@ -194,6 +204,7 @@ public class CertificateLocalizationService extends AbstractService
   @Override
   protected void serviceStop() throws Exception {
     stopServer();
+    stopClients();
     
     if (null != materializeDir) {
       FileUtils.deleteQuietly(materializeDir.toFile());

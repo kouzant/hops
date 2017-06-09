@@ -39,6 +39,7 @@ import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.List;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class TestCertificateLocalizationService {
@@ -68,51 +69,65 @@ public class TestCertificateLocalizationService {
     }
   }
   
+  private void configure(String currentRMId, Configuration conf) {
+    conf.set(YarnConfiguration.RM_HA_ID, currentRMId);
+    conf.set(YarnConfiguration.RM_HA_IDS, "rm0,rm1,rm2");
+    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm0", "0.0.0.0:8812");
+    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm1", "0.0.0.0:8813");
+    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm2", "0.0.0.0:8814");
+  }
+  
+  private void verifyMaterialExistOrNot(CertificateLocalizationService certLocSrv,
+   String username, boolean exist) throws Exception {
+    if (!exist) {
+      rule.expect(FileNotFoundException.class);
+    }
+    String certLoc = certLocSrv.getMaterializeDirectory().toString();
+    String expectedKPath = Paths.get(certLoc, username, username + "__kstore" +
+        ".jks").toString();
+    String expectedTPath = Paths.get(certLoc, username, username + "__tstore" +
+        ".jks").toString();
+    CryptoMaterial material = certLocSrv.getMaterialLocation(username);
+    assertEquals(expectedKPath, material.getKeyStoreLocation());
+    assertEquals(expectedTPath, material.getTrustStoreLocation());
+    
+    File kfd = new File(expectedKPath);
+    File tfd = new File(expectedTPath);
+    if (exist) {
+      assertTrue(kfd.exists());
+      assertTrue(tfd.exists());
+    } else {
+      assertFalse(kfd.exists());
+      assertFalse(tfd.exists());
+    }
+  }
+  
   @Test
   public void testMaterialSyncService() throws Exception {
     // Stop the Service started without HA
     if (null != certLocSrv) {
       certLocSrv.serviceStop();
     }
-    
-    conf.set(YarnConfiguration.RM_HA_ID, "rm0");
-    conf.set(YarnConfiguration.RM_HA_IDS, "rm0,rm1,rm2");
-    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm0", "0.0.0.0:8812");
-    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm1", "0.0.0.0:8813");
-    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm2", "0.0.0.0:8814");
+    boolean exist = true;
+    boolean doesNotExist = false;
     
     CertificateLocalizationService certSyncLeader = new CertificateLocalizationService
         (true);
+    configure("rm0", conf);
     certSyncLeader.serviceInit(conf);
     certSyncLeader.serviceStart();
     certSyncLeader.transitionToActive();
     
     Configuration conf2 = new Configuration();
-    conf2.set(YarnConfiguration.RM_HA_ID, "rm1");
-    conf2.set(YarnConfiguration.RM_HA_IDS, "rm0,rm1,rm2");
-    conf2.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm0",
-        "0.0.0.0:8812");
-    conf2.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm1",
-        "0.0.0.0:8813");
-    conf2.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm2",
-        "0.0.0.0:8814");
-    
     CertificateLocalizationService certSyncSlave = new
         CertificateLocalizationService(true);
+    configure("rm1", conf2);
     certSyncSlave.serviceInit(conf2);
     certSyncSlave.serviceStart();
     certSyncSlave.transitionToStandby();
   
     Configuration conf3 = new Configuration();
-    conf3.set(YarnConfiguration.RM_HA_ID, "rm2");
-    conf3.set(YarnConfiguration.RM_HA_IDS, "rm0,rm1,rm2");
-    conf3.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm0",
-        "0.0.0.0:8812");
-    conf3.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm1",
-        "0.0.0.0:8813");
-    conf3.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm2",
-        "0.0.0.0:8814");
-  
+    configure("rm2", conf3);
     CertificateLocalizationService certSyncSlave2 = new
         CertificateLocalizationService(true);
     certSyncSlave2.serviceInit(conf3);
@@ -126,33 +141,15 @@ public class TestCertificateLocalizationService {
     
     TimeUnit.SECONDS.sleep(2);
     
-    String slaveCertLoc = certSyncSlave.getMaterializeDirectory().toString();
-    String expectedKPath = Paths.get(slaveCertLoc, username, username +
-        "__kstore.jks").toString();
-    String expectedTPath = Paths.get(slaveCertLoc, username, username +
-        "__tstore.jks").toString();
-    CryptoMaterial material = certSyncSlave.getMaterialLocation(username);
-    assertEquals(expectedKPath, material.getKeyStoreLocation());
-    assertEquals(expectedTPath, material.getTrustStoreLocation());
-    
-    slaveCertLoc = certSyncSlave2.getMaterializeDirectory().toString();
-    expectedKPath = Paths.get(slaveCertLoc, username, username +
-        "__kstore.jks").toString();
-    expectedTPath = Paths.get(slaveCertLoc, username, username +
-        "__tstore.jks").toString();
-    material = certSyncSlave2.getMaterialLocation(username);
-    assertEquals(expectedKPath, material.getKeyStoreLocation());
-    assertEquals(expectedTPath, material.getTrustStoreLocation());
+    verifyMaterialExistOrNot(certSyncSlave, username, exist);
+    verifyMaterialExistOrNot(certSyncSlave2, username, exist);
     
     certSyncLeader.removeMaterial(username);
     
     TimeUnit.SECONDS.sleep(2);
     
-    File kfd = new File(expectedKPath);
-    File tfd = new File(expectedTPath);
-    
-    assertFalse(kfd.exists());
-    assertFalse(tfd.exists());
+    verifyMaterialExistOrNot(certSyncSlave, username, doesNotExist);
+    verifyMaterialExistOrNot(certSyncSlave2, username, doesNotExist);
     
     LOG.info("Switching roles");
     // Switch roles
@@ -161,22 +158,16 @@ public class TestCertificateLocalizationService {
     
     username = "Amy";
     certSyncSlave.materializeCertificates(username, kstore, tstore);
+    
     TimeUnit.SECONDS.sleep(2);
-    slaveCertLoc = certSyncLeader.getMaterializeDirectory().toString();
-    expectedKPath = Paths.get(slaveCertLoc, username, username + "__kstore" +
-        ".jks").toString();
-    expectedTPath = Paths.get(slaveCertLoc, username, username + "__tstore" +
-        ".jks").toString();
-    material = certSyncLeader.getMaterialLocation(username);
-    assertEquals(expectedKPath, material.getKeyStoreLocation());
-    assertEquals(expectedTPath, material.getTrustStoreLocation());
+    verifyMaterialExistOrNot(certSyncLeader, username, exist);
+    verifyMaterialExistOrNot(certSyncSlave2, username, exist);
     
     certSyncSlave.removeMaterial(username);
     TimeUnit.SECONDS.sleep(2);
-    kfd = new File(expectedKPath);
-    tfd = new File(expectedTPath);
-    assertFalse(kfd.exists());
-    assertFalse(tfd.exists());
+    
+    verifyMaterialExistOrNot(certSyncLeader, username, doesNotExist);
+    verifyMaterialExistOrNot(certSyncSlave2, username, doesNotExist);
     
     certSyncSlave.serviceStop();
     certSyncLeader.serviceStop();
