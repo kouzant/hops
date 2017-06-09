@@ -467,6 +467,9 @@ RM_PREFIX + "resource-tracker.port";
 
   public static final String RM_HA_IDS = RM_HA_PREFIX + "rm-ids";
   public static final String RM_HA_ID = RM_HA_PREFIX + "id";
+  
+  public static final String RM_HA_CERT_LOC_ADDRESS = RM_HA_PREFIX + "cert" +
+      ".loc.address";
 
   /** Store the related configuration files in File System */
   public static final String FS_BASED_RM_CONF_STORE = RM_PREFIX

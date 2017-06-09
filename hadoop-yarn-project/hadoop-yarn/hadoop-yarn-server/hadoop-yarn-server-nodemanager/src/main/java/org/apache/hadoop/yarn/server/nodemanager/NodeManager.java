@@ -264,7 +264,7 @@ public class NodeManager extends CompositeService
     if (conf.getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       certificateLocalizationService = new CertificateLocalizationService
-          (false, false);
+          (false);
       CertificateLocalizationCtx.getInstance().setCertificateLocalization
           (certificateLocalizationService);
       addService(certificateLocalizationService);

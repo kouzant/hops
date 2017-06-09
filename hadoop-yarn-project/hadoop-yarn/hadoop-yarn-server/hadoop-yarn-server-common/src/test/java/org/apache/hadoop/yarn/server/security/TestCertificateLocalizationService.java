@@ -20,6 +20,9 @@ package org.apache.hadoop.yarn.server.security;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.security.ssl.CertificateLocalization;
 import org.apache.hadoop.security.ssl.CryptoMaterial;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
@@ -35,10 +38,13 @@ import java.io.FileNotFoundException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.Paths;
+import java.util.List;
 import java.util.concurrent.TimeUnit;
 
 public class TestCertificateLocalizationService {
   
+  private final Logger LOG = LogManager.getLogger
+      (TestCertificateLocalizationService.class);
   private CertificateLocalizationService certLocSrv;
   private Configuration conf;
   
@@ -48,7 +54,7 @@ public class TestCertificateLocalizationService {
   @Before
   public void setUp() throws Exception {
     conf = new Configuration();
-    certLocSrv = new CertificateLocalizationService(false, false);
+    certLocSrv = new CertificateLocalizationService(false);
     certLocSrv.serviceInit(conf);
     certLocSrv.serviceStart();
   }
@@ -69,15 +75,49 @@ public class TestCertificateLocalizationService {
       certLocSrv.serviceStop();
     }
     
+    conf.set(YarnConfiguration.RM_HA_ID, "rm0");
+    conf.set(YarnConfiguration.RM_HA_IDS, "rm0,rm1,rm2");
+    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm0", "0.0.0.0:8812");
+    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm1", "0.0.0.0:8813");
+    conf.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm2", "0.0.0.0:8814");
+    
     CertificateLocalizationService certSyncLeader = new CertificateLocalizationService
-        (true, true);
+        (true);
     certSyncLeader.serviceInit(conf);
     certSyncLeader.serviceStart();
+    certSyncLeader.transitionToActive();
+    
+    Configuration conf2 = new Configuration();
+    conf2.set(YarnConfiguration.RM_HA_ID, "rm1");
+    conf2.set(YarnConfiguration.RM_HA_IDS, "rm0,rm1,rm2");
+    conf2.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm0",
+        "0.0.0.0:8812");
+    conf2.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm1",
+        "0.0.0.0:8813");
+    conf2.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm2",
+        "0.0.0.0:8814");
     
     CertificateLocalizationService certSyncSlave = new
-        CertificateLocalizationService(false, true);
-    certSyncSlave.serviceInit(conf);
+        CertificateLocalizationService(true);
+    certSyncSlave.serviceInit(conf2);
     certSyncSlave.serviceStart();
+    certSyncSlave.transitionToStandby();
+  
+    Configuration conf3 = new Configuration();
+    conf3.set(YarnConfiguration.RM_HA_ID, "rm2");
+    conf3.set(YarnConfiguration.RM_HA_IDS, "rm0,rm1,rm2");
+    conf3.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm0",
+        "0.0.0.0:8812");
+    conf3.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm1",
+        "0.0.0.0:8813");
+    conf3.set(YarnConfiguration.RM_HA_CERT_LOC_ADDRESS + ".rm2",
+        "0.0.0.0:8814");
+  
+    CertificateLocalizationService certSyncSlave2 = new
+        CertificateLocalizationService(true);
+    certSyncSlave2.serviceInit(conf3);
+    certSyncSlave2.serviceStart();
+    certSyncSlave2.transitionToStandby();
     
     String username = "Dr.Who";
     ByteBuffer kstore = ByteBuffer.wrap("some bytes".getBytes());
@@ -95,6 +135,15 @@ public class TestCertificateLocalizationService {
     assertEquals(expectedKPath, material.getKeyStoreLocation());
     assertEquals(expectedTPath, material.getTrustStoreLocation());
     
+    slaveCertLoc = certSyncSlave2.getMaterializeDirectory().toString();
+    expectedKPath = Paths.get(slaveCertLoc, username, username +
+        "__kstore.jks").toString();
+    expectedTPath = Paths.get(slaveCertLoc, username, username +
+        "__tstore.jks").toString();
+    material = certSyncSlave2.getMaterialLocation(username);
+    assertEquals(expectedKPath, material.getKeyStoreLocation());
+    assertEquals(expectedTPath, material.getTrustStoreLocation());
+    
     certSyncLeader.removeMaterial(username);
     
     TimeUnit.SECONDS.sleep(2);
@@ -105,8 +154,33 @@ public class TestCertificateLocalizationService {
     assertFalse(kfd.exists());
     assertFalse(tfd.exists());
     
+    LOG.info("Switching roles");
+    // Switch roles
+    certSyncSlave.transitionToActive();
+    certSyncLeader.transitionToStandby();
+    
+    username = "Amy";
+    certSyncSlave.materializeCertificates(username, kstore, tstore);
+    TimeUnit.SECONDS.sleep(2);
+    slaveCertLoc = certSyncLeader.getMaterializeDirectory().toString();
+    expectedKPath = Paths.get(slaveCertLoc, username, username + "__kstore" +
+        ".jks").toString();
+    expectedTPath = Paths.get(slaveCertLoc, username, username + "__tstore" +
+        ".jks").toString();
+    material = certSyncLeader.getMaterialLocation(username);
+    assertEquals(expectedKPath, material.getKeyStoreLocation());
+    assertEquals(expectedTPath, material.getTrustStoreLocation());
+    
+    certSyncSlave.removeMaterial(username);
+    TimeUnit.SECONDS.sleep(2);
+    kfd = new File(expectedKPath);
+    tfd = new File(expectedTPath);
+    assertFalse(kfd.exists());
+    assertFalse(tfd.exists());
+    
     certSyncSlave.serviceStop();
     certSyncLeader.serviceStop();
+    certSyncSlave2.serviceStop();
   }
   
   @Test
