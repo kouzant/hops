@@ -55,12 +55,14 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
+import java.util.concurrent.LinkedBlockingQueue;
 
 public class CertificateLocalizationService extends AbstractService
     implements CertificateLocalization, CertificateLocalizationProtocol {
@@ -81,6 +83,9 @@ public class CertificateLocalizationService extends AbstractService
   private final boolean isHAEnabled;
   private final List<CertificateLocalizationProtocol> clients = new
       ArrayList<>();
+  private BlockingQueue<CertificateLocalizationEvent> evtQueue = null;
+  private Thread eventProcessor = null;
+  private volatile boolean stopped = false;
   
   private File tmpDir;
   
@@ -132,6 +137,14 @@ public class CertificateLocalizationService extends AbstractService
       stopServer();
       stopClients();
       startSyncClients();
+      if (null != evtQueue) {
+        evtQueue.clear();
+      }
+      evtQueue = new LinkedBlockingQueue<>();
+      eventProcessor = new Thread(new EventProcessor());
+      eventProcessor.setDaemon(true);
+      eventProcessor.setName("CertificateLocalizationService - EvtProcessor");
+      eventProcessor.start();
     }
   }
   
@@ -140,6 +153,15 @@ public class CertificateLocalizationService extends AbstractService
       stopServer();
       stopClients();
       startSyncService();
+      if (null != evtQueue) {
+        evtQueue.clear();
+        evtQueue = null;
+      }
+      if (null != eventProcessor) {
+        eventProcessor.interrupt();
+        stopped = true;
+        eventProcessor = null;
+      }
     }
   }
   
@@ -208,6 +230,11 @@ public class CertificateLocalizationService extends AbstractService
     
     if (null != materializeDir) {
       FileUtils.deleteQuietly(materializeDir.toFile());
+    }
+    
+    if (null != eventProcessor) {
+      eventProcessor.interrupt();
+      stopped = true;
     }
     
     LOG.debug("Stopped CertificateLocalization service");
@@ -404,25 +431,16 @@ public class CertificateLocalizationService extends AbstractService
           tstoreFile.getAbsolutePath(), kstore, tstore);
       materialLocation.put(key, material);
       futures.remove(key);
-  
-      for (CertificateLocalizationProtocol client : clients) {
+
+      if (isHAEnabled && eventProcessor != null) {
         MaterializeCryptoKeysRequest request = Records.newRecord
             (MaterializeCryptoKeysRequest.class);
         request.setUsername(key.getUsername());
         request.setKeystore(kstore);
         request.setTruststore(tstore);
-        try {
-          MaterializeCryptoKeysResponse response = client
-              .materializeCrypto(request);
-          if (!response.getSuccess()) {
-            LOG.error("Could not sync materialization of crypto material");
-          }
-        } catch (YarnException ex) {
-          LOG.error(
-              "Error while syncing materialization of crypto material:" +
-                  " " + ex, ex);
-        }
+        evtQueue.add(new CertificateLocalizationEvent(request));
       }
+
       return material;
     }
   }
@@ -443,13 +461,76 @@ public class CertificateLocalizationService extends AbstractService
       FileUtils.deleteQuietly(appDir);
       materialLocation.remove(key);
       
-      for (CertificateLocalizationProtocol client : clients) {
+      if (isHAEnabled && eventProcessor != null) {
         RemoveCryptoKeysRequest request = Records.newRecord
             (RemoveCryptoKeysRequest.class);
         request.setUsername(key.username);
+        evtQueue.add(new CertificateLocalizationEvent(request));
+      }
+    }
+  }
+  
+  private class CertificateLocalizationEvent<T> {
+    private final T request;
+    
+    private CertificateLocalizationEvent(T request) {
+      this.request = request;
+    }
+    
+    private T getRequest() {
+      return request;
+    }
+  }
+  
+  private class EventProcessor implements Runnable {
+    
+    private EventProcessor() {
+      super();
+    }
+    
+    @Override
+    public void run() {
+      while (!stopped && !Thread.currentThread().isInterrupted()) {
         try {
-          RemoveCryptoKeysResponse response = client
-              .removeCrypto(request);
+          CertificateLocalizationEvent evt = evtQueue.take();
+          if (evt.getRequest() instanceof MaterializeCryptoKeysRequest) {
+            MaterializeCryptoKeysRequest request =
+                (MaterializeCryptoKeysRequest) evt.getRequest();
+            materializeRequest(request);
+          } else if (evt.getRequest() instanceof RemoveCryptoKeysRequest) {
+            RemoveCryptoKeysRequest request = (RemoveCryptoKeysRequest) evt
+                .getRequest();
+            removeRequest(request);
+          } else {
+            LOG.error("Unknown event type");
+          }
+        } catch (InterruptedException ex) {
+          LOG.info("Handler thread has been interrupted");
+          Thread.currentThread().interrupt();
+          stopped = true;
+        }
+      }
+    }
+    
+    private void materializeRequest(MaterializeCryptoKeysRequest request) {
+      for (CertificateLocalizationProtocol client : clients) {
+        try {
+          MaterializeCryptoKeysResponse response = client.materializeCrypto
+              (request);
+          if (!response.getSuccess()) {
+            LOG.error("Could sync materialization of crypto material");
+          }
+        } catch (YarnException | IOException ex) {
+          LOG.error("Error while syncing materialization of crypto material: " +
+              ex, ex);
+        }
+      }
+    }
+    
+    private void removeRequest(RemoveCryptoKeysRequest request) {
+      for (CertificateLocalizationProtocol client : clients) {
+        try {
+          RemoveCryptoKeysResponse response = client.removeCrypto(request);
           if (!response.getSuccess()) {
             LOG.error("Could not sync removal of crypto material");
           }

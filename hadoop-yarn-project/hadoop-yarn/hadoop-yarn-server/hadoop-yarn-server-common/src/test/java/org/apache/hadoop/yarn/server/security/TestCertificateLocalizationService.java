@@ -18,7 +18,6 @@
 package org.apache.hadoop.yarn.server.security;
 
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.security.ssl.CertificateLocalization;
 import org.apache.hadoop.security.ssl.CryptoMaterial;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.log4j.LogManager;
@@ -29,6 +28,7 @@ import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
 
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertEquals;
@@ -38,8 +38,6 @@ import java.io.FileNotFoundException;
 import java.nio.ByteBuffer;
 import java.nio.file.Path;
 import java.nio.file.Paths;
-import java.util.List;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class TestCertificateLocalizationService {
@@ -78,31 +76,36 @@ public class TestCertificateLocalizationService {
   }
   
   private void verifyMaterialExistOrNot(CertificateLocalizationService certLocSrv,
-   String username, boolean exist) throws Exception {
-    if (!exist) {
-      rule.expect(FileNotFoundException.class);
-    }
+      String username, boolean exist) throws Exception {
+    
     String certLoc = certLocSrv.getMaterializeDirectory().toString();
     String expectedKPath = Paths.get(certLoc, username, username + "__kstore" +
         ".jks").toString();
     String expectedTPath = Paths.get(certLoc, username, username + "__tstore" +
         ".jks").toString();
-    CryptoMaterial material = certLocSrv.getMaterialLocation(username);
-    assertEquals(expectedKPath, material.getKeyStoreLocation());
-    assertEquals(expectedTPath, material.getTrustStoreLocation());
-    
     File kfd = new File(expectedKPath);
     File tfd = new File(expectedTPath);
+    
     if (exist) {
+      CryptoMaterial material = certLocSrv.getMaterialLocation(username);
+      assertEquals(expectedKPath, material.getKeyStoreLocation());
+      assertEquals(expectedTPath, material.getTrustStoreLocation());
       assertTrue(kfd.exists());
       assertTrue(tfd.exists());
     } else {
-      assertFalse(kfd.exists());
-      assertFalse(tfd.exists());
+      CryptoMaterial material = null;
+      try {
+        material = certLocSrv.getMaterialLocation(username);
+      } catch (FileNotFoundException ex) {
+        LOG.info("Exception here is normal");
+        assertNull(material);
+        assertFalse(kfd.exists());
+        assertFalse(tfd.exists());
+      }
     }
   }
   
-  @Test
+  @Test(timeout = 10000)
   public void testMaterialSyncService() throws Exception {
     // Stop the Service started without HA
     if (null != certLocSrv) {
