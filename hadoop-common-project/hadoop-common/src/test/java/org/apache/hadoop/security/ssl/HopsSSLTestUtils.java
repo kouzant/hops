@@ -126,7 +126,7 @@ public class HopsSSLTestUtils {
         this.outDir = outDir;
 
         String keyAlg = "RSA";
-        String signAlg = "MD5withRSA";
+        String signAlg = "SHA256withRSA";
 
         // Generate CA
         KeyPair caKeyPair = KeyStoreTestUtil.generateKeyPair(keyAlg);
