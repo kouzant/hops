@@ -134,6 +134,7 @@ public class CertificateLocalizationService extends AbstractService
   
   public void transitionToActive() {
     if (isHAEnabled) {
+      LOG.info("Transitioned to active");
       stopServer();
       stopClients();
       startSyncClients();
@@ -150,6 +151,7 @@ public class CertificateLocalizationService extends AbstractService
   
   public void transitionToStandby() {
     if (isHAEnabled) {
+      LOG.info("Transitioned to standby");
       stopServer();
       stopClients();
       startSyncService();
