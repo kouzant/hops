@@ -17,6 +17,8 @@
 */
 package org.apache.hadoop.security.ssl;
 
+import org.apache.commons.logging.Log;
+import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 import org.apache.hadoop.conf.Configuration;
@@ -90,6 +92,8 @@ public class SSLFactory implements ConnectionConfigurator {
 
   private String[] enabledProtocols = null;
   private List<String> excludeCiphers;
+
+  private final Log LOG = LogFactory.getLog(SSLFactory.class);
 
   /**
    * Creates an SSLFactory.

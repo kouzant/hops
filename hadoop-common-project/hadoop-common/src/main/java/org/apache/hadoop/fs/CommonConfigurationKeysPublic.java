@@ -418,6 +418,9 @@ public class CommonConfigurationKeysPublic {
                                                 "ipc.server.log.slow.rpc";
   public static final boolean IPC_SERVER_LOG_SLOW_RPC_DEFAULT = false;
 
+  public static final String IPC_SERVER_SSL_ENABLED = "ipc.server.ssl.enabled";
+  public static final boolean IPC_SERVER_SSL_ENABLED_DEFAULT = false;
+
   /**
    * @see
    * <a href="{@docRoot}/../hadoop-project-dist/hadoop-common/core-default.xml">

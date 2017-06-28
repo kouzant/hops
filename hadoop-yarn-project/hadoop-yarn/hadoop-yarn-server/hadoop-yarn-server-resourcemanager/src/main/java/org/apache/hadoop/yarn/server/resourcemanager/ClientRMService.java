@@ -22,6 +22,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
+import java.nio.ByteBuffer;
 import java.security.AccessControlException;
 import java.text.MessageFormat;
 import java.util.ArrayList;
@@ -572,9 +573,11 @@ public class ClientRMService extends AbstractService implements
     // in RMAppManager.
 
     String user = null;
+    String username = null;
     try {
       // Safety
       user = UserGroupInformation.getCurrentUser().getShortUserName();
+      username = UserGroupInformation.getCurrentUser().getUserName();
     } catch (IOException ie) {
       LOG.warn("Unable to get the current user.", ie);
       RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
@@ -582,7 +585,33 @@ public class ClientRMService extends AbstractService implements
           "Exception in submitting application", applicationId, callerContext);
       throw RPCUtil.getRemoteException(ie);
     }
-
+    
+    if (getConfig().getBoolean(CommonConfigurationKeysPublic
+        .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
+        .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+  
+      ByteBuffer kstore = submissionContext.getKeyStore();
+      ByteBuffer tstore = submissionContext.getTrustStore();
+      try {
+        if (kstore == null || tstore == null) {
+          throw new IOException("RPC TLS is enabled but either keystore or " +
+              "truststore is null");
+        }
+        if (kstore.capacity() == 0 || tstore.capacity() == 0) {
+          throw new IOException("RPC TLS is enabled but either keystore or " +
+              "truststore is empty");
+        }
+        
+        rmContext.getCertificateLocalizationService().materializeCertificates
+            (username, kstore, tstore);
+      } catch (IOException ex) {
+        LOG.error(ex, ex);
+        RMAuditLogger.logFailure(user, AuditConstants.SUBMIT_APP_REQUEST,
+            ex.getMessage(), "ClientRMService",
+            "Exception in submitting application", applicationId);
+        throw RPCUtil.getRemoteException(ex);
+      }
+    }
     // Check whether app has already been put into rmContext,
     // If it is, simply return the response
     if (rmContext.getRMApps().get(applicationId) != null) {
@@ -619,7 +648,7 @@ public class ClientRMService extends AbstractService implements
       rmAppManager.submitApplication(submissionContext,
           System.currentTimeMillis(), user);
 
-      LOG.info("Application with id " + applicationId.getId() + 
+      LOG.info("Application with id " + applicationId.getId() +
           " submitted by user " + user);
       RMAuditLogger.logSuccess(user, AuditConstants.SUBMIT_APP_REQUEST,
           "ClientRMService", applicationId, callerContext);
@@ -947,7 +976,7 @@ public class ClientRMService extends AbstractService implements
   @Override
   public GetClusterNodesResponse getClusterNodes(GetClusterNodesRequest request)
       throws YarnException {
-    GetClusterNodesResponse response = 
+    GetClusterNodesResponse response =
       recordFactory.newRecordInstance(GetClusterNodesResponse.class);
     EnumSet<NodeState> nodeStates = request.getNodeStates();
     if (nodeStates == null || nodeStates.isEmpty()) {

@@ -28,6 +28,8 @@ import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.RetryNTimes;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ha.HAServiceProtocol;
 import org.apache.hadoop.ha.HAServiceProtocol.HAServiceState;
 import org.apache.hadoop.http.lib.StaticUserWebFilter;
@@ -40,6 +42,8 @@ import org.apache.hadoop.security.SecurityUtil;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHandler;
 import org.apache.hadoop.security.authorize.ProxyUsers;
+import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
+import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.service.Service;
@@ -170,6 +174,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   protected QuotaService quotaService;
   protected ContainersLogsService containersLogsService;
   protected PriceMultiplicatiorService priceMultiplicatiorService;
+  protected CertificateLocalizationService certificateLocalizationService;
   protected ReservationSystem reservationSystem;
   private ClientRMService clientRM;
   protected ApplicationMasterService masterService;
@@ -335,6 +340,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
     addService(systemMetricsPublisher);
     rmContext.setSystemMetricsPublisher(systemMetricsPublisher);
 
+    createCertificateLocalizationService();
+    
     super.serviceInit(this.conf);
   }
 
@@ -698,7 +705,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
     RMSchedulerServices() {
       super("RMActiveServices");
     }
-
+    
     @Override
     protected void serviceInit(Configuration configuration) throws Exception {
       createAndInitResourceTrackingServices();
@@ -750,7 +757,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       
       priceMultiplicatiorService = new PriceMultiplicatiorService(rmContext);
       addIfService(priceMultiplicatiorService);
-
+      
       // creating monitors that handle preemption
       createPolicyMonitors();
 
@@ -1283,6 +1290,9 @@ LOG.info("+");
 //    }
 
     rmContext.setHAServiceState(HAServiceProtocol.HAServiceState.ACTIVE);
+    if (null != certificateLocalizationService) {
+      certificateLocalizationService.transitionToActive();
+    }
     LOG.info("Transitioned to active state " + HAUtil.getRMHAId(conf));
     }finally{
       LOG.info("unlocked resourceTrackingServiceStart");
@@ -1316,6 +1326,9 @@ LOG.info("+");
         }
       }
       reinitialize(initialize);
+      if (null != certificateLocalizationService) {
+        certificateLocalizationService.transitionToStandby();
+      }
     }
     LOG.info("Transitioned to standby state " + HAUtil.getRMHAId(conf));
     }finally{
@@ -1439,7 +1452,21 @@ LOG.info("+");
   protected GroupMembershipService createGroupMembershipService() {
     return new GroupMembershipService(this, rmContext);
   }
- 
+  
+  private void createCertificateLocalizationService() {
+    if (conf.getBoolean(CommonConfigurationKeysPublic
+        .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
+        .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      boolean isHAEnabled = rmContext.isHAEnabled();
+      
+      certificateLocalizationService = new CertificateLocalizationService(isHAEnabled);
+      CertificateLocalizationCtx.getInstance().setCertificateLocalization
+          (certificateLocalizationService);
+      addService(certificateLocalizationService);
+      rmContext.setCertificateLocalizationService(certificateLocalizationService);
+    }
+  }
+  
   @Private
   public ClientRMService getClientRMService() {
     return this.clientRM;

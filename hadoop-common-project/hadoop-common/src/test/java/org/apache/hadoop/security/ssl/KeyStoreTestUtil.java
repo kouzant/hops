@@ -40,7 +40,6 @@ import java.security.KeyStore;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.security.cert.Certificate;
-import java.security.cert.X509Certificate;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
@@ -50,7 +49,12 @@ import java.security.NoSuchProviderException;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
 import javax.security.auth.x500.X500Principal;
+
+import org.bouncycastle.asn1.ASN1ObjectIdentifier;
 import org.bouncycastle.x509.X509V1CertificateGenerator;
+import org.bouncycastle.x509.X509V3CertificateGenerator;
+import org.bouncycastle.x509.extension.AuthorityKeyIdentifierStructure;
+import org.bouncycastle.x509.extension.SubjectKeyIdentifierStructure;
 
 public class KeyStoreTestUtil {
 
@@ -96,6 +100,37 @@ public class KeyStoreTestUtil {
 
     X509Certificate cert = certGen.generate(pair.getPrivate());
     return cert;
+  }
+
+  @SuppressWarnings("deprecation")
+  public static X509Certificate generateSignedCertificate(String dn, KeyPair pair, int days, String algorithm,
+          PrivateKey caKey, X509Certificate caCert) throws CertificateParsingException,
+                                                            CertificateEncodingException,
+                                                            NoSuchAlgorithmException,
+                                                            SignatureException,
+                                                            InvalidKeyException,
+                                                            NoSuchProviderException {
+    Date from = new Date();
+    Date to = new Date(from.getTime() + days * 86400000l);
+    BigInteger sn = new BigInteger(64, new SecureRandom());
+    X509V3CertificateGenerator certGen = new X509V3CertificateGenerator();
+
+    X500Principal subjectName = new X500Principal(dn);
+
+    certGen.setSerialNumber(sn);
+    certGen.setIssuerDN(caCert.getSubjectX500Principal());
+    certGen.setNotBefore(from);
+    certGen.setNotAfter(to);
+    certGen.setSubjectDN(subjectName);
+    certGen.setPublicKey(pair.getPublic());
+    certGen.setSignatureAlgorithm(algorithm);
+
+    certGen.addExtension(new ASN1ObjectIdentifier("2.5.29.35"), false,
+            new AuthorityKeyIdentifierStructure(caCert));
+    certGen.addExtension(new ASN1ObjectIdentifier("2.5.29.14"), false,
+            new SubjectKeyIdentifierStructure(pair.getPublic()));
+
+    return certGen.generate(caKey);
   }
 
   public static KeyPair generateKeyPair(String algorithm)
@@ -309,7 +344,7 @@ public class KeyStoreTestUtil {
   public static Configuration createClientSSLConfig(String clientKS,
       String password, String keyPassword, String trustKS) {
     return createSSLConfig(SSLFactory.Mode.CLIENT,
-      clientKS, password, keyPassword, trustKS, "");
+      clientKS, password, keyPassword, trustKS, "trustP" ,"");
   }
 
   /**
@@ -327,7 +362,7 @@ public class KeyStoreTestUtil {
     public static Configuration createClientSSLConfig(String clientKS,
       String password, String keyPassword, String trustKS, String excludeCiphers) {
     return createSSLConfig(SSLFactory.Mode.CLIENT,
-      clientKS, password, keyPassword, trustKS, excludeCiphers);
+      clientKS, password, keyPassword, trustKS, String trsutPass, excludeCiphers);
   }
 
   /**
@@ -343,9 +378,9 @@ public class KeyStoreTestUtil {
    * @throws java.io.IOException
    */
   public static Configuration createServerSSLConfig(String serverKS,
-      String password, String keyPassword, String trustKS) throws IOException {
+      String password, String keyPassword, String trustKS, String trustPass) throws IOException {
     return createSSLConfig(SSLFactory.Mode.SERVER,
-      serverKS, password, keyPassword, trustKS, "");
+      serverKS, password, keyPassword, trustKS, trustPass, "");
   }
 
   /**
@@ -362,9 +397,9 @@ public class KeyStoreTestUtil {
    * @throws IOException
    */
     public static Configuration createServerSSLConfig(String serverKS,
-      String password, String keyPassword, String trustKS, String excludeCiphers) throws IOException {
+      String password, String keyPassword, String trustKS, String trustPass, String excludeCiphers) throws IOException {
     return createSSLConfig(SSLFactory.Mode.SERVER,
-      serverKS, password, keyPassword, trustKS, excludeCiphers);
+      serverKS, password, keyPassword, trustKS, trustPass, excludeCiphers);
   }
 
   /**
@@ -403,6 +438,10 @@ public class KeyStoreTestUtil {
     return base + fileSuffix + ".xml";
   }
 
+  public static Configuration createServerSSLConfig(String serverKS, String password, String keyPassword,
+          String trustKS, String excludeCiphers) throws IOException {
+    return createServerSSLConfig(serverKS, password, keyPassword, trustKS, "trustP", excludeCiphers);
+  }
   /**
    * Creates SSL configuration.
    *
@@ -416,9 +455,8 @@ public class KeyStoreTestUtil {
    * @return Configuration for SSL
    */
   private static Configuration createSSLConfig(SSLFactory.Mode mode,
-    String keystore, String password, String keyPassword, String trustKS, String excludeCiphers) {
-    String trustPassword = "trustP";
-
+    String keystore, String password, String keyPassword, String trustKS, String trustPass String excludeCiphers) {
+    String trustPassword = trustPass;
     Configuration sslConf = new Configuration(false);
     if (keystore != null) {
       sslConf.set(FileBasedKeyStoresFactory.resolvePropertyName(mode,

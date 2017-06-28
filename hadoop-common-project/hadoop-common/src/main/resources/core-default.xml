@@ -2141,6 +2141,14 @@
   </description>
 </property>
 
+<property>
+  <name>ipc.server.ssl.enabled</name>
+  <value>false</value>
+  <description>
+    Flag to indicate whether to enable or not SSL support for IPC
+    server. If enabled, then the client should also support SSL
+  </description>
+</property>
 
   <!-- YARN registry -->
 

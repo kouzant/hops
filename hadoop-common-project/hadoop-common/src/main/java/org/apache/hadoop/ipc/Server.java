@@ -46,24 +46,14 @@ import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.nio.channels.WritableByteChannel;
 import java.nio.charset.StandardCharsets;
+import java.security.GeneralSecurityException;
 import java.security.PrivilegedExceptionAction;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.Iterator;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.Timer;
-import java.util.TimerTask;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.LinkedBlockingQueue;
+import java.security.cert.X509Certificate;
+import java.util.*;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import javax.net.ssl.*;
 import javax.security.sasl.Sasl;
 import javax.security.sasl.SaslException;
 import javax.security.sasl.SaslServer;
@@ -106,6 +96,7 @@ import org.apache.hadoop.security.authorize.AuthorizationException;
 import org.apache.hadoop.security.authorize.PolicyProvider;
 import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.security.authorize.ServiceAuthorizationManager;
+import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.security.token.SecretManager;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.TokenIdentifier;
@@ -440,6 +431,11 @@ public abstract class Server {
   private Listener listener = null;
   private Responder responder = null;
   private Handler[] handlers = null;
+
+  private final boolean isSSLEnabled;
+  private SSLFactory sslFactory = null;
+  private String proxySuperuser = null;
+  private Set<String> trustedHostnames;
 
   private boolean logSlowRPC = false;
 
@@ -1089,7 +1085,30 @@ public abstract class Server {
     InetSocketAddress getAddress() {
       return (InetSocketAddress)acceptChannel.socket().getLocalSocketAddress();
     }
-    
+
+    /**
+     * If SSL is enabled create SSLEngine for this connection
+     * @return the configured SSLEngine or null if SSL is not enabled
+     * @throws IOException
+       */
+    SSLEngine createSSLEngine() throws IOException {
+      if (isSSLEnabled) {
+        try {
+          SSLEngine sslEngine = sslFactory.createSSLEngine();
+          sslEngine.getSession().invalidate();
+          // Override whatever value from configuration file, we always need
+          // the client to authenticate here
+          sslEngine.setNeedClientAuth(true);
+          sslEngine.beginHandshake();
+          return sslEngine;
+        } catch (GeneralSecurityException ex) {
+          throw new IOException(ex);
+        }
+      } else {
+        return null;
+      }
+    }
+
     void doAccept(SelectionKey key) throws InterruptedException, IOException,  OutOfMemoryError {
       ServerSocketChannel server = (ServerSocketChannel) key.channel();
       SocketChannel channel;
@@ -1098,18 +1117,33 @@ public abstract class Server {
         channel.configureBlocking(false);
         channel.socket().setTcpNoDelay(tcpNoDelay);
         channel.socket().setKeepAlive(true);
-        
-        Reader reader = getReader();
-        Connection c = connectionManager.register(channel);
-        // If the connectionManager can't take it, close the connection.
-        if (c == null) {
+
+        SSLEngine sslEngine = createSSLEngine();
+
+        Connection c = connectionManager.register(channel, sslEngine);
+        if (c != null) {
+          boolean handshakeDone = false;
+          if (isSSLEnabled) {
+            if (!c.doHandshake()) {
+              // SSL handshake failed
+              LOG.error("SSL handshake for " + c.getHostAddress() + " failed");
+              connectionManager.close(c);
+            } else {
+              handshakeDone = true;
+            }
+          }
+
+          if (!isSSLEnabled || handshakeDone) {
+            Reader reader = getReader();
+            key.attach(c); // so closeCurrentConnection can get the object
+            reader.addConnection(c);
+          }
+        } else {
+          // If the connectionManager can't take it, close the connection.
           if (channel.isOpen()) {
             IOUtils.cleanup(null, channel);
           }
-          continue;
         }
-        key.attach(c);  // so closeCurrentConnection can get the object
-        reader.addConnection(c);
       }
     }
 
@@ -1346,7 +1380,14 @@ public abstract class Server {
           //
           // Send as much data as we can in the non-blocking fashion
           //
-          int numBytes = channelWrite(channel, call.rpcResponse);
+
+          int numBytes = 0;
+          if (isSSLEnabled) {
+            numBytes = call.connection.sslChannelWrite(channel, call.rpcResponse);
+          } else {
+            numBytes = channelWrite(channel, call.rpcResponse);
+          }
+
           if (numBytes < 0) {
             return true;
           }
@@ -1529,8 +1570,23 @@ public abstract class Server {
 
     private boolean sentNegotiate = false;
     private boolean useWrap = false;
-    
+
+
+    // For SSL encryption
+    private final RpcSSLEngine rpcSSLEngine;
+    // Buffer to store decrypted incoming data
+    // In SSL mode, readAndProcess reads from this buffer instead of the channel directly
+    private ByteBuffer sslUnwrappedBuffer = null;
+
     public Connection(SocketChannel channel, long lastContact) {
+      this(channel, lastContact, null);
+    }
+
+    public Connection(SocketChannel channel, long lastContact, RpcSSLEngine rpcSSLEngine) {
+      this.rpcSSLEngine = rpcSSLEngine;
+      if (rpcSSLEngine != null) {
+        this.sslUnwrappedBuffer = ByteBuffer.allocate(51200);
+      }
       this.channel = channel;
       this.lastContact = lastContact;
       this.data = null;
@@ -1554,7 +1610,20 @@ public abstract class Server {
                    socketSendBufferSize);
         }
       }
-    }   
+    }
+
+    public boolean doHandshake() throws IOException {
+      return rpcSSLEngine.doHandshake();
+    }
+
+    public int sslChannelWrite(WritableByteChannel channel, ByteBuffer buffer)
+      throws IOException {
+      int count = rpcSSLEngine.write(channel, buffer);
+      if (count > 0) {
+        rpcMetrics.incrSentBytes(count);
+      }
+      return count;
+    }
 
     @Override
     public String toString() {
@@ -1856,25 +1925,51 @@ public abstract class Server {
 
     public int readAndProcess() throws IOException, InterruptedException {
       while (!shouldClose()) { // stop if a fatal response has been sent.
+        // Decrypt incoming data
+        if (isSSLEnabled) {
+          int bytesRead = rpcSSLEngine.read(channel, sslUnwrappedBuffer);
+          if (bytesRead < 0) {
+            return bytesRead;
+          } else if (bytesRead > 0) {
+            rpcMetrics.incrReceivedBytes(bytesRead);
+          }
+          // If decrypted data buffer is empty continue reading from channel
+          if (sslUnwrappedBuffer.position() == 0) {
+            continue;
+          }
+          sslUnwrappedBuffer.flip();
+        }
+
+        /* Read at most one RPC. If the header is not read completely yet
+         * then iterate until we read first RPC or until there is no data left.
+         */    
         int count = -1;
         if (dataLengthBuffer.remaining() > 0) {
-          count = channelRead(channel, dataLengthBuffer);       
-          if (count < 0 || dataLengthBuffer.remaining() > 0) 
+          // dataLengthBuffer :: 4 bytes
+          count = channelRead(channel, dataLengthBuffer, sslUnwrappedBuffer);
+
+          if (count < 0 || dataLengthBuffer.remaining() > 0)
             return count;
         }
-        
+
         if (!connectionHeaderRead) {
           //Every connection is expected to send the header.
           if (connectionHeaderBuf == null) {
             connectionHeaderBuf = ByteBuffer.allocate(3);
           }
-          count = channelRead(channel, connectionHeaderBuf);
+
+          // connectionHeaderBuf :: 3 bytes
+          count = channelRead(channel, connectionHeaderBuf, sslUnwrappedBuffer);
+
           if (count < 0 || connectionHeaderBuf.remaining() > 0) {
             return count;
           }
+
+          connectionHeaderBuf.flip();
           int version = connectionHeaderBuf.get(0);
           // TODO we should add handler for service class later
-          this.setServiceClass(connectionHeaderBuf.get(1));
+          int serviceClass = connectionHeaderBuf.get(1);
+          this.setServiceClass(serviceClass);
           dataLengthBuffer.flip();
           
           // Check if it looks like the user is hitting an IPC port
@@ -1902,6 +1997,10 @@ public abstract class Server {
           dataLengthBuffer.clear();
           connectionHeaderBuf = null;
           connectionHeaderRead = true;
+
+          if (isSSLEnabled) {
+            sslUnwrappedBuffer.compact();
+          }
           continue;
         }
         
@@ -1912,8 +2011,12 @@ public abstract class Server {
           data = ByteBuffer.allocate(dataLength);
         }
         
-        count = channelRead(channel, data);
-        
+        count = channelRead(channel, data, sslUnwrappedBuffer);
+
+        if (isSSLEnabled) {
+          sslUnwrappedBuffer.compact();
+        }
+
         if (data.remaining() == 0) {
           dataLengthBuffer.clear();
           data.flip();
@@ -2049,6 +2152,7 @@ public abstract class Server {
       UserGroupInformation protocolUser = ProtoUtil.getUgi(connectionContext);
       if (authProtocol == AuthProtocol.NONE) {
         user = protocolUser;
+        authenticateSSLConnection(protocolUser);
       } else {
         // user is authenticated
         user.setAuthenticationMethod(authMethod);
@@ -2081,7 +2185,97 @@ public abstract class Server {
         connectionManager.incrUserConnections(user.getShortUserName());
       }
     }
-    
+
+      /**
+       * Checks whether the CN from the client's certificate subject
+       * matches the username supplied by the RPC call
+       * @param protocolUser - UserGroupInformation for the user made the RPC call
+       * @throws WrappedRpcServerException
+       */
+    private void authenticateSSLConnection(UserGroupInformation protocolUser)
+            throws WrappedRpcServerException {
+      if (!isSSLEnabled) {
+        return;
+      }
+      try {
+        String user = protocolUser.getUserName();
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Authenticating user: " + user + " for protocol "
+              + protocolName + " from " + hostAddress + ":" + remotePort);
+        }
+        
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Authentication via certificate CN");
+        }
+        X509Certificate clientCertificate = ((ServerRpcSSLEngineImpl) rpcSSLEngine)
+                .getClientCertificate();
+
+        String subjectDN = clientCertificate.getSubjectX500Principal().getName("RFC2253");
+        String[] subjectTokens = subjectDN.split(",");
+        String[] cnTokens = subjectTokens[0].split("=", 2);
+        if (cnTokens.length != 2) {
+          throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
+                  "Problematic CN in client certificate: " + subjectTokens[0]);
+        }
+        String cn = cnTokens[1];
+
+        // If the CN of the certificate is equals to Hops superuser,
+        // let it go through
+        if (cn.equals(proxySuperuser)) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("SSL authentication: CN is superuser");
+          }
+          return;
+        }
+
+        
+        // If the CN is not equal to Hops superuser but it is the
+        // same as the RPC username, let it go through as well
+        if (protocolUser.getUserName() != null
+                && protocolUser.getUserName().equals(cn)) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("SSL authentication: CN equals the RPC username");
+          }
+          return;
+        }
+
+        // The CN could also be the machine hostname.
+        // These certificates will be used by Hops services RM, NM, NN, DN
+        // Assume that reverse DNS will succeed only for machines that we
+        // trust
+          if (trustedHostnames.contains(cn)) {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("SSL authentication: CN is hostname and hostname " +
+                  "already authenticated");
+            }
+            return;
+          }
+
+          try {
+            String remoteHostname = InetAddress.getByName(cn).getHostName();
+            if (remoteHostname.equals(cn)) {
+              trustedHostnames.add(cn);
+              if (LOG.isDebugEnabled()) {
+                LOG.debug("SSL authentication: CN is hostname but just " +
+                        "authenticated");
+              }
+              return;
+            }
+          } catch (UnknownHostException ex) {
+            // Continue and an authentication exception will be thrown later on
+            LOG.error("SSL authentication: Could not resolve CN=" + cn);
+          }
+
+        // Incoming RPC did not manage to authenticate
+        throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
+                "Client's certificate CN " + cn +
+                        " did not match the supplied RPC username " + protocolUser.getUserName()
+                        + " for protocol: " + protocolName);
+      } catch (SSLPeerUnverifiedException ex) {
+        throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED, ex);
+      }
+    }
+
     /**
      * Process a wrapped RPC Request - unwrap the SASL packet and process
      * each embedded RPC request 
@@ -2364,7 +2558,7 @@ public abstract class Server {
             RpcErrorCodeProto.FATAL_UNAUTHORIZED, ae);
       }
     }
-    
+
     /**
      * Decode the a protobuf from the given input stream 
      * @param message - Representation of the type of message
@@ -2412,8 +2606,19 @@ public abstract class Server {
       disposeSasl();
       data = null;
       dataLengthBuffer = null;
+
+      if (isSSLEnabled && rpcSSLEngine != null) {
+        try {
+          rpcSSLEngine.close();
+        } catch (IOException ex) {
+          if (LOG.isDebugEnabled()) {
+            LOG.debug("Ignoring exception while closing the socket", ex);
+          }
+        }
+      }
       if (!channel.isOpen())
         return;
+
       try {socket.shutdownOutput();} catch(Exception e) {
         LOG.debug("Ignoring socket shutdown exception", e);
       }
@@ -2532,8 +2737,8 @@ public abstract class Server {
     this(bindAddress, port, rpcRequestClass, handlerCount, numReaders, 
         queueSizePerHandler, conf, serverName, secretManager, null);
   }
-  
-  /** 
+
+  /**
    * Constructs a server listening on the named port and address.  Parameters passed must
    * be of the named class.  The <code>handlerCount</handlerCount> determines
    * the number of handler threads that will be used to process calls.
@@ -2612,6 +2817,37 @@ public abstract class Server {
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC,
         CommonConfigurationKeysPublic.IPC_SERVER_LOG_SLOW_RPC_DEFAULT));
 
+    this.isSSLEnabled = conf.getBoolean(
+            CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
+            CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT);
+
+    if (this.isSSLEnabled) {
+      // Configure SSLContext
+      this.sslFactory = new SSLFactory(SSLFactory.Mode.SERVER, conf);
+      try {
+        this.sslFactory.init();
+      } catch (GeneralSecurityException ex) {
+        throw new IOException(ex);
+      }
+
+      // Get the superuser
+      for (Map.Entry<String, String> entry : conf) {
+        String propName = entry.getKey();
+        if (propName.startsWith(ProxyUsers.CONF_HADOOP_PROXYUSER)) {
+          String[] tokens = propName.split("\\.");
+          // Configuration property is in the form of hadoop.proxyuser.USERNAME.{hosts,groups}
+          proxySuperuser = tokens[2];
+          break;
+        }
+      }
+      // Fallback to Hops default
+      if (proxySuperuser == null) {
+        proxySuperuser = "glassfish";
+      }
+
+      trustedHostnames = new ConcurrentSkipListSet<>();
+    }
+
     // Create the responder here
     responder = new Responder();
     
@@ -2622,7 +2858,7 @@ public abstract class Server {
     
     this.exceptionsHandler.addTerseLoggingExceptions(StandbyException.class);
   }
-  
+
   private RpcSaslProto buildNegotiateResponse(List<AuthMethod> authMethods)
       throws IOException {
     RpcSaslProto.Builder negotiateBuilder = RpcSaslProto.newBuilder();
@@ -2882,6 +3118,9 @@ public abstract class Server {
     notifyAll();
     this.rpcMetrics.shutdown();
     this.rpcDetailedMetrics.shutdown();
+    if (sslFactory != null) {
+      sslFactory.destroy();
+    }
   }
 
   /** Wait for the server to be stopped.
@@ -3023,7 +3262,12 @@ public abstract class Server {
     }
     return count;
   }
-  
+
+
+  private int channelRead(ReadableByteChannel channel, ByteBuffer buffer)
+    throws IOException {
+    return channelRead(channel, buffer, null);
+  }
   
   /**
    * This is a wrapper around {@link ReadableByteChannel#read(ByteBuffer)}.
@@ -3034,13 +3278,26 @@ public abstract class Server {
    * @see ReadableByteChannel#read(ByteBuffer)
    */
   private int channelRead(ReadableByteChannel channel, 
-                          ByteBuffer buffer) throws IOException {
-    
-    int count = (buffer.remaining() <= NIO_BUFFER_LIMIT) ?
-                channel.read(buffer) : channelIO(channel, null, buffer);
-    if (count > 0) {
-      rpcMetrics.incrReceivedBytes(count);
+                          ByteBuffer buffer, ByteBuffer sslUnwrappedBuffer) throws IOException {
+    int count = 0;
+    if (isSSLEnabled && sslUnwrappedBuffer != null) {
+
+      while (buffer.hasRemaining() && sslUnwrappedBuffer.hasRemaining()) {
+        buffer.put(sslUnwrappedBuffer.get());
+        count++;
+      }
+
+      if (count > -1) {
+        count++;
+      }
+    } else if (!isSSLEnabled) {
+      count = (buffer.remaining() <= NIO_BUFFER_LIMIT) ?
+              channel.read(buffer) : channelIO(channel, null, buffer);
+      if (count > 0) {
+        rpcMetrics.incrReceivedBytes(count);
+      }
     }
+
     return count;
   }
   
@@ -3181,11 +3438,16 @@ public abstract class Server {
       return connections.toArray(new Connection[0]);
     }
 
-    Connection register(SocketChannel channel) {
+    Connection register(SocketChannel channel, SSLEngine sslEngine) {
       if (isFull()) {
         return null;
       }
-      Connection connection = new Connection(channel, Time.now());
+      Connection connection;
+      if (sslEngine != null) {
+        connection = new Connection(channel, Time.now(), new ServerRpcSSLEngineImpl(channel, sslEngine));
+      } else {
+        connection = new Connection(channel, Time.now());
+      }
       add(connection);
       if (LOG.isDebugEnabled()) {
         LOG.debug("Server connection from " + connection +

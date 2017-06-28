@@ -21,6 +21,47 @@ package org.apache.hadoop.ipc;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import static org.apache.hadoop.ipc.RpcConstants.*;
+
+import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.DataInputStream;
+import java.io.DataOutputStream;
+import java.io.EOFException;
+import java.io.FilterInputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InterruptedIOException;
+import java.io.OutputStream;
+import java.net.InetAddress;
+import java.net.InetSocketAddress;
+import java.net.Socket;
+import java.net.SocketTimeoutException;
+import java.net.UnknownHostException;
+import java.security.PrivilegedExceptionAction;
+import java.util.Arrays;
+import java.util.Hashtable;
+import java.util.Iterator;
+import java.util.Map.Entry;
+import java.util.Random;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
+
+import javax.net.SocketFactory;
+import javax.net.ssl.SSLException;
+import javax.net.ssl.SSLSocket;
+import javax.security.sasl.Sasl;
+
+import org.apache.commons.collections.functors.ExceptionClosure;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -45,6 +86,7 @@ import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto.RpcErrorCodeProto;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos.RpcResponseHeaderProto.RpcStatusProto;
 import org.apache.hadoop.net.ConnectTimeoutException;
+import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.KerberosInfo;
 import org.apache.hadoop.security.SaslRpcClient;
@@ -664,12 +706,12 @@ public class Client implements AutoCloseable {
            */
           UserGroupInformation ticket = remoteId.getTicket();
           if (ticket != null && ticket.hasKerberosCredentials()) {
-            KerberosInfo krbInfo = 
-              remoteId.getProtocol().getAnnotation(KerberosInfo.class);
+            KerberosInfo krbInfo =
+                    remoteId.getProtocol().getAnnotation(KerberosInfo.class);
             if (krbInfo != null && krbInfo.clientPrincipal() != null) {
-              String host = 
-                SecurityUtil.getHostFromPrincipal(remoteId.getTicket().getUserName());
-              
+              String host =
+                      SecurityUtil.getHostFromPrincipal(remoteId.getTicket().getUserName());
+
               // If host name is a valid local address then bind socket to it
               InetAddress localAddr = NetUtils.getLocalInetAddress(host);
               if (localAddr != null) {
@@ -677,7 +719,7 @@ public class Client implements AutoCloseable {
               }
             }
           }
-          
+
           NetUtils.connect(this.socket, server, connectionTimeout);
           this.socket.setSoTimeout(soTimeout);
           return;
@@ -848,7 +890,7 @@ public class Client implements AutoCloseable {
         }
       } catch (Throwable t) {
         if (t instanceof IOException) {
-          markClosed((IOException)t);
+          markClosed((IOException) t);
         } else {
           markClosed(new IOException("Couldn't set up IO streams: " + t, t));
         }
@@ -959,10 +1001,14 @@ public class Client implements AutoCloseable {
       // before all messages are sent.
       final DataOutputStream out = streams.out;
       synchronized (out) {
-        out.write(RpcConstants.HEADER.array());
-        out.write(RpcConstants.CURRENT_VERSION);
-        out.write(serviceClass);
-        out.write(authProtocol.callId);
+      	try{
+        	out.write(RpcConstants.HEADER.array());
+        	out.write(RpcConstants.CURRENT_VERSION);
+        	out.write(serviceClass);
+        	out.write(authProtocol.callId);
+        } catch (SSLException ex) {
+            throw new IOException(ex.getMessage()).initCause(ex);
+        }
       }
     }
 
@@ -1480,6 +1526,9 @@ public class Client implements AutoCloseable {
         if (call.error instanceof RemoteException) {
           call.error.fillInStackTrace();
           throw call.error;
+        } else if (call.error.getCause() instanceof SSLException) {
+          LOG.error("Connection " + connection.getName() + " encountered TLS error", call.error.getCause());
+          throw new SSLException(call.error.getMessage());
         } else { // local exception
           InetSocketAddress address = connection.getRemoteAddress();
           throw NetUtils.wrapException(address.getHostName(),
