@@ -34,6 +34,8 @@ import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.server.resourcemanager.ahs.RMApplicationHistoryWriter;
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
+import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMDelegatedNodeLabelsUpdater;
+import org.apache.hadoop.yarn.server.resourcemanager.placement.PlacementManager;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.reservation.ReservationSystem;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
@@ -70,13 +72,15 @@ public class RMContextImpl implements RMContext {
 
   private RMApplicationHistoryWriter rmApplicationHistoryWriter;
   private SystemMetricsPublisher systemMetricsPublisher;
+  private EmbeddedElector elector;
+
+  private final Object haServiceStateLock = new Object();
 
   /**
    * Default constructor. To be used in conjunction with setter methods for
    * individual fields.
    */
   public RMContextImpl() {
-
   }
 
   @VisibleForTesting
@@ -133,6 +137,16 @@ public class RMContextImpl implements RMContext {
   }
 
   @Override
+  public void setLeaderElectorService(EmbeddedElector elector) {
+    this.elector = elector;
+  }
+
+  @Override
+  public EmbeddedElector getLeaderElectorService() {
+    return this.elector;
+  }
+
+  @Override
   public RMStateStore getStateStore() {
     return activeServiceContext.getStateStore();
   }
@@ -148,7 +162,7 @@ public class RMContextImpl implements RMContext {
   }
 
   @Override
-  public ConcurrentMap<String, RMNode> getInactiveRMNodes() {
+  public ConcurrentMap<NodeId, RMNode> getInactiveRMNodes() {
     return activeServiceContext.getInactiveRMNodes();
   }
 
@@ -236,9 +250,9 @@ public class RMContextImpl implements RMContext {
     this.isHAEnabled = isHAEnabled;
   }
 
-  void setHAServiceState(HAServiceState haServiceState) {
-    synchronized (haServiceState) {
-      this.haServiceState = haServiceState;
+  void setHAServiceState(HAServiceState serviceState) {
+    synchronized (haServiceStateLock) {
+      this.haServiceState = serviceState;
     }
   }
 
@@ -291,7 +305,8 @@ public class RMContextImpl implements RMContext {
     activeServiceContext.setNMTokenSecretManager(nmTokenSecretManager);
   }
 
-  void setScheduler(ResourceScheduler scheduler) {
+  @VisibleForTesting
+  public void setScheduler(ResourceScheduler scheduler) {
     activeServiceContext.setScheduler(scheduler);
   }
 
@@ -333,7 +348,7 @@ public class RMContextImpl implements RMContext {
 
   @Override
   public HAServiceState getHAServiceState() {
-    synchronized (haServiceState) {
+    synchronized (haServiceStateLock) {
       return haServiceState;
     }
   }
@@ -399,6 +414,18 @@ public class RMContextImpl implements RMContext {
     activeServiceContext.setNodeLabelManager(mgr);
   }
 
+  @Override
+  public RMDelegatedNodeLabelsUpdater getRMDelegatedNodeLabelsUpdater() {
+    return activeServiceContext.getRMDelegatedNodeLabelsUpdater();
+  }
+
+  @Override
+  public void setRMDelegatedNodeLabelsUpdater(
+      RMDelegatedNodeLabelsUpdater delegatedNodeLabelsUpdater) {
+    activeServiceContext.setRMDelegatedNodeLabelsUpdater(
+        delegatedNodeLabelsUpdater);
+  }
+
   public void setSchedulerRecoveryStartAndWaitTime(long waitTime) {
     activeServiceContext.setSchedulerRecoveryStartAndWaitTime(waitTime);
   }
@@ -436,5 +463,24 @@ public class RMContextImpl implements RMContext {
 
   public void setYarnConfiguration(Configuration yarnConfiguration) {
     this.yarnConfiguration=yarnConfiguration;
+  }
+
+  @Override
+  public PlacementManager getQueuePlacementManager() {
+    return this.activeServiceContext.getQueuePlacementManager();
+  }
+  
+  @Override
+  public void setQueuePlacementManager(PlacementManager placementMgr) {
+    this.activeServiceContext.setQueuePlacementManager(placementMgr);
+  }
+
+  public String getHAZookeeperConnectionState() {
+    if (elector == null) {
+      return "Could not find leader elector. Verify both HA and automatic " +
+          "failover are enabled.";
+    } else {
+      return elector.getZookeeperConnectionState();
+    }
   }
 }

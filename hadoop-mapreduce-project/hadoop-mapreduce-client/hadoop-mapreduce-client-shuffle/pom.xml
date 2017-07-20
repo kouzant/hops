@@ -25,7 +25,7 @@
   <groupId>io.hops</groupId>
   <artifactId>hadoop-mapreduce-client-shuffle</artifactId>
   <version>2.4.0</version>
-  <name>hadoop-mapreduce-client-shuffle</name>
+  <name>Apache Hadoop MapReduce Shuffle</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->

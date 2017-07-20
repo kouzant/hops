@@ -34,7 +34,7 @@ import java.util.HashSet;
 import java.util.Set;
 
 import org.apache.commons.compress.compressors.bzip2.BZip2CompressorInputStream;
-import org.apache.commons.io.Charsets;
+import java.nio.charset.StandardCharsets;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
@@ -72,7 +72,7 @@ public class TestLineRecordReader {
     String delimiter = conf.get("textinputformat.record.delimiter");
     byte[] recordDelimiterBytes = null;
     if (null != delimiter) {
-      recordDelimiterBytes = delimiter.getBytes(Charsets.UTF_8);
+      recordDelimiterBytes = delimiter.getBytes(StandardCharsets.UTF_8);
     }
     // read the data without splitting to count the records
     FileSplit split = new FileSplit(testFilePath, 0, testFileSize,
@@ -110,6 +110,43 @@ public class TestLineRecordReader {
         numRecordsNoSplits, numRecordsFirstSplit + numRecordsRemainingSplits);
   }
 
+  private void testLargeSplitRecordForFile(Configuration conf,
+      long firstSplitLength, long testFileSize, Path testFilePath)
+      throws IOException {
+    conf.setInt(org.apache.hadoop.mapreduce.lib.input.
+        LineRecordReader.MAX_LINE_LENGTH, Integer.MAX_VALUE);
+    assertTrue("unexpected firstSplitLength:" + firstSplitLength,
+        testFileSize < firstSplitLength);
+    String delimiter = conf.get("textinputformat.record.delimiter");
+    byte[] recordDelimiterBytes = null;
+    if (null != delimiter) {
+      recordDelimiterBytes = delimiter.getBytes(StandardCharsets.UTF_8);
+    }
+    // read the data without splitting to count the records
+    FileSplit split = new FileSplit(testFilePath, 0, testFileSize,
+        (String[])null);
+    LineRecordReader reader = new LineRecordReader(conf, split,
+        recordDelimiterBytes);
+    LongWritable key = new LongWritable();
+    Text value = new Text();
+    int numRecordsNoSplits = 0;
+    while (reader.next(key, value)) {
+      ++numRecordsNoSplits;
+    }
+    reader.close();
+
+    // count the records in the first split
+    split = new FileSplit(testFilePath, 0, firstSplitLength, (String[])null);
+    reader = new LineRecordReader(conf, split, recordDelimiterBytes);
+    int numRecordsFirstSplit = 0;
+    while (reader.next(key, value)) {
+      ++numRecordsFirstSplit;
+    }
+    reader.close();
+    assertEquals("Unexpected number of records in split",
+        numRecordsNoSplits, numRecordsFirstSplit);
+  }
+
   @Test
   public void testBzip2SplitEndsAtCR() throws IOException {
     // the test data contains a carriage-return at the end of the first
@@ -145,6 +182,13 @@ public class TestLineRecordReader {
 
     //Start next split 10 bytes from behind the end marker.
     testSplitRecords("blockEndingInCR.txt.bz2", 136494);
+  }
+
+  @Test(expected=IOException.class)
+  public void testSafeguardSplittingUnsplittableFiles() throws IOException {
+    // The LineRecordReader must fail when trying to read a file that
+    // was compressed using an unsplittable file format
+    testSplitRecords("TestSafeguardSplittingUnsplittableFiles.txt.gz", 2);
   }
 
   // Use the LineRecordReader to read records from the file
@@ -325,6 +369,22 @@ public class TestLineRecordReader {
   }
 
   @Test
+  public void testUncompressedInputWithLargeSplitSize() throws Exception {
+    Configuration conf = new Configuration();
+    // single char delimiter
+    String inputData = "abcde +fghij+ klmno+pqrst+uvwxyz";
+    Path inputFile = createInputFile(conf, inputData);
+    conf.set("textinputformat.record.delimiter", "+");
+    // split size over max value of integer
+    long longSplitSize = (long)Integer.MAX_VALUE + 1;
+    for (int bufferSize = 1; bufferSize <= inputData.length(); bufferSize++) {
+      conf.setInt("io.file.buffer.size", bufferSize);
+      testLargeSplitRecordForFile(conf, longSplitSize, inputData.length(),
+          inputFile);
+    }
+  }
+
+  @Test
   public void testUncompressedInput() throws Exception {
     Configuration conf = new Configuration();
     // single char delimiter, best case
@@ -422,7 +482,7 @@ public class TestLineRecordReader {
     String inputData = "abcdefghij++kl++mno";
     Path inputFile = createInputFile(conf, inputData);
     String delimiter = "++";
-    byte[] recordDelimiterBytes = delimiter.getBytes(Charsets.UTF_8);
+    byte[] recordDelimiterBytes = delimiter.getBytes(StandardCharsets.UTF_8);
     // the first split must contain two records to make sure that it also pulls
     // in the record from the 2nd split
     int splitLength = 15;
@@ -495,7 +555,7 @@ public class TestLineRecordReader {
     inputData = "abcd|efgh|+|ij|kl|+|mno|pqr";
     inputFile = createInputFile(conf, inputData);
     delimiter = "|+|";
-    recordDelimiterBytes = delimiter.getBytes(Charsets.UTF_8);
+    recordDelimiterBytes = delimiter.getBytes(StandardCharsets.UTF_8);
     // walking over the buffer and split sizes checks for proper processing
     // of the ambiguous bytes of the delimiter
     for (int bufferSize = 1; bufferSize <= inputData.length(); bufferSize++) {
@@ -593,5 +653,34 @@ public class TestLineRecordReader {
     assertEquals(12, reader.getPos());
     assertFalse(reader.next(key, value));
     assertEquals(12, reader.getPos());
+  }
+
+  @Test
+  public void testBzipWithMultibyteDelimiter() throws IOException {
+    String testFileName = "compressedMultibyteDelimiter.txt.bz2";
+    // firstSplitLength < (headers + blockMarker) will pass always since no
+    // records will be read (in the test file that is byte 0..9)
+    // firstSplitlength > (compressed file length - one compressed block
+    // size + 1) will also always pass since the second split will be empty
+    // (833 bytes is the last block start in the used data file)
+    int firstSplitLength = 100;
+    URL testFileUrl = getClass().getClassLoader().getResource(testFileName);
+    assertNotNull("Cannot find " + testFileName, testFileUrl);
+    File testFile = new File(testFileUrl.getFile());
+    long testFileSize = testFile.length();
+    Path testFilePath = new Path(testFile.getAbsolutePath());
+    assertTrue("Split size is smaller than header length",
+        firstSplitLength > 9);
+    assertTrue("Split size is larger than compressed file size " +
+        testFilePath, testFileSize > firstSplitLength);
+
+    Configuration conf = new Configuration();
+    conf.setInt(org.apache.hadoop.mapreduce.lib.input.
+        LineRecordReader.MAX_LINE_LENGTH, Integer.MAX_VALUE);
+
+    String delimiter = "<E-LINE>\r\r\n";
+    conf.set("textinputformat.record.delimiter", delimiter);
+    testSplitRecordsForFile(conf, firstSplitLength, testFileSize,
+        testFilePath);
   }
 }

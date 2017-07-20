@@ -25,7 +25,7 @@
   <artifactId>hadoop-yarn-project</artifactId>
   <version>2.4.0</version>
   <packaging>pom</packaging>
-  <name>hadoop-yarn-project</name>
+  <name>Apache Hadoop YARN Project</name>
   <url>http://hadoop.apache.org/yarn/</url>
 
   <properties>
@@ -96,22 +96,13 @@
                   cd "${project.build.directory}"
                   tar cf - ${project.artifactId}-${project.version} | gzip > ${project.artifactId}-${project.version}.tar.gz
                 </echo>
-                <exec executable="sh" dir="${project.build.directory}" failonerror="true">
+                <exec executable="${shell-executable}" dir="${project.build.directory}" failonerror="true">
                   <arg line="./dist-maketar.sh"/>
                 </exec>
               </target>
             </configuration>
           </execution>
         </executions>
-      </plugin>
-      <plugin>
-        <groupId>org.apache.rat</groupId>
-        <artifactId>apache-rat-plugin</artifactId>
-        <configuration>
-          <excludes>
-            <exclude>CHANGES.txt</exclude>
-          </excludes>
-        </configuration>
       </plugin>
     </plugins>
   </build>

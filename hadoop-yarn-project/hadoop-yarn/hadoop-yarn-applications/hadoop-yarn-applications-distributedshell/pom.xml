@@ -25,7 +25,7 @@
   <groupId>io.hops</groupId>
   <artifactId>hadoop-yarn-applications-distributedshell</artifactId>
   <version>2.4.0</version>
-  <name>hadoop-yarn-applications-distributedshell</name>
+  <name>Apache Hadoop YARN DistributedShell</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->
@@ -114,6 +114,38 @@
       <groupId>io.hops</groupId>
       <artifactId>hadoop-yarn-server-tests</artifactId>
       <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.mockito</groupId>
+      <artifactId>mockito-all</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.hops</groupId>
+      <artifactId>hadoop-yarn-server-timeline-pluginstorage</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>io.hops</groupId>
+      <artifactId>hadoop-yarn-server-timeline-pluginstorage</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.hops</groupId>
+      <artifactId>hadoop-yarn-common</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.hops</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
+      <type>test-jar</type>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.hops</groupId>
+      <artifactId>hadoop-hdfs</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

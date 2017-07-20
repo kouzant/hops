@@ -22,7 +22,7 @@
   <groupId>io.hops</groupId>
   <artifactId>hadoop-yarn-server-sharedcachemanager</artifactId>
   <version>2.4.0</version>
-  <name>hadoop-yarn-server-sharedcachemanager</name>
+  <name>Apache Hadoop YARN SharedCacheManager</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->

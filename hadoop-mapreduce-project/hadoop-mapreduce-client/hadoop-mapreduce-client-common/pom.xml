@@ -25,11 +25,13 @@
   <groupId>io.hops</groupId>
   <artifactId>hadoop-mapreduce-client-common</artifactId>
   <version>2.4.0</version>
-  <name>hadoop-mapreduce-client-common</name>
+  <name>Apache Hadoop MapReduce Common</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->
     <mr.basedir>${project.parent.basedir}/../</mr.basedir>
+    <should.run.jdiff>true</should.run.jdiff>
+    <dev-support.relative.dir>../../dev-support</dev-support.relative.dir>
   </properties>
 
   <dependencies>

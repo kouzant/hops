@@ -22,11 +22,13 @@
   <groupId>io.hops</groupId>
   <artifactId>hadoop-yarn-client</artifactId>
   <version>2.4.0</version>
-  <name>hadoop-yarn-client</name>
+  <name>Apache Hadoop YARN Client</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->
     <yarn.basedir>${project.parent.basedir}</yarn.basedir>
+    <should.run.jdiff>true</should.run.jdiff>
+    <dev-support.relative.dir>../dev-support</dev-support.relative.dir>
   </properties>
 
   <dependencies>
@@ -134,6 +136,18 @@
 
   <build>
     <plugins>
+      <plugin>
+        <groupId>org.apache.rat</groupId>
+        <artifactId>apache-rat-plugin</artifactId>
+        <configuration>
+          <excludes>
+            <exclude>src/test/resources/application_1440536969523_0001.har/_index</exclude>
+            <exclude>src/test/resources/application_1440536969523_0001.har/part-0</exclude>
+            <exclude>src/test/resources/application_1440536969523_0001.har/_masterindex</exclude>
+            <exclude>src/test/resources/application_1440536969523_0001.har/_SUCCESS</exclude>
+          </excludes>
+        </configuration>
+      </plugin>
       <plugin>
         <groupId>io.hops</groupId>
         <artifactId>hadoop-maven-plugins</artifactId>

@@ -25,7 +25,7 @@
   <groupId>io.hops</groupId>
   <artifactId>hadoop-mapreduce-client-hs</artifactId>
   <version>2.4.0</version>
-  <name>hadoop-mapreduce-client-hs</name>
+  <name>Apache Hadoop MapReduce HistoryServer</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->

@@ -25,7 +25,7 @@
   <groupId>io.hops</groupId>
   <artifactId>hadoop-yarn-server-web-proxy</artifactId>
   <version>2.4.0</version>
-  <name>hadoop-yarn-server-web-proxy</name>
+  <name>Apache Hadoop YARN Web Proxy</name>
 
   <properties>
     <install.file>${project.artifact.file}</install.file>

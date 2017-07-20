@@ -37,18 +37,21 @@ import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.classification.InterfaceStability.Unstable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.token.delegation.DelegationKey;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
+import org.apache.hadoop.yarn.api.records.ReservationId;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
 import org.apache.hadoop.yarn.conf.HAUtil;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
+import org.apache.hadoop.yarn.proto.YarnProtos.ReservationAllocationStateProto;
 import org.apache.hadoop.yarn.security.client.RMDelegationTokenIdentifier;
 import org.apache.hadoop.yarn.server.records.Version;
 import org.apache.hadoop.yarn.server.resourcemanager.RMFatalEvent;
@@ -64,7 +67,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.AggregateAppR
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEventType;
-import org.apache.hadoop.yarn.state.InvalidStateTransitonException;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptMetrics;
+import org.apache.hadoop.yarn.state.InvalidStateTransitionException;
 import org.apache.hadoop.yarn.state.MultipleArcTransition;
 import org.apache.hadoop.yarn.state.StateMachine;
 import org.apache.hadoop.yarn.state.StateMachineFactory;
@@ -88,9 +92,11 @@ public abstract class RMStateStore extends AbstractService {
       "RMDTSequenceNumber_";
   protected static final String AMRMTOKEN_SECRET_MANAGER_ROOT =
       "AMRMTokenSecretManagerRoot";
+  protected static final String RESERVATION_SYSTEM_ROOT =
+      "ReservationSystemRoot";
   protected static final String VERSION_NODE = "RMVersionNode";
   protected static final String EPOCH_NODE = "EpochNode";
-  private ResourceManager resourceManager;
+  protected ResourceManager resourceManager;
   private final ReadLock readLock;
   private final WriteLock writeLock;
 
@@ -154,6 +160,14 @@ public abstract class RMStateStore extends AbstractService {
           EnumSet.of(RMStateStoreState.ACTIVE, RMStateStoreState.FENCED),
           RMStateStoreEventType.UPDATE_AMRM_TOKEN,
           new StoreOrUpdateAMRMTokenTransition())
+      .addTransition(RMStateStoreState.ACTIVE,
+          EnumSet.of(RMStateStoreState.ACTIVE, RMStateStoreState.FENCED),
+          RMStateStoreEventType.STORE_RESERVATION,
+          new StoreReservationAllocationTransition())
+      .addTransition(RMStateStoreState.ACTIVE,
+          EnumSet.of(RMStateStoreState.ACTIVE, RMStateStoreState.FENCED),
+          RMStateStoreEventType.REMOVE_RESERVATION,
+          new RemoveReservationAllocationTransition())
       .addTransition(RMStateStoreState.ACTIVE, RMStateStoreState.FENCED,
           RMStateStoreEventType.FENCED)
       .addTransition(RMStateStoreState.FENCED, RMStateStoreState.FENCED,
@@ -169,7 +183,9 @@ public abstract class RMStateStore extends AbstractService {
           RMStateStoreEventType.STORE_DELEGATION_TOKEN,
           RMStateStoreEventType.REMOVE_DELEGATION_TOKEN,
           RMStateStoreEventType.UPDATE_DELEGATION_TOKEN,
-          RMStateStoreEventType.UPDATE_AMRM_TOKEN));
+          RMStateStoreEventType.UPDATE_AMRM_TOKEN,
+          RMStateStoreEventType.STORE_RESERVATION,
+          RMStateStoreEventType.REMOVE_RESERVATION));
 
   private final StateMachine<RMStateStoreState,
                              RMStateStoreEventType,
@@ -223,8 +239,10 @@ public abstract class RMStateStore extends AbstractService {
       LOG.info("Updating info for app: " + appId);
       try {
         store.updateApplicationStateInternal(appId, appState);
-        store.notifyApplication(new RMAppEvent(appId,
-            RMAppEventType.APP_UPDATE_SAVED));
+        if (((RMStateUpdateAppEvent) event).isNotifyApplication()) {
+          store.notifyApplication(new RMAppEvent(appId,
+              RMAppEventType.APP_UPDATE_SAVED));
+        }
       } catch (Exception e) {
         LOG.error("Error updating app: " + appId, e);
         isFenced = store.notifyStoreOperationFailedInternal(e);
@@ -474,6 +492,63 @@ public abstract class RMStateStore extends AbstractService {
     }
   }
 
+  private static class StoreReservationAllocationTransition implements
+      MultipleArcTransition<RMStateStore, RMStateStoreEvent,
+          RMStateStoreState> {
+    @Override
+    public RMStateStoreState transition(RMStateStore store,
+        RMStateStoreEvent event) {
+      if (!(event instanceof RMStateStoreStoreReservationEvent)) {
+        // should never happen
+        LOG.error("Illegal event type: " + event.getClass());
+        return RMStateStoreState.ACTIVE;
+      }
+      boolean isFenced = false;
+      RMStateStoreStoreReservationEvent reservationEvent =
+          (RMStateStoreStoreReservationEvent) event;
+      try {
+        LOG.info("Storing reservation allocation." + reservationEvent
+                .getReservationIdName());
+        store.storeReservationState(
+            reservationEvent.getReservationAllocation(),
+            reservationEvent.getPlanName(),
+            reservationEvent.getReservationIdName());
+      } catch (Exception e) {
+        LOG.error("Error while storing reservation allocation.", e);
+        isFenced = store.notifyStoreOperationFailedInternal(e);
+      }
+      return finalState(isFenced);
+    }
+  }
+
+  private static class RemoveReservationAllocationTransition implements
+      MultipleArcTransition<RMStateStore, RMStateStoreEvent,
+          RMStateStoreState> {
+    @Override
+    public RMStateStoreState transition(RMStateStore store,
+        RMStateStoreEvent event) {
+      if (!(event instanceof RMStateStoreStoreReservationEvent)) {
+        // should never happen
+        LOG.error("Illegal event type: " + event.getClass());
+        return RMStateStoreState.ACTIVE;
+      }
+      boolean isFenced = false;
+      RMStateStoreStoreReservationEvent reservationEvent =
+          (RMStateStoreStoreReservationEvent) event;
+      try {
+        LOG.info("Removing reservation allocation." + reservationEvent
+                .getReservationIdName());
+        store.removeReservationState(
+            reservationEvent.getPlanName(),
+            reservationEvent.getReservationIdName());
+      } catch (Exception e) {
+        LOG.error("Error while removing reservation allocation.", e);
+        isFenced = store.notifyStoreOperationFailedInternal(e);
+      }
+      return finalState(isFenced);
+    }
+  }
+
   private static RMStateStoreState finalState(boolean isFenced) {
     return isFenced ? RMStateStoreState.FENCED : RMStateStoreState.ACTIVE;
   }
@@ -520,6 +595,9 @@ public abstract class RMStateStore extends AbstractService {
 
     AMRMTokenSecretManagerState amrmTokenSecretManagerState = null;
 
+    private Map<String, Map<ReservationId, ReservationAllocationStateProto>>
+        reservationState = new TreeMap<>();
+
     public Map<ApplicationId, ApplicationStateData> getApplicationState() {
       return appState;
     }
@@ -530,6 +608,11 @@ public abstract class RMStateStore extends AbstractService {
 
     public AMRMTokenSecretManagerState getAMRMTokenSecretManagerState() {
       return amrmTokenSecretManagerState;
+    }
+
+    public Map<String, Map<ReservationId, ReservationAllocationStateProto>>
+        getReservationState() {
+      return reservationState;
     }
   }
     
@@ -655,20 +738,25 @@ public abstract class RMStateStore extends AbstractService {
    * RMAppStoredEvent will be sent on completion to notify the RMApp
    */
   @SuppressWarnings("unchecked")
-  public synchronized void storeNewApplication(RMApp app) {
+  public void storeNewApplication(RMApp app) {
     ApplicationSubmissionContext context = app
                                             .getApplicationSubmissionContext();
     assert context instanceof ApplicationSubmissionContextPBImpl;
     ApplicationStateData appState =
-        ApplicationStateData.newInstance(
-            app.getSubmitTime(), app.getStartTime(), context, app.getUser());
+        ApplicationStateData.newInstance(app.getSubmitTime(),
+            app.getStartTime(), context, app.getUser(), app.getCallerContext());
     dispatcher.getEventHandler().handle(new RMStateStoreAppEvent(appState));
   }
 
   @SuppressWarnings("unchecked")
-  public synchronized void updateApplicationState(
+  public void updateApplicationState(
       ApplicationStateData appState) {
     dispatcher.getEventHandler().handle(new RMStateUpdateAppEvent(appState));
+  }
+
+  public void updateApplicationStateSynchronously(
+      ApplicationStateData appState, boolean notifyApp) {
+    handleStoreEvent(new RMStateUpdateAppEvent(appState, notifyApp));
   }
 
   public void updateFencedState() {
@@ -693,25 +781,28 @@ public abstract class RMStateStore extends AbstractService {
    * This does not block the dispatcher threads
    * RMAppAttemptStoredEvent will be sent on completion to notify the RMAppAttempt
    */
-  public synchronized void storeNewApplicationAttempt(RMAppAttempt appAttempt) {
+  public void storeNewApplicationAttempt(RMAppAttempt appAttempt) {
     Credentials credentials = getCredentialsFromAppAttempt(appAttempt);
-
+    RMAppAttemptMetrics attempMetrics = appAttempt.getRMAppAttemptMetrics();
     AggregateAppResourceUsage resUsage =
-        appAttempt.getRMAppAttemptMetrics().getAggregateAppResourceUsage();
+        attempMetrics.getAggregateAppResourceUsage();
     ApplicationAttemptStateData attemptState =
         ApplicationAttemptStateData.newInstance(
             appAttempt.getAppAttemptId(),
             appAttempt.getMasterContainer(),
             credentials, appAttempt.getStartTime(),
             resUsage.getMemorySeconds(),
-            resUsage.getVcoreSeconds());
+            resUsage.getVcoreSeconds(),
+            attempMetrics.getPreemptedMemory(),
+            attempMetrics.getPreemptedVcore()
+            );
 
     dispatcher.getEventHandler().handle(
       new RMStateStoreAppAttemptEvent(attemptState));
   }
 
   @SuppressWarnings("unchecked")
-  public synchronized void updateApplicationAttemptState(
+  public void updateApplicationAttemptState(
       ApplicationAttemptStateData attemptState) {
     dispatcher.getEventHandler().handle(
       new RMStateUpdateAppAttemptEvent(attemptState));
@@ -809,6 +900,40 @@ public abstract class RMStateStore extends AbstractService {
   }
 
   /**
+   * Blocking Apis to maintain reservation state.
+   */
+  public void storeNewReservation(
+      ReservationAllocationStateProto reservationAllocation, String planName,
+      String reservationIdName) {
+    handleStoreEvent(new RMStateStoreStoreReservationEvent(
+        reservationAllocation, RMStateStoreEventType.STORE_RESERVATION,
+        planName, reservationIdName));
+  }
+
+  public void removeReservation(String planName, String reservationIdName) {
+    handleStoreEvent(new RMStateStoreStoreReservationEvent(
+            null, RMStateStoreEventType.REMOVE_RESERVATION,
+            planName, reservationIdName));
+  }
+
+  /**
+   * Blocking API
+   * Derived classes must implement this method to store the state of
+   * a reservation allocation.
+   */
+  protected abstract void storeReservationState(
+      ReservationAllocationStateProto reservationAllocation, String planName,
+      String reservationIdName) throws Exception;
+
+  /**
+   * Blocking API
+   * Derived classes must implement this method to remove the state of
+   * a reservation allocation.
+   */
+  protected abstract void removeReservationState(String planName,
+      String reservationIdName) throws Exception;
+
+  /**
    * Blocking API
    * Derived classes must implement this method to remove the state of
    * DelegationToken Master Key
@@ -842,11 +967,11 @@ public abstract class RMStateStore extends AbstractService {
    * There is no notification of completion for this operation.
    */
   @SuppressWarnings("unchecked")
-  public synchronized void removeApplication(RMApp app) {
+  public void removeApplication(RMApp app) {
     ApplicationStateData appState =
-        ApplicationStateData.newInstance(
-            app.getSubmitTime(), app.getStartTime(),
-            app.getApplicationSubmissionContext(), app.getUser());
+        ApplicationStateData.newInstance(app.getSubmitTime(),
+            app.getStartTime(), app.getApplicationSubmissionContext(),
+            app.getUser(), app.getCallerContext());
     for(RMAppAttempt appAttempt : app.getAppAttempts().values()) {
       appState.attempts.put(appAttempt.getAppAttemptId(), null);
     }
@@ -905,7 +1030,7 @@ public abstract class RMStateStore extends AbstractService {
             + getRMStateStoreState());
       }
 
-    } catch (InvalidStateTransitonException e) {
+    } catch (InvalidStateTransitionException e) {
       LOG.error("Can't handle this event at current state", e);
     } finally {
       this.writeLock.unlock();
@@ -988,6 +1113,15 @@ public abstract class RMStateStore extends AbstractService {
    * @throws Exception
    */
   public abstract void deleteStore() throws Exception;
+
+  /**
+   * Derived classes must implement this method to remove application from the
+   * state store
+   * 
+   * @throws Exception
+   */
+  public abstract void removeApplication(ApplicationId removeAppId)
+      throws Exception;
 
   public void setResourceManager(ResourceManager rm) {
     this.resourceManager = rm;

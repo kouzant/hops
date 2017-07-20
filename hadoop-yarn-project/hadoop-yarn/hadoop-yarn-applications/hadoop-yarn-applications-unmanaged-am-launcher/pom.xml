@@ -25,7 +25,7 @@
   <groupId>io.hops</groupId>
   <artifactId>hadoop-yarn-applications-unmanaged-am-launcher</artifactId>
   <version>2.4.0</version>
-  <name>hadoop-yarn-applications-unmanaged-am-launcher</name>
+  <name>Apache Hadoop YARN Unmanaged Am Launcher</name>
 
   <properties>
     <!-- Needed for generating FindBugs warnings using parent pom -->

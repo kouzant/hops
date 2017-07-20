@@ -20,8 +20,8 @@ package org.apache.hadoop.fs.viewfs;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.util.ArrayList;
+import java.security.PrivilegedExceptionAction;
 import java.util.Arrays;
-import java.util.ArrayList;
 import java.util.List;
 
 
@@ -77,7 +77,7 @@ import org.junit.Test;
  * </p>
  */
 
-public class ViewFileSystemBaseTest {
+abstract public class ViewFileSystemBaseTest {
   FileSystem fsView;  // the view file system - the mounts are here
   FileSystem fsTarget;  // the target file system - the mount will point here
   Path targetTestRoot;
@@ -863,6 +863,46 @@ public class ViewFileSystemBaseTest {
   @Test(expected=AccessControlException.class)
   public void testInternalRemoveXAttr() throws IOException {
     fsView.removeXAttr(new Path("/internalDir"), "xattrName");
+  }
+
+  @Test(expected = AccessControlException.class)
+  public void testInternalCreateSnapshot1() throws IOException {
+    fsView.createSnapshot(new Path("/internalDir"));
+  }
+
+  @Test(expected = AccessControlException.class)
+  public void testInternalCreateSnapshot2() throws IOException {
+    fsView.createSnapshot(new Path("/internalDir"), "snap1");
+  }
+
+  @Test(expected = AccessControlException.class)
+  public void testInternalRenameSnapshot() throws IOException {
+    fsView.renameSnapshot(new Path("/internalDir"), "snapOldName",
+        "snapNewName");
+  }
+
+  @Test(expected = AccessControlException.class)
+  public void testInternalDeleteSnapshot() throws IOException {
+    fsView.deleteSnapshot(new Path("/internalDir"), "snap1");
+  }
+
+  @Test
+  public void testCheckOwnerWithFileStatus()
+      throws IOException, InterruptedException {
+    final UserGroupInformation userUgi = UserGroupInformation
+        .createUserForTesting("user@HADOOP.COM", new String[]{"hadoop"});
+    userUgi.doAs(new PrivilegedExceptionAction<Object>() {
+      @Override
+      public Object run() throws IOException {
+        UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+        String doAsUserName = ugi.getUserName();
+        assertEquals(doAsUserName, "user@HADOOP.COM");
+        FileSystem vfs = FileSystem.get(FsConstants.VIEWFS_URI, conf);
+        FileStatus stat = vfs.getFileStatus(new Path("/internalDir"));
+        assertEquals(userUgi.getShortUserName(), stat.getOwner());
+        return null;
+      }
+    });
   }
 
 }
