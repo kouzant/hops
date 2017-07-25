@@ -70,6 +70,7 @@ import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService;
 import org.apache.hadoop.yarn.server.nodemanager.security.NMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.nodemanager.security.NMTokenSecretManagerInNM;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
+import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.yarn.util.Records;
 import org.junit.After;
 import org.junit.Assert;
@@ -681,6 +682,11 @@ public abstract class BaseAMRMProxyTest {
 
     @Override
     public NodeStatusUpdater getNodeStatusUpdater() {
+      return null;
+    }
+    
+    @Override
+    public CertificateLocalizationService getCertificateLocalizationService(){
       return null;
     }
   }

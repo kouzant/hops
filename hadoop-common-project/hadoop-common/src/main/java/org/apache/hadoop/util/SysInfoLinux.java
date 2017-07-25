@@ -32,6 +32,10 @@ import java.util.regex.Pattern;
 
 import com.google.common.annotations.VisibleForTesting;
 
+import io.hops.GPUManagementLibrary;
+import io.hops.GPUManagementLibraryLoader;
+import io.hops.exceptions.GPUManagementLibraryException;
+
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -67,6 +71,7 @@ public class SysInfoLinux extends SysInfo {
   private static final String HUGEPAGESIZE_STRING = "Hugepagesize";
 
   private GPUManagementLibrary gpuManagementLibrary;
+  
   private static final String GPU_MANAGEMENT_LIBRARY_CLASSNAME = "io.hops" +
       ".management.nvidia.NvidiaManagementLibrary";
 

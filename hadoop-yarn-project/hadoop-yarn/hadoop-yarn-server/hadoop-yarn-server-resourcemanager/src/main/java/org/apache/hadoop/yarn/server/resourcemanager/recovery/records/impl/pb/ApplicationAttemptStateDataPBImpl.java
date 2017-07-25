@@ -318,6 +318,18 @@ public class ApplicationAttemptStateDataPBImpl extends
   }
 
   @Override
+  public long getPreemptedGPUSeconds() {
+    ApplicationAttemptStateDataProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getPreemptedGpuSeconds();
+  }
+  
+  @Override
+  public void setPreemptedGPUSeconds(long gpuSeconds) {
+    maybeInitBuilder();
+    builder.setPreemptedGpuSeconds(gpuSeconds);
+  }
+  
+  @Override
   public FinalApplicationStatus getFinalApplicationStatus() {
     ApplicationAttemptStateDataProtoOrBuilder p = viaProto ? proto : builder;
     if (!p.hasFinalApplicationStatus()) {

@@ -44,7 +44,7 @@ public class TestFairSchedulerFairShare extends FairSchedulerTestBase {
 
   @Before
   public void setup() throws IOException {
-    super.setUp();
+    conf = createConfiguration();
     conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
   }
 

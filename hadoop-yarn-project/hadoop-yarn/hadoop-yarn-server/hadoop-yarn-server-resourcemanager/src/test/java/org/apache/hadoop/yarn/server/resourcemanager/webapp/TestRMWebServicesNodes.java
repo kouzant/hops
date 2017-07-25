@@ -80,6 +80,7 @@ import com.sun.jersey.api.client.UniformInterfaceException;
 import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import com.sun.jersey.test.framework.WebAppDescriptor;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplNotDist;
 
 public class TestRMWebServicesNodes extends JerseyTestBase {
 
@@ -199,7 +200,7 @@ public class TestRMWebServicesNodes extends JerseyTestBase {
 
   private RMNodeImpl getNewRMNode(String host, int port, int memory) {
     NodeId nodeId = NodeId.newInstance(host, port);
-    RMNodeImpl nodeImpl = new RMNodeImpl(nodeId, rm.getRMContext(),
+    RMNodeImpl nodeImpl = new RMNodeImplNotDist(nodeId, rm.getRMContext(),
         nodeId.getHost(), nodeId.getPort(), nodeId.getPort() + 1,
         RackResolver.resolve(nodeId.getHost()), Resource.newInstance(memory, 4),
         YarnVersionInfo.getVersion());

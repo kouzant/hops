@@ -15,23 +15,20 @@
  */
 package io.hops.streaming;
 
-import io.hops.metadata.yarn.entity.FinishedApplications;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import io.hops.metadata.yarn.entity.Container;
 
-public class FinishedApplicationsEvent implements DBEvent {
+public class ContainerToDecreaseEvent implements DBEvent {
 
-  private static final Log LOG = LogFactory.getLog(
-          FinishedApplicationsEvent.class);
-  private final FinishedApplications finishedApplication;
+  private final Container container;
 
-  public FinishedApplicationsEvent(String rmnodeId, String applicationId) {
+  public ContainerToDecreaseEvent(String containerId, String NodeId, String httpAddress, int priority, long memSize,
+      int virtualCores, int gpus, int version) {
 
-    finishedApplication = new FinishedApplications(rmnodeId, applicationId);
+    this.container = new Container(containerId, NodeId, httpAddress, priority, memSize, virtualCores, gpus, version);
   }
 
-  public FinishedApplications getFinishedApplication() {
-    return finishedApplication;
+  public Container getContainer() {
+    return container;
   }
 
 }

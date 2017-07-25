@@ -18,6 +18,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.rmnode;
 
 import io.hops.metadata.yarn.entity.PendingEvent;
+import io.hops.metadata.yarn.entity.RMNodeApplication;
 import io.hops.util.DBUtility;
 import io.hops.util.ToCommitHB;
 import java.io.IOException;
@@ -28,7 +29,10 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Time;
+import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
@@ -36,15 +40,19 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
+import org.apache.hadoop.yarn.api.records.SignalContainerCommand;
+import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NMContainerStatus;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.ClusterMetrics;
+import org.apache.hadoop.yarn.server.resourcemanager.NodesListManager;
 import org.apache.hadoop.yarn.server.resourcemanager.NodesListManagerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.NodesListManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppRunningOnNodeEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.AllocationExpirationInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeResourceUpdateSchedulerEvent;
 import org.apache.hadoop.yarn.state.InvalidStateTransitonException;
@@ -89,7 +97,7 @@ public class RMNodeImplDist extends RMNodeImpl {
     if (isNodeDecommissioning) {
       List<ApplicationId> keepAliveApps = statusEvent.getKeepAliveAppIds();
       if (rmNode.runningApplications.isEmpty() && (keepAliveApps == null || keepAliveApps.isEmpty())) {
-        RMNodeImpl.deactivateNode(rmNode, NodeState.DECOMMISSIONED);
+        deactivateNode(rmNode, NodeState.DECOMMISSIONED);
         return NodeState.DECOMMISSIONED;
       }
     }
@@ -213,7 +221,7 @@ public class RMNodeImplDist extends RMNodeImpl {
               getState().name(), remoteContainer.getDiagnostics(),
               remoteContainer.getExitStatus(), nodeId.toString()));
     }
-    }
+    
     completedContainers.addAll(findLostContainers(
           numRemoteRunningContainers, containerStatuses));
     
@@ -247,16 +255,22 @@ public class RMNodeImplDist extends RMNodeImpl {
         copyContainersToClean.add(ContainerId.newContainerId(cid.getApplicationAttemptId(),
                 cid.getContainerId()));
       }
+      Set<SignalContainerRequest> copyContainersToSignal = new HashSet<>(this.containersToSignal.size());
+      for (SignalContainerRequest signalContainerRequest : this.containersToSignal) {
+        copyContainersToSignal.add(SignalContainerRequest.newInstance(signalContainerRequest.getContainerId(),
+            signalContainerRequest.getCommand()));
+      }
       DBUtility.removeContainersToClean(copyContainersToClean, this.nodeId);
-
+      DBUtility.removeContainersToSignal(copyContainersToSignal, this.nodeId);
+      
       List<ApplicationId> copyFinishedApplications = new ArrayList<>(this.finishedApplications.size());
       for (ApplicationId appId : this.finishedApplications) {
         copyFinishedApplications.add(ApplicationId.newInstance(appId.getClusterTimestamp(),
                 appId.getId()));
       }
-      DBUtility.removeFinishedApplications(copyFinishedApplications, this.nodeId);
+      DBUtility.removeRMNodeApplications(copyFinishedApplications, this.nodeId,
+          RMNodeApplication.RMNodeApplicationStatus.FINISHED);
       this.containersToClean.clear();
-      DBUtility.removeContainersToSignal(containersToClean, this.nodeId);
       this.containersToSignal.clear();
       this.finishedApplications.clear();
       this.containersToBeRemovedFromNM.clear();
@@ -267,14 +281,18 @@ public class RMNodeImplDist extends RMNodeImpl {
     }
   }
 
-    @Override
+  @Override
   public void updateNodeHeartbeatResponseForContainersDecreasing(
       NodeHeartbeatResponse response) {
     this.writeLock.lock();
     
     try {
       response.addAllContainersToDecrease(toBeDecreasedContainers.values());
-      DBUtility.removetoBeDecreasedContainers(finishedApplications, this.nodeId);
+      try{
+        DBUtility.removeContainersToDecrease(toBeDecreasedContainers.values());
+      }catch(IOException ex){
+        LOG.error(ex, ex);
+      }
       toBeDecreasedContainers.clear();
     } finally {
       this.writeLock.unlock();
@@ -294,8 +312,8 @@ public class RMNodeImplDist extends RMNodeImpl {
       rmNode.finishedApplications.add(appId);
       rmNode.runningApplications.remove(appId);
       try {
-        DBUtility.addFinishedApplication(appId, rmNode.nodeId);
-        DBUtility.removeRunningApplication(appId, rmNode.nodeId);
+        DBUtility.addRMNodeApplication(appId, rmNode.nodeId, RMNodeApplication.RMNodeApplicationStatus.FINISHED);
+        DBUtility.removeRMNodeApplication(appId, rmNode.nodeId, RMNodeApplication.RMNodeApplicationStatus.RUNNING);
       } catch (IOException ex) {
         LOG.error(ex, ex);
       }
@@ -304,10 +322,10 @@ public class RMNodeImplDist extends RMNodeImpl {
 
     rmNode.runningApplications.add(appId);
     try {
-        DBUtility.addRunningApplication(appId, rmNode.nodeId);
-      } catch (IOException ex) {
-        LOG.error(ex, ex);
-      }
+      DBUtility.addRMNodeApplication(appId, rmNode.nodeId, RMNodeApplication.RMNodeApplicationStatus.RUNNING);
+    } catch (IOException ex) {
+      LOG.error(ex, ex);
+    }
     context.getDispatcher().getEventHandler()
             .handle(new RMAppRunningOnNodeEvent(appId, nodeId));
   }
@@ -319,8 +337,8 @@ public class RMNodeImplDist extends RMNodeImpl {
     rmNode.finishedApplications.add(appId);
     rmNode.runningApplications.remove(appId);
     try {
-      DBUtility.addFinishedApplication(appId, rmNode.getNodeID());
-      DBUtility.removeRunningApplication(appId, rmNode.getNodeID());
+      DBUtility.addRMNodeApplication(appId, rmNode.nodeId, RMNodeApplication.RMNodeApplicationStatus.FINISHED);
+      DBUtility.removeRMNodeApplication(appId, rmNode.nodeId, RMNodeApplication.RMNodeApplicationStatus.RUNNING);
     } catch (IOException ex) {
       LOG.error(ex, ex);
   }
@@ -376,6 +394,26 @@ public class RMNodeImplDist extends RMNodeImpl {
     }
   }
   
+  public void addContainersToSignal(SignalContainerRequest containerToSignal) {
+    super.writeLock.lock();
+
+    try {
+      super.containersToSignal.add(containerToSignal);
+    } finally {
+      super.writeLock.unlock();
+    }
+  }
+  
+  public void addContainersToDecrease(Container containerToDecrease) {
+    super.writeLock.lock();
+
+    try {
+      super.toBeDecreasedContainers.put(containerToDecrease.getId(), containerToDecrease);
+    } finally {
+      super.writeLock.unlock();
+    }
+  }
+  
   public void setAppsToCleanUp(List<ApplicationId> appsToCleanUp) {
     super.writeLock.lock();
 
@@ -391,6 +429,16 @@ public class RMNodeImplDist extends RMNodeImpl {
 
     try {
       super.finishedApplications.add(appToCleanUp);
+    } finally {
+      super.writeLock.unlock();
+    }
+  }
+  
+  public void addToRunningApps(ApplicationId runningApp) {
+    super.writeLock.lock();
+
+    try {
+      super.runningApplications.add(runningApp);
     } finally {
       super.writeLock.unlock();
     }
@@ -566,8 +614,19 @@ if(rmNode.context.isLeader()){
   }
 
   @Override
-  protected void deactivateNodeTransitionInternal(RMNodeImpl rmNode,
-      RMNodeEvent event, final NodeState finalState) {
+  protected void decreaseContainersInt(RMNodeImpl rmNode, RMNodeDecreaseContainerEvent de) {
+    for (Container c : de.getToBeDecreasedContainers()) {
+      rmNode.toBeDecreasedContainers.put(c.getId(), c);
+    }
+    try{
+      DBUtility.addContainersToDecrease(de.getToBeDecreasedContainers());
+    }catch(IOException ex){
+      LOG.error(ex, ex);
+    }
+  }
+  
+  @Override
+  protected void deactivateNode(RMNodeImpl rmNode, final NodeState finalState) {
     if (rmNode.getNodeID().getPort() == -1) {
       rmNode.updateMetricsForDeactivatedNode(rmNode.getState(), finalState);
       return;
@@ -590,7 +649,7 @@ if(rmNode.context.isLeader()){
    * @param rmNode
    * @param finalState
    */
-  public static void reportNodeUnusable(RMNodeImpl rmNode,
+  public void reportNodeUnusable(RMNodeImpl rmNode,
       NodeState finalState) {
     // Inform the scheduler
     rmNode.nodeUpdateQueue.clear();
@@ -618,7 +677,7 @@ if(rmNode.context.isLeader()){
     rmNode.context.getRMNodes().remove(rmNode.nodeId);
     LOG.info("Deactivating Node " + rmNode.nodeId + " as it is now "
             + finalState);
-    rmNode.context.getInactiveRMNodes().put(rmNode.nodeId.getHost(), rmNode);
+    rmNode.context.getInactiveRMNodes().put(rmNode.nodeId, rmNode);
 
     //Update the metrics
     rmNode.updateMetricsForDeactivatedNode(initialState, finalState);
@@ -665,6 +724,16 @@ if(rmNode.context.isLeader()){
     return NodeState.UNHEALTHY;
   }
 
+  @Override
+  protected void signalContainerInt(RMNodeImpl rmNode, RMNodeEvent event) {
+    try{
+      DBUtility.addContainerToSignal(((RMNodeSignalContainerEvent) event).getSignalRequest(), this.nodeId);
+    }catch(IOException ex){
+      LOG.error(ex, ex);
+    }
+    rmNode.containersToSignal.add(((RMNodeSignalContainerEvent) event).getSignalRequest());
+  }
+      
   public void handle(RMNodeEvent event) {
     LOG.debug("Processing " + event.getNodeId() + " of type " + event.getType());
     try {

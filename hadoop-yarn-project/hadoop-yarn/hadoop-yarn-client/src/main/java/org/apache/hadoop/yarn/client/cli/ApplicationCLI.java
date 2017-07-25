@@ -642,7 +642,7 @@ public class ApplicationCLI extends YarnCLI {
             " MB-seconds, ");
         appReportStr.println(usageReport.getPreemptedVcoreSeconds() +
             " vcore-seconds");
-            appReportStr.println(usageReport.getPreemptedgpuSeconds() +
+            appReportStr.println(usageReport.getPreemptedGPUSeconds() +
             " gpu-seconds");
       } else {
         appReportStr.println("N/A");

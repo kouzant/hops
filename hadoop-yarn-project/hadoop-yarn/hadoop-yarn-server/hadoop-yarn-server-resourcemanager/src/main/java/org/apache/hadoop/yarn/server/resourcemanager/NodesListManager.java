@@ -53,6 +53,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplDist;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplNotDist;
 import org.apache.hadoop.yarn.util.Clock;
 import org.apache.hadoop.yarn.util.SystemClock;
 
@@ -230,10 +232,18 @@ public class NodesListManager extends CompositeService implements
     Set<String> excludeList = hostsReader.getExcludedHosts();
     for (final String host : excludeList) {
       NodeId nodeId = createUnknownNodeId(host);
-      RMNodeImpl rmNode = new RMNodeImpl(nodeId,
+      RMNodeImpl rmNode;
+      if(rmContext.isDistributed()){
+        rmNode= new RMNodeImplDist(nodeId,
           rmContext, host, -1, -1, new UnknownNode(host),
           Resource.newInstance(0, 0), "unknown");
       rmContext.getInactiveRMNodes().put(nodeId, rmNode);
+      }else{
+        rmNode= new RMNodeImplNotDist(nodeId,
+          rmContext, host, -1, -1, new UnknownNode(host),
+          Resource.newInstance(0, 0), "unknown");
+      rmContext.getInactiveRMNodes().put(nodeId, rmNode);
+      }
       rmNode.handle(new RMNodeEvent(nodeId, RMNodeEventType.DECOMMISSION));
     }
   }

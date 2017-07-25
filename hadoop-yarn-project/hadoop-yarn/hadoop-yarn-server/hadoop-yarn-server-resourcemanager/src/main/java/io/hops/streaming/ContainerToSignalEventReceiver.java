@@ -16,17 +16,12 @@
 package io.hops.streaming;
 
 import static io.hops.streaming.DBEvent.receivedEvents;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 
-public class FinishedApplicationsEventReceiver {
+public class ContainerToSignalEventReceiver {
 
-  private static final Log LOG = LogFactory.getLog(
-          FinishedApplicationsEventReceiver.class);
+    public void createAndAddToQueue(String rmnodeId, String containerId, String command) {
 
-  public void createAndAddToQueue(String rmnodeId, String applicationId, String status) {
-
-    RMNodeApplicationsEvent event = new RMNodeApplicationsEvent(rmnodeId, applicationId, status);
+    ContainerToSignalEvent event = new ContainerToSignalEvent(rmnodeId, containerId, command);
     receivedEvents.add(event);
 
   }

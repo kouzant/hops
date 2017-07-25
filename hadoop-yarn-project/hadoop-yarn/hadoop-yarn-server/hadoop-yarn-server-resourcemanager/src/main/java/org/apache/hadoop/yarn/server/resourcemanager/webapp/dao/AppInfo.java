@@ -103,6 +103,7 @@ public class AppInfo {
   protected int numAMContainerPreempted;
   private long preemptedMemorySeconds;
   private long preemptedVcoreSeconds;
+  private long preemptedGPUSeconds;
 
   protected List<ResourceRequest> resourceRequests;
 
@@ -401,6 +402,10 @@ public class AppInfo {
     return preemptedVcoreSeconds;
   }
 
+  public long getPreemptedGPUSeconds() {
+    return preemptedGPUSeconds;
+  }
+  
   public List<ResourceRequest> getResourceRequests() {
     return this.resourceRequests;
   }

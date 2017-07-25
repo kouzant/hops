@@ -79,7 +79,7 @@ public class CapacitySchedulerPreemptionTestBase {
   }
 
   SchedulingEditPolicy getSchedulingEditPolicy(MockRM rm) {
-    ResourceManager.RMActiveServices activeServices = rm.getRMActiveService();
+    ResourceManager.RMSchedulerServices activeServices = rm.getRMActiveService();
     SchedulingMonitor mon = null;
     for (Service service : activeServices.getServices()) {
       if (service instanceof SchedulingMonitor) {

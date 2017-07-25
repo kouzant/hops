@@ -68,10 +68,10 @@ public abstract class ApplicationAttemptStateData {
       ApplicationAttemptId attemptId, Container masterContainer,
       Credentials attemptTokens, long startTime, long memorySeconds,
       long vcoreSeconds, long gpuSeconds, long preemptedMemorySeconds,
-      long preemptedVcoreSeconds, long preemtedGPUSeconds, String trackingUrl) {
+      long preemptedVcoreSeconds, long preemptedGPUSeconds, String trackingUrl) {
     return newInstance(attemptId, masterContainer, attemptTokens,
         startTime, null, "N/A", "", null, ContainerExitStatus.INVALID, 0,
-        memorySeconds, vcoreSeconds, gpuSeconds
+        memorySeconds, vcoreSeconds, gpuSeconds,
         preemptedMemorySeconds, preemptedVcoreSeconds, preemptedGPUSeconds, trackingUrl);
     }
 

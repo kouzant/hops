@@ -697,7 +697,7 @@ public class TestRMNodeTransitions {
     NodeId nodeId =
         NodesListManager.createUnknownNodeId("host1");
     RMNodeImpl node =
-        new RMNodeImpl(nodeId, rmContext, null, 0, 0, null, null, null);
+        new RMNodeImplNotDist(nodeId, rmContext, null, 0, 0, null, null, null);
     rmContext.getInactiveRMNodes().putIfAbsent(nodeId,node);
     node.handle(
         new RMNodeEvent(node.getNodeID(), RMNodeEventType.DECOMMISSION));

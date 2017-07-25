@@ -23,6 +23,7 @@ import static org.apache.hadoop.fs.CommonConfigurationKeys.HADOOP_USER_GROUP_MET
 import static org.apache.hadoop.util.PlatformName.IBM_JAVA;
 
 import com.google.common.annotations.VisibleForTesting;
+import io.hops.security.UsersGroups;
 
 import java.io.File;
 import java.io.FileNotFoundException;

@@ -682,6 +682,7 @@ public class NodeHeartbeatResponsePBImpl extends
   private SignalContainerRequestProto convertToProtoFormat(
       SignalContainerRequest t) {
     return ((SignalContainerRequestPBImpl)t).getProto();
+  }
   
   @Override
   public synchronized boolean getNextheartbeat() {

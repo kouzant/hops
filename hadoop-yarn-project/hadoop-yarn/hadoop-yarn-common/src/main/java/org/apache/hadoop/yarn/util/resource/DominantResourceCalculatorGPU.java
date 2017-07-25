@@ -22,7 +22,7 @@ import org.apache.hadoop.yarn.api.records.Resource;
 public class DominantResourceCalculatorGPU extends DominantResourceCalculator {
   
   @Override
-  public int computeAvailableContainers(Resource available, Resource required) {
+  public long computeAvailableContainers(Resource available, Resource required) {
     int vCoreMemoryContainers = Math.min(
         available.getMemory() / required.getMemory(),
         available.getVirtualCores() / required.getVirtualCores());

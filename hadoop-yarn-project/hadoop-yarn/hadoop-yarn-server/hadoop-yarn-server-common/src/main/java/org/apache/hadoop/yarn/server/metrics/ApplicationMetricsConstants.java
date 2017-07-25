@@ -82,6 +82,9 @@ public class ApplicationMetricsConstants {
   public static final String APP_CPU_PREEMPT_METRICS =
       "YARN_APPLICATION_CPU_PREEMPT_METRIC";
 
+  public static final String APP_GPU_PREEMPT_METRICS =
+      "YARN_APPLICATION_GPU_PREEMPT_METRIC";
+  
   public static final String APP_MEM_PREEMPT_METRICS =
       "YARN_APPLICATION_MEM_PREEMPT_METRIC";
 

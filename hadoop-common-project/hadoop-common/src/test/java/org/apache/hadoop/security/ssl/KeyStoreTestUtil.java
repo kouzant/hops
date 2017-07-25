@@ -46,8 +46,11 @@ import java.util.Map;
 
 import java.security.InvalidKeyException;
 import java.security.NoSuchProviderException;
+import java.security.PrivateKey;
 import java.security.SignatureException;
 import java.security.cert.CertificateEncodingException;
+import java.security.cert.CertificateParsingException;
+import java.security.cert.X509Certificate;
 import javax.security.auth.x500.X500Principal;
 
 import org.bouncycastle.asn1.ASN1ObjectIdentifier;
@@ -362,7 +365,7 @@ public class KeyStoreTestUtil {
     public static Configuration createClientSSLConfig(String clientKS,
       String password, String keyPassword, String trustKS, String excludeCiphers) {
     return createSSLConfig(SSLFactory.Mode.CLIENT,
-      clientKS, password, keyPassword, trustKS, String trsutPass, excludeCiphers);
+      clientKS, password, keyPassword, trustKS, "trustP", excludeCiphers);
   }
 
   /**
@@ -378,9 +381,9 @@ public class KeyStoreTestUtil {
    * @throws java.io.IOException
    */
   public static Configuration createServerSSLConfig(String serverKS,
-      String password, String keyPassword, String trustKS, String trustPass) throws IOException {
+      String password, String keyPassword, String trustKS) throws IOException {
     return createSSLConfig(SSLFactory.Mode.SERVER,
-      serverKS, password, keyPassword, trustKS, trustPass, "");
+      serverKS, password, keyPassword, trustKS, "trustP", "");
   }
 
   /**
@@ -396,12 +399,18 @@ public class KeyStoreTestUtil {
    * @return
    * @throws IOException
    */
-    public static Configuration createServerSSLConfig(String serverKS,
+  public static Configuration createServerSSLConfig(String serverKS,
+      String password, String keyPassword, String trustKS, String excludeCiphers) throws IOException {
+    return createSSLConfig(SSLFactory.Mode.SERVER,
+      serverKS, password, keyPassword, trustKS, "trustP", excludeCiphers);
+  }
+
+  public static Configuration createServerSSLConfig(String serverKS,
       String password, String keyPassword, String trustKS, String trustPass, String excludeCiphers) throws IOException {
     return createSSLConfig(SSLFactory.Mode.SERVER,
       serverKS, password, keyPassword, trustKS, trustPass, excludeCiphers);
   }
-
+  
   /**
    * Returns the client SSL configuration file name.  Under parallel test
    * execution, this file name is parameterized by a unique ID to ensure that
@@ -438,10 +447,6 @@ public class KeyStoreTestUtil {
     return base + fileSuffix + ".xml";
   }
 
-  public static Configuration createServerSSLConfig(String serverKS, String password, String keyPassword,
-          String trustKS, String excludeCiphers) throws IOException {
-    return createServerSSLConfig(serverKS, password, keyPassword, trustKS, "trustP", excludeCiphers);
-  }
   /**
    * Creates SSL configuration.
    *
@@ -455,7 +460,7 @@ public class KeyStoreTestUtil {
    * @return Configuration for SSL
    */
   private static Configuration createSSLConfig(SSLFactory.Mode mode,
-    String keystore, String password, String keyPassword, String trustKS, String trustPass String excludeCiphers) {
+    String keystore, String password, String keyPassword, String trustKS, String trustPass, String excludeCiphers) {
     String trustPassword = trustPass;
     Configuration sslConf = new Configuration(false);
     if (keystore != null) {

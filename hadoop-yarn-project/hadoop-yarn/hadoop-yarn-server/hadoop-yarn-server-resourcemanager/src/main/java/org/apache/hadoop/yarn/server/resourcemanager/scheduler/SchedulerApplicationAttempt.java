@@ -726,7 +726,7 @@ public class SchedulerApplicationAttempt implements SchedulableEntity {
         runningResourceUsage.getMemorySeconds(),
         runningResourceUsage.getVcoreSeconds(),
         runningResourceUsage.getGPUSeconds(), queueUsagePerc,
-        clusterUsagePerc, 0, 0);
+        clusterUsagePerc, 0, 0, 0);
   }
 
   public synchronized Map<ContainerId, RMContainer> getLiveContainersMap() {

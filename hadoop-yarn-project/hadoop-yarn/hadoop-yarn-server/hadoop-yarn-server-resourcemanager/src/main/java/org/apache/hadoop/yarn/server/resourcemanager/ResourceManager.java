@@ -630,7 +630,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       rmContext.setResourceTrackerService(resourceTracker);
 
       DefaultMetricsSystem.initialize("ResourceManager");
-      JvmMetrics.initSingleton("ResourceManager", null);
+      JvmMetrics jm = JvmMetrics.initSingleton("ResourceManager", null);
       pauseMonitor = new JvmPauseMonitor(conf);
       jm.setPauseMonitor(pauseMonitor);
       super.serviceInit(conf);
@@ -1236,7 +1236,7 @@ LOG.info("+");
     }
   }
 
-  void reinitialize(boolean initialize) {
+  void reinitialize(boolean initialize) throws Exception {
     ClusterMetrics.destroy();
     QueueMetrics.clearQueueMetrics();
     if (initialize) {

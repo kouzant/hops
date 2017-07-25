@@ -205,7 +205,7 @@ public class CgroupsLCEResourcesHandlerGPU implements LCEResourcesHandler {
     initializeControllerPaths();
     
     // cap overall usage to the number of cores allocated to YARN
-    yarnProcessors = NodeManagerHardwareUtils.getContainersCores(plugin, conf);
+    yarnProcessors = NodeManagerHardwareUtils.getContainersCPUs(plugin, conf);
     int systemProcessors = plugin.getNumProcessors();
     if (systemProcessors != (int) yarnProcessors) {
       LOG.info("YARN containers restricted to " + yarnProcessors + " cores");

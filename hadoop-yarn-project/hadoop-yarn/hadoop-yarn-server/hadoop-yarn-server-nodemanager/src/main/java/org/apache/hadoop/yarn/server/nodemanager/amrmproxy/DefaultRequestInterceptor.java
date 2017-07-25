@@ -69,7 +69,7 @@ public final class DefaultRequestInterceptor extends
             @Override
             public ApplicationMasterProtocol run() throws Exception {
               return ClientRMProxy.createRMProxy(conf,
-                  ApplicationMasterProtocol.class);
+                  ApplicationMasterProtocol.class, true);
             }
           });
     } catch (IOException e) {

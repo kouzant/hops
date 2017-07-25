@@ -33,7 +33,7 @@ public class RMAppMetrics {
 
   public RMAppMetrics(Resource resourcePreempted,
       int numNonAMContainersPreempted, int numAMContainersPreempted,
-      long memorySeconds, long vcoreSeconds, long gpuSeconds long preemptedMemorySeconds,
+      long memorySeconds, long vcoreSeconds, long gpuSeconds, long preemptedMemorySeconds,
       long preemptedVcoreSeconds, long preemptedGPUSeconds) {
     this.resourcePreempted = resourcePreempted;
     this.numNonAMContainersPreempted = numNonAMContainersPreempted;

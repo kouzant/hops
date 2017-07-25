@@ -122,11 +122,6 @@ public class ResourceTrackerService extends AbstractService implements
   private DynamicResourceConfiguration drConf;
   private AtomicInteger load = new AtomicInteger(0);
   
-  static {
-    resync.setNodeAction(NodeAction.RESYNC);
-
-    shutDown.setNodeAction(NodeAction.SHUTDOWN);
-  }
 
   public ResourceTrackerService(RMContext rmContext,
       NodesListManager nodesListManager,

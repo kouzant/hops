@@ -52,6 +52,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppRunningOnNodeEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplNotDist;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeStartedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeStatusEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
@@ -133,13 +134,13 @@ public class TestRMAppLogAggregationStatus {
     NodeId nodeId1 = NodeId.newInstance("localhost", 1234);
     Resource capability = Resource.newInstance(4096, 4);
     RMNodeImpl node1 =
-        new RMNodeImpl(nodeId1, rmContext, null, 0, 0, null, capability, null);
+        new RMNodeImplNotDist(nodeId1, rmContext, null, 0, 0, null, capability, null);
     node1.handle(new RMNodeStartedEvent(nodeId1, null, null));
     rmApp.handle(new RMAppRunningOnNodeEvent(this.appId, nodeId1));
 
     NodeId nodeId2 = NodeId.newInstance("localhost", 2345);
     RMNodeImpl node2 =
-        new RMNodeImpl(nodeId2, rmContext, null, 0, 0, null, capability, null);
+        new RMNodeImplNotDist(nodeId2, rmContext, null, 0, 0, null, capability, null);
     node2.handle(new RMNodeStartedEvent(node2.getNodeID(), null, null));
     rmApp.handle(new RMAppRunningOnNodeEvent(this.appId, nodeId2));
 

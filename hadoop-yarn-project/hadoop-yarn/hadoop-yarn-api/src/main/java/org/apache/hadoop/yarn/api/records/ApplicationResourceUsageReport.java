@@ -37,7 +37,7 @@ public abstract class ApplicationResourceUsageReport {
       int numUsedContainers, int numReservedContainers, Resource usedResources,
       Resource reservedResources, Resource neededResources, long memorySeconds,
       long vcoreSeconds, long gpuSeconds, float queueUsagePerc, float clusterUsagePerc,
-      long preemptedMemorySeconds, long preemptedVcoresSeconds) {
+      long preemptedMemorySeconds, long preemptedVcoresSeconds, long preemptedGPUSeconds) {
     ApplicationResourceUsageReport report =
         Records.newRecord(ApplicationResourceUsageReport.class);
     report.setNumUsedContainers(numUsedContainers);
@@ -51,6 +51,7 @@ public abstract class ApplicationResourceUsageReport {
     report.setClusterUsagePercentage(clusterUsagePerc);
     report.setPreemptedMemorySeconds(preemptedMemorySeconds);
     report.setPreemptedVcoreSeconds(preemptedVcoresSeconds);
+    report.setPreemptedGPUSeconds(preemptedGPUSeconds);
     report.setGPUSeconds(gpuSeconds);
     return report;
   }

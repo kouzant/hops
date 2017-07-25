@@ -54,12 +54,12 @@ import java.io.IOException;
 public class TestFSAppAttempt extends FairSchedulerTestBase {
 
   @Before
-  public void setup() throws IOException {
-    super.setUp();
+  public void setup() {
+    Configuration conf = createConfiguration();
     resourceManager = new MockRM(conf);
     resourceManager.start();
     scheduler = (FairScheduler) resourceManager.getResourceScheduler();
-  }
+}
 
   @Test
   public void testDelayScheduling() {

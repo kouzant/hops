@@ -21,7 +21,9 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
@@ -29,15 +31,18 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceOption;
+import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NMContainerStatus;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.ClusterMetrics;
+import org.apache.hadoop.yarn.server.resourcemanager.NodesListManager;
 import org.apache.hadoop.yarn.server.resourcemanager.NodesListManagerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.NodesListManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppRunningOnNodeEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmcontainer.AllocationExpirationInfo;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeRemovedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.NodeResourceUpdateSchedulerEvent;
@@ -82,7 +87,7 @@ public class RMNodeImplNotDist extends RMNodeImpl {
     if (isNodeDecommissioning) {
       List<ApplicationId> keepAliveApps = statusEvent.getKeepAliveAppIds();
       if (rmNode.runningApplications.isEmpty() && (keepAliveApps == null || keepAliveApps.isEmpty())) {
-        RMNodeImpl.deactivateNode(rmNode, NodeState.DECOMMISSIONED);
+        deactivateNode(rmNode, NodeState.DECOMMISSIONED);
         return NodeState.DECOMMISSIONED;
       }
     }
@@ -404,8 +409,14 @@ public class RMNodeImplNotDist extends RMNodeImpl {
   }
 
   @Override
-  protected void deactivateNodeTransitionInternal(RMNodeImpl rmNode,
-      RMNodeEvent event, final NodeState finalState) {
+  protected void decreaseContainersInt(RMNodeImpl rmNode, RMNodeDecreaseContainerEvent de) {
+    for (Container c : de.getToBeDecreasedContainers()) {
+      rmNode.toBeDecreasedContainers.put(c.getId(), c);
+    }
+  }
+  
+  @Override
+  protected void deactivateNode(RMNodeImpl rmNode, final NodeState finalState) {
     if (rmNode.getNodeID().getPort() == -1) {
       rmNode.updateMetricsForDeactivatedNode(rmNode.getState(), finalState);
       return;
@@ -477,6 +488,11 @@ public class RMNodeImplNotDist extends RMNodeImpl {
     }
 
     return NodeState.UNHEALTHY;
+  }
+  
+  @Override
+  protected void signalContainerInt(RMNodeImpl rmNode, RMNodeEvent event){
+      rmNode.containersToSignal.add(((RMNodeSignalContainerEvent) event).getSignalRequest());
   }
   
   public void handle(RMNodeEvent event) {

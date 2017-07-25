@@ -43,6 +43,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -63,6 +64,7 @@ import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
+import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.Event;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.nodelabels.NodeLabelTestBase;
@@ -73,7 +75,9 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerRequest;
 import org.apache.hadoop.yarn.server.api.records.NodeAction;
+import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
+import org.apache.hadoop.yarn.server.api.records.impl.pb.MasterKeyPBImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.NodeLabelsUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.NullRMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
@@ -920,8 +924,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     NodeHeartbeatRequest request = Records.newRecord(NodeHeartbeatRequest.class);
     NodeId nodeId = NodeId.newInstance("host2", 1234);
     NodeStatus status = NodeStatus.newInstance(nodeId, 0, new ArrayList<ContainerStatus>(),
-            new ArrayList<ApplicationId>(), NodeHealthStatus.
-                    newInstance(true, "healthreport", 0));
+            new ArrayList<ApplicationId>(), NodeHealthStatus.newInstance(true, "healthreport", 0),null, null, null);
     request.setNodeStatus(status);
     request.setLastKnownContainerTokenMasterKey(new MasterKeyPBImpl());
     request.setLastKnownNMTokenMasterKey(new MasterKeyPBImpl());
@@ -935,7 +938,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     containerStatuses.add(containerStatus);
     status = NodeStatus.newInstance(nodeId, 1, containerStatuses,
             new ArrayList<ApplicationId>(), NodeHealthStatus.
-                    newInstance(true, "healthreport", 0));
+                    newInstance(true, "healthreport", 0),null, null, null);
     request.setNodeStatus(status);
     request.setLastKnownContainerTokenMasterKey(new MasterKeyPBImpl());
     request.setLastKnownNMTokenMasterKey(new MasterKeyPBImpl());

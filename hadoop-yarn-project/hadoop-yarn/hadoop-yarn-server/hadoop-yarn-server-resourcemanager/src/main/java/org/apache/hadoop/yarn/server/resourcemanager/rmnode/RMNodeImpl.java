@@ -130,7 +130,7 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
   /* Resource utilization for the node. */
   private ResourceUtilization nodeUtilization;
 
-  private final ContainerAllocationExpirer containerAllocationExpirer;
+  protected final ContainerAllocationExpirer containerAllocationExpirer;
   /* set of containers that have just launched */
   protected final Set<ContainerId> launchedContainers =
     new HashSet<ContainerId>();
@@ -140,7 +140,7 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       new ContainerIdComparator());
 
   /* set of containers that need to be signaled */
-  private final List<SignalContainerRequest> containersToSignal =
+  protected final List<SignalContainerRequest> containersToSignal =
       new ArrayList<SignalContainerRequest>();
 
   /*
@@ -151,14 +151,14 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       new HashSet<ContainerId>();
 
   /* the list of applications that have finished and need to be purged */
-  private final List<ApplicationId> finishedApplications =
+  protected final List<ApplicationId> finishedApplications =
       new ArrayList<ApplicationId>();
 
   /* the list of applications that are running on this node */
-  private final List<ApplicationId> runningApplications =
+  protected final List<ApplicationId> runningApplications =
       new ArrayList<ApplicationId>();
   
-  private final Map<ContainerId, Container> toBeDecreasedContainers =
+  protected final Map<ContainerId, Container> toBeDecreasedContainers =
       new HashMap<>();
   
   private final Map<ContainerId, Container> nmReportedIncreasedContainers =
@@ -718,7 +718,7 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     return containers;
   }
   
-  protected abstract void reconnectNodeTransitionInternal(RMNodeImpl rmNode, RMNodeEvent event);
+  protected abstract NodeState reconnectNodeTransitionInternal(RMNodeImpl rmNode, RMNodeEvent event);
   
   protected void handleNMContainerStatus(
           List<NMContainerStatus> nmContainerStatuses, RMNodeImpl rmnode) {
@@ -745,8 +745,8 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       MultipleArcTransition<RMNodeImpl, RMNodeEvent, NodeState> {
 
     @Override
-    public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
-      rmNode.reconnectNodeTransitionInternal(rmNode, event);
+    public NodeState transition(RMNodeImpl rmNode, RMNodeEvent event) {
+      return rmNode.reconnectNodeTransitionInternal(rmNode, event);
     }
   }
   
@@ -818,12 +818,12 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
       RMNodeDecreaseContainerEvent de = (RMNodeDecreaseContainerEvent) event;
 
-      for (Container c : de.getToBeDecreasedContainers()) {
-        rmNode.toBeDecreasedContainers.put(c.getId(), c);
-      }
+      rmNode.decreaseContainersInt(rmNode, de);
     }
   }
 
+  protected abstract void decreaseContainersInt(RMNodeImpl rmNode, RMNodeDecreaseContainerEvent de);
+  
   public static class DeactivateNodeTransition
     implements SingleArcTransition<RMNodeImpl, RMNodeEvent> {
 
@@ -834,11 +834,11 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
 
     @Override
     public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
-      rmNode.deactivateNodeTransitionInternal(rmNode, event, finalState);
+      rmNode.deactivateNode(rmNode, finalState);
     }
   }
 
-  abstract protected void deactivateNodeTransitionInternal(RMNodeImpl rmNode, RMNodeEvent event, final NodeState finalState);
+  abstract protected void deactivateNode(RMNodeImpl rmNode, final NodeState finalState);
   
 
 
@@ -930,11 +930,12 @@ public static class RecommissionNodeTransition
 
     @Override
     public void transition(RMNodeImpl rmNode, RMNodeEvent event) {
-      rmNode.containersToSignal.add(((
-          RMNodeSignalContainerEvent) event).getSignalRequest());
+      rmNode.signalContainerInt(rmNode, event);
     }
   }
 
+  protected abstract void signalContainerInt(RMNodeImpl rmNode, RMNodeEvent event);
+  
   @Override
   public List<UpdatedContainerInfo> pullContainerUpdates() {
     return this.pullContainerUpdatesInternal();
@@ -967,7 +968,7 @@ public static class RecommissionNodeTransition
     return nlm.getLabelsOnNode(nodeId);
   }
   
-  private void handleReportedIncreasedContainers(
+  protected void handleReportedIncreasedContainers(
       List<Container> reportedIncreasedContainers) {
     for (Container container : reportedIncreasedContainers) {
       ContainerId containerId = container.getId();
@@ -997,7 +998,7 @@ public static class RecommissionNodeTransition
 
   abstract protected void handleContainerStatus(List<ContainerStatus> containerStatuses);
 
-  private List<ContainerStatus> findLostContainers(int numRemoteRunning,
+  protected List<ContainerStatus> findLostContainers(int numRemoteRunning,
       List<ContainerStatus> containerStatuses) {
     if (numRemoteRunning >= launchedContainers.size()) {
       return Collections.emptyList();
@@ -1026,7 +1027,7 @@ public static class RecommissionNodeTransition
     return lostContainers;
   }
 
-  private void handleLogAggregationStatus(
+  protected void handleLogAggregationStatus(
       List<LogAggregationReport> logAggregationReportsForApps) {
     for (LogAggregationReport report : logAggregationReportsForApps) {
       RMApp rmApp = this.context.getRMApps().get(report.getApplicationId());

@@ -190,7 +190,7 @@ public class TestLeaderElectorService {
       public void run() {
         rm1 = new MockRM(conf, true) {
           @Override
-          synchronized void transitionToActive() throws Exception {
+          public synchronized void transitionToActive() throws Exception {
             if (throwException.get()) {
              throw new Exception("Fail to transition to active");
             } else {

@@ -313,7 +313,6 @@ public class ContainersMonitorImpl extends AbstractService implements
      * @return
      */
     public int getGPUs() { return this.gpus; }
-  }
 
     /**
      * Set resource limit for enforcement
@@ -641,6 +640,8 @@ public class ContainersMonitorImpl extends AbstractService implements
     int vmemLimitMBs;
     int pmemLimitMBs;
     int cpuVcores;
+    int gpus;
+    
     switch (monitoringEvent.getType()) {
     case START_MONITORING_CONTAINER:
       usageMetrics = ContainerMetrics
@@ -652,10 +653,11 @@ public class ContainersMonitorImpl extends AbstractService implements
           startEvent.getLaunchDuration(),
           startEvent.getLocalizationDuration());
       cpuVcores = startEvent.getCpuVcores();
+      gpus = startEvent.getGPUs();
       vmemLimitMBs = (int) (startEvent.getVmemLimit() >> 20);
       pmemLimitMBs = (int) (startEvent.getPmemLimit() >> 20);
       usageMetrics.recordResourceLimit(
-          vmemLimitMBs, pmemLimitMBs, cpuVcores);
+          vmemLimitMBs, pmemLimitMBs, cpuVcores, gpus);
       break;
     case STOP_MONITORING_CONTAINER:
       usageMetrics = ContainerMetrics.getContainerMetrics(
@@ -674,8 +676,9 @@ public class ContainersMonitorImpl extends AbstractService implements
       pmemLimitMBs = (int) resource.getMemorySize();
       vmemLimitMBs = (int) (pmemLimitMBs * vmemRatio);
       cpuVcores = resource.getVirtualCores();
+      gpus = resource.getGPUs();
       usageMetrics.recordResourceLimit(
-          vmemLimitMBs, pmemLimitMBs, cpuVcores);
+          vmemLimitMBs, pmemLimitMBs, cpuVcores, gpus);
       break;
     default:
       break;

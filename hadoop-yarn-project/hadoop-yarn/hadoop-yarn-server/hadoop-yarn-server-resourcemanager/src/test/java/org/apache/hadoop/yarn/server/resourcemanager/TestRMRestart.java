@@ -129,6 +129,8 @@ import io.hops.util.YarnAPIStorageFactory;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.FileSystemRMStateStore;
+import org.junit.Assume;
+import org.junit.Ignore;
 
 public class TestRMRestart extends ParameterizedSchedulerTestBase {
   private static final Log LOG = LogFactory.getLog(TestRMRestart.class);

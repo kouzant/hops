@@ -93,7 +93,6 @@ public class SSLFactory implements ConnectionConfigurator {
   private String[] enabledProtocols = null;
   private List<String> excludeCiphers;
 
-  private final Log LOG = LogFactory.getLog(SSLFactory.class);
 
   /**
    * Creates an SSLFactory.

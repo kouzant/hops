@@ -15,19 +15,19 @@
  */
 package io.hops.streaming;
 
-import static io.hops.streaming.DBEvent.receivedEvents;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
+import io.hops.metadata.yarn.entity.ContainerToSignal;
 
-public class FinishedApplicationsEventReceiver {
+public class ContainerToSignalEvent implements DBEvent {
 
-  private static final Log LOG = LogFactory.getLog(
-          FinishedApplicationsEventReceiver.class);
+    private final ContainerToSignal containerToSignal;
 
-  public void createAndAddToQueue(String rmnodeId, String applicationId, String status) {
+  public ContainerToSignalEvent(String rmNodeId, String containerId, String command) {
 
-    RMNodeApplicationsEvent event = new RMNodeApplicationsEvent(rmnodeId, applicationId, status);
-    receivedEvents.add(event);
-
+    this.containerToSignal = new ContainerToSignal(rmNodeId, containerId, command);
   }
+
+  public ContainerToSignal getContainerToSignal() {
+    return containerToSignal;
+  }
+
 }

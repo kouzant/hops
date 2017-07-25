@@ -78,6 +78,7 @@ import org.junit.Test;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplNotDist;
 
 public class TestRMAdminService {
 
@@ -1109,18 +1110,18 @@ public class TestRMAdminService {
         .setHAServiceState(HAServiceState.ACTIVE);
     Map<NodeId, RMNode> rmNodes = rm.getRMContext().getRMNodes();
     rmNodes.put(NodeId.newInstance("host1", 1111),
-        new RMNodeImpl(null, rm.getRMContext(), "host1", 0, 0, null, null,
+        new RMNodeImplNotDist(null, rm.getRMContext(), "host1", 0, 0, null, null,
                 null));
     rmNodes.put(NodeId.newInstance("host2", 2222),
-            new RMNodeImpl(null, rm.getRMContext(), "host2", 0, 0, null, null,
+            new RMNodeImplNotDist(null, rm.getRMContext(), "host2", 0, 0, null, null,
                 null));
     rmNodes.put(NodeId.newInstance("host3", 3333),
-            new RMNodeImpl(null, rm.getRMContext(), "host3", 0, 0, null, null,
+            new RMNodeImplNotDist(null, rm.getRMContext(), "host3", 0, 0, null, null,
                 null));
     Map<NodeId, RMNode> rmInactiveNodes = rm.getRMContext()
         .getInactiveRMNodes();
     rmInactiveNodes.put(NodeId.newInstance("host4", 4444),
-        new RMNodeImpl(null, rm.getRMContext(), "host4", 0, 0, null, null,
+        new RMNodeImplNotDist(null, rm.getRMContext(), "host4", 0, 0, null, null,
                 null));
     RMNodeLabelsManager labelMgr = rm.rmContext.getNodeLabelManager();
 

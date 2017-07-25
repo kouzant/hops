@@ -87,18 +87,18 @@ public class TestQueueMetrics {
     checkApps(queueSource, 1, 0, 1, 0, 0, 0, true);
 
     metrics.allocateResources(user, 3, Resources.createResource(2*GB, 2, 2), true);
-    checkResources(queueSource, 6*GB, 6, 3, 3, 0, 100*GB, 100, 100, 9*GB, 9, 9, 2, 0, 0, 0);
+    checkResources(queueSource, 6*GB, 6, 6, 3, 3, 0, 100*GB, 100, 100, 9*GB, 9, 9, 2, 0, 0, 0, 0);
 
     metrics.releaseResources(user, 1, Resources.createResource(2*GB, 2, 2));
-    checkResources(queueSource, 4*GB, 4, 2, 3, 1, 100*GB, 100, 100, 9*GB, 9, 9, 2, 0, 0, 0);
+    checkResources(queueSource, 4*GB, 4, 4, 2, 3, 1, 100*GB, 100, 100, 9*GB, 9, 9, 2, 0, 0, 0, 0);
 
     metrics.incrPendingResources(user, 0, Resources.createResource(2 * GB, 2, 2));
-    checkResources(queueSource, 4 * GB, 4, 2, 3, 1, 100 * GB, 100, 100, 9 * GB, 9, 9, 2,
-        0, 0, 0);
+    checkResources(queueSource, 4 * GB, 4, 4, 2, 3, 1, 100 * GB, 100, 100, 9 * GB, 9, 9, 2,
+        0, 0, 0, 0);
 
     metrics.decrPendingResources(user, 0, Resources.createResource(2 * GB, 2, 2));
-    checkResources(queueSource, 4 * GB, 4, 2, 3, 1, 100 * GB, 100, 100, 9 * GB, 9, 9, 2,
-        0, 0, 0);
+    checkResources(queueSource, 4 * GB, 4, 4, 2, 3, 1, 100 * GB, 100, 100, 9 * GB, 9, 9, 2,
+        0, 0, 0, 0);
 
     metrics.finishAppAttempt(
         app.getApplicationId(), app.isPending(), app.getUser());
@@ -412,7 +412,7 @@ public class TestQueueMetrics {
   }
 
   public static void checkResources(MetricsSource source, long allocatedMB,
-      int allocatedCores, int allocCtnrs, long aggreAllocCtnrs,
+      int allocatedCores, int allocatedGPUs, int allocCtnrs, long aggreAllocCtnrs,
       long aggreReleasedCtnrs, long availableMB, int availableCores, int availableGPUs, long pendingMB,
       int pendingCores, int pendingGPUs, int pendingCtnrs, long reservedMB, int reservedCores, int reservedGPUs,
       int reservedCtnrs) {

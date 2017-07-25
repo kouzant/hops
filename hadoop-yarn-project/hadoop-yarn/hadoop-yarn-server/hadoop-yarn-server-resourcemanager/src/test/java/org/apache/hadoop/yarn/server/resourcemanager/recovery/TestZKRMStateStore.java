@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.recovery;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.curator.framework.CuratorFramework;
 import org.apache.curator.framework.CuratorFrameworkFactory;
 import org.apache.curator.retry.RetryNTimes;
@@ -419,7 +422,7 @@ public class TestZKRMStateStore extends RMStateStoreTestBase {
             store.getCredentialsFromAppAttempt(mockAttempt),
             startTime, RMAppAttemptState.FINISHED, "testUrl", 
             "test", FinalApplicationStatus.SUCCEEDED, 100,
-            finishTime, 0, 0, 0, 0, 0, "myTrackingUrl");
+            finishTime, 0, 0, 0, 0, 0, 0, "myTrackingUrl");
     store.updateApplicationAttemptState(newAttemptState);
     assertEquals("RMStateStore should have been in fenced state",
             true, store.isFencedState());

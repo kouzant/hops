@@ -171,13 +171,13 @@ public class ResourceCalculatorPlugin extends Configured {
     return sys.getStorageBytesWritten();
   }
 
-  public abstract float getCpuUsage();
-  
   /**
    * Obtain the total number of usable GPUs (in non-erroneous state)
    * @return number of GPUs
    */
-  public abstract int getNumGPUs();
+  public int getNumGPUs(){
+    return sys.getNumGPUs();
+  }
 
   /**
    * Create the ResourceCalculatorPlugin from the class name and configure it. If

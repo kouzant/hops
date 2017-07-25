@@ -86,7 +86,7 @@ message ApplicationAttemptStateDataProto {
     optional int64 finish_time = 12;
     optional int64 preempted_memory_seconds = 13;
     optional int64 preempted_vcore_seconds = 14;
-    optional string tracking_url = 15;
+    optional int64 preempted_gpu_seconds = 15;
     optional string tracking_url = 16;
     optional int64 gpu_seconds = 17;
 }

@@ -15,19 +15,23 @@
  */
 package io.hops.streaming;
 
-import static io.hops.streaming.DBEvent.receivedEvents;
+import io.hops.metadata.yarn.entity.RMNodeApplication;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
-public class FinishedApplicationsEventReceiver {
+public class RMNodeApplicationsEvent implements DBEvent {
 
-  private static final Log LOG = LogFactory.getLog(
-          FinishedApplicationsEventReceiver.class);
+  private static final Log LOG = LogFactory.getLog(RMNodeApplicationsEvent.class);
+  private final RMNodeApplication rmNodeApplication;
 
-  public void createAndAddToQueue(String rmnodeId, String applicationId, String status) {
+  public RMNodeApplicationsEvent(String rmnodeId, String applicationId, String Status) {
 
-    RMNodeApplicationsEvent event = new RMNodeApplicationsEvent(rmnodeId, applicationId, status);
-    receivedEvents.add(event);
-
+    rmNodeApplication = new RMNodeApplication(rmnodeId, applicationId, RMNodeApplication.RMNodeApplicationStatus.
+        valueOf(Status));
   }
+
+  public RMNodeApplication getRmNodeApplication() {
+    return rmNodeApplication;
+  }
+
 }

@@ -307,7 +307,7 @@ public class TestAMRMProxy {
           @Override
           public ApplicationMasterProtocol run() throws Exception {
             return ClientRMProxy.createRMProxy(yarnConf,
-                ApplicationMasterProtocol.class);
+                ApplicationMasterProtocol.class, true);
           }
         });
   }

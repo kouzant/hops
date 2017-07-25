@@ -15,19 +15,14 @@
  */
 package io.hops.streaming;
 
-import static io.hops.streaming.DBEvent.receivedEvents;
-import org.apache.commons.logging.Log;
-import org.apache.commons.logging.LogFactory;
 
-public class FinishedApplicationsEventReceiver {
+public class ContainerToDecreaseEventReceiver {
 
-  private static final Log LOG = LogFactory.getLog(
-          FinishedApplicationsEventReceiver.class);
+    public void createAndAddToQueue(String containerId, String NodeId, String httpAddress, int priority, long memSize,
+      int virtualCores, int gpus, int version) {
 
-  public void createAndAddToQueue(String rmnodeId, String applicationId, String status) {
-
-    RMNodeApplicationsEvent event = new RMNodeApplicationsEvent(rmnodeId, applicationId, status);
-    receivedEvents.add(event);
+      ContainerToDecreaseEvent event = new ContainerToDecreaseEvent(containerId, NodeId, httpAddress, priority, memSize,
+          virtualCores, gpus, version);
 
   }
 }

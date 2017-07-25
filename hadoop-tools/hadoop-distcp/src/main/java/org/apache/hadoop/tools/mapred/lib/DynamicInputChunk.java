@@ -31,6 +31,7 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.hadoop.mapreduce.TaskID;
 
 import java.io.IOException;
+import org.apache.hadoop.fs.FileStatus;
 
 /**
  * The DynamicInputChunk represents a single chunk of work, when used in

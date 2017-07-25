@@ -141,4 +141,5 @@ public abstract class SysInfo {
    */
   public abstract long getStorageBytesWritten();
 
+  public abstract int getNumGPUs();
 }

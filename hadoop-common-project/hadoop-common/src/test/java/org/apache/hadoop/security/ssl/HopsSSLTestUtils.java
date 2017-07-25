@@ -105,7 +105,7 @@ public class HopsSSLTestUtils {
         conf.set(SSLFactory.SSL_HOSTNAME_VERIFIER_KEY, "ALLOW_ALL");
 
         Configuration sslServerConf = KeyStoreTestUtil.createServerSSLConfig(serverKeyStore.toString(),
-                passwd, passwd, serverTrustStore.toString(), passwd);
+                passwd, passwd, serverTrustStore.toString(), passwd, "");
         Path sslServerPath = Paths.get(outDir, "ssl-server.xml");
         filesToPurge.add(sslServerPath);
         File sslServer = new File(sslServerPath.toUri());

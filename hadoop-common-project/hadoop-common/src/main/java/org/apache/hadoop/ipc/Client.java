@@ -818,7 +818,11 @@ public class Client implements AutoCloseable {
         while (true) {
           setupConnection();
           ipcStreams = new IpcStreams(socket, maxResponseLength);
-          writeConnectionHeader(ipcStreams);
+          try{
+            writeConnectionHeader(ipcStreams);
+          } catch (SSLException ex) {
+            throw new IOException(ex.getMessage()).initCause(ex);
+          }
           if (authProtocol == AuthProtocol.SASL) {
             UserGroupInformation ticket = remoteId.getTicket();
             if (ticket.getRealUser() != null) {
@@ -987,7 +991,7 @@ public class Client implements AutoCloseable {
      * +----------------------------------+
      */
     private void writeConnectionHeader(IpcStreams streams)
-        throws IOException {
+        throws IOException, SSLException {
       // Write out the header, version and authentication method.
       // The output stream is buffered but we must not flush it yet.  The
       // connection setup protocol requires the client to send multiple
@@ -1001,14 +1005,12 @@ public class Client implements AutoCloseable {
       // before all messages are sent.
       final DataOutputStream out = streams.out;
       synchronized (out) {
-      	try{
-        	out.write(RpcConstants.HEADER.array());
-        	out.write(RpcConstants.CURRENT_VERSION);
-        	out.write(serviceClass);
-        	out.write(authProtocol.callId);
-        } catch (SSLException ex) {
-            throw new IOException(ex.getMessage()).initCause(ex);
-        }
+
+        out.write(RpcConstants.HEADER.array());
+        out.write(RpcConstants.CURRENT_VERSION);
+        out.write(serviceClass);
+        out.write(authProtocol.callId);
+
       }
     }
 

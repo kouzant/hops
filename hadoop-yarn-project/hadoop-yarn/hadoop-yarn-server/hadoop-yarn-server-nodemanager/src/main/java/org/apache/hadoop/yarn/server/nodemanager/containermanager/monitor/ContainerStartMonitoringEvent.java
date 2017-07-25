@@ -30,7 +30,7 @@ public class ContainerStartMonitoringEvent extends ContainersMonitorEvent {
   private final long localizationDuration;
 
   public ContainerStartMonitoringEvent(ContainerId containerId,
-      long vmemLimit, long pmemLimit, int cpuVcores, ing gpus, long launchDuration,
+      long vmemLimit, long pmemLimit, int cpuVcores, int gpus, long launchDuration,
       long localizationDuration) {
     super(containerId, ContainersMonitorEventType.START_MONITORING_CONTAINER);
     this.vmemLimit = vmemLimit;

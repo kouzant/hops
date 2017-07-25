@@ -451,7 +451,6 @@ public class TestRMWebServices extends JerseyTestBase {
   }
 
   public void verifyClusterMetrics(int submittedApps, int completedApps,
-<<<<<<< 148a0a977329e7fc809a271883aabc1e77a06051
       int reservedMB, int availableMB, int allocMB, int reservedVirtualCores,
       int availableVirtualCores, int allocVirtualCores, int totalVirtualCores,
       int reservedGPUs, int availableGPUs, int allocGPUs, int totalGPUs,

@@ -163,9 +163,9 @@ public class Resources {
     return resource;
   }
 
-  public static Resource createResource(int memory, int cores, int gpus) {
+  public static Resource createResource(long memory, int cores, int gpus) {
     Resource resource = Records.newRecord(Resource.class);
-    resource.setMemory(memory);
+    resource.setMemorySize(memory);
     resource.setVirtualCores(cores);
     resource.setGPUs(gpus);
     return resource;

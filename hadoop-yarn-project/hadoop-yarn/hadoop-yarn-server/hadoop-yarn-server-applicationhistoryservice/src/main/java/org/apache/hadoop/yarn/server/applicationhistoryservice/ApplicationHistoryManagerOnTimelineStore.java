@@ -334,13 +334,13 @@ public class ApplicationHistoryManagerOnTimelineStore extends AbstractService
             ApplicationMetricsConstants.APP_CPU_METRICS);
         long memorySeconds = parseLong(entityInfo,
             ApplicationMetricsConstants.APP_MEM_METRICS);
-        long gpuseconds=Long.parseLong(entityInfo.get(
+        long gpuSeconds=Long.parseLong(entityInfo.get(
             ApplicationMetricsConstants.APP_GPU_METRICS).toString());
         long preemptedMemorySeconds = parseLong(entityInfo,
             ApplicationMetricsConstants.APP_MEM_PREEMPT_METRICS);
         long preemptedVcoreSeconds = parseLong(entityInfo,
             ApplicationMetricsConstants.APP_CPU_PREEMPT_METRICS);
-        long preemptedgpuSeconds = parseLong(entityInfo,
+        long preemptedGPUSeconds = parseLong(entityInfo,
             ApplicationMetricsConstants.APP_GPU_PREEMPT_METRICS);
         appResources = ApplicationResourceUsageReport.newInstance(0, 0, null,
             null, null, memorySeconds, vcoreSeconds, gpuSeconds, 0, 0,

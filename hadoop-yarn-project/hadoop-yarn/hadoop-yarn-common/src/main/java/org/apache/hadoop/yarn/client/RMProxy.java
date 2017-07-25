@@ -96,7 +96,7 @@ public class RMProxy<T> {
         ? (YarnConfiguration) configuration
         : new YarnConfiguration(configuration);
         RetryPolicy retryPolicy =  createRetryPolicy(conf);
-    return createRMProxy(conf, protocol, instance, retryPolicy);
+    return createRMProxy(conf, protocol, instance, retryPolicy, toLeader);
   }
 
   /**
@@ -108,17 +108,17 @@ public class RMProxy<T> {
   @Private
   protected static <T> T createRMProxy(final Configuration configuration,
       final Class<T> protocol, RMProxy instance, final long retryTime,
-      final long retryInterval) throws IOException {
+      final long retryInterval, boolean toLeader) throws IOException {
     YarnConfiguration conf = (configuration instanceof YarnConfiguration)
         ? (YarnConfiguration) configuration
         : new YarnConfiguration(configuration);
     RetryPolicy retryPolicy =
         createRetryPolicy(conf, retryTime, retryInterval);
-    return createRMProxy(conf, protocol, instance, retryPolicy);
+    return createRMProxy(conf, protocol, instance, retryPolicy, toLeader);
   }
 
   private static <T> T createRMProxy(final YarnConfiguration conf,
-      final Class<T> protocol, RMProxy instance, RetryPolicy retryPolicy)
+      final Class<T> protocol, RMProxy instance, RetryPolicy retryPolicy, boolean toLeader)
           throws IOException{
     if (HAUtil.isHAEnabled(conf) || conf.getBoolean(YarnConfiguration.DISTRIBUTED_RM,
             YarnConfiguration.DEFAULT_DISTRIBUTED_RM)) {

@@ -152,6 +152,10 @@ import org.junit.Test;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import org.junit.Before;
 
 public class TestClientRMService {
 
@@ -161,9 +165,17 @@ public class TestClientRMService {
       .getRecordFactory(null);
 
   private String appType = "MockApp";
-  
+    
   private final static String QUEUE_1 = "Q-1";
   private final static String QUEUE_2 = "Q-2";
+
+  @Before
+  public void setUp() throws IOException {
+    Configuration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  }
 
   @Test
   public void testGetClusterNodes() throws Exception {
@@ -650,7 +662,7 @@ public class TestClientRMService {
     ClientRMService rmService =
         new ClientRMService(rmContext, yarnScheduler, appManager,
             mockAclsManager, mockQueueACLsManager, null);
-    rmService.serviceInit(conf);
+    rmService.serviceInit(new Configuration());
     
     // without name and queue
 
@@ -740,7 +752,7 @@ public class TestClientRMService {
     ClientRMService rmService =
         new ClientRMService(rmContext, yarnScheduler, appManager,
             mockAclsManager, mockQueueACLsManager, null);
-    rmService.serviceInit(conf);
+    rmService.serviceInit(new Configuration());
 
     // Initialize appnames and queues
     String[] queues = {QUEUE_1, QUEUE_2};
@@ -902,7 +914,7 @@ public class TestClientRMService {
     final ClientRMService rmService =
         new ClientRMService(rmContext, yarnScheduler, appManager, null, null,
             null);
-    rmService.serviceInit(conf);
+    rmService.serviceInit(new Configuration());
     
     // submit an app and wait for it to block while in app submission
     Thread t = new Thread() {
@@ -993,7 +1005,7 @@ public class TestClientRMService {
     ApplicationId applicationId3 = getApplicationId(3);
     YarnConfiguration config = new YarnConfiguration();
     apps.put(applicationId1, getRMApp(rmContext, yarnScheduler, applicationId1,
-        config, "testqueue", 10, 3,null,null));
+        config, "testqueue", 10, 3, 3, null,null));
     apps.put(applicationId2, getRMApp(rmContext, yarnScheduler, applicationId2,
         config, "a", 20, 2, 2, null,""));
     apps.put(applicationId3, getRMApp(rmContext, yarnScheduler, applicationId3,

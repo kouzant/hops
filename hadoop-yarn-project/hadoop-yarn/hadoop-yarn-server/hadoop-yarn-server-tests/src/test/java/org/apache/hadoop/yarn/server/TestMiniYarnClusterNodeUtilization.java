@@ -109,7 +109,7 @@ public class TestMiniYarnClusterNodeUtilization {
     NodeHeartbeatRequest request =
         NodeHeartbeatRequest.newInstance(nodeStatus, null, null, null);
     ResourceTracker tracker =
-        ServerRMProxy.createRMProxy(conf, ResourceTracker.class);
+        ServerRMProxy.createRMProxy(conf, ResourceTracker.class, true);
     tracker.nodeHeartbeat(request);
 
     // Give the heartbeat time to propagate to the RM

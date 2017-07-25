@@ -2193,7 +2193,7 @@ public abstract class Server {
        * @throws WrappedRpcServerException
        */
     private void authenticateSSLConnection(UserGroupInformation protocolUser)
-            throws WrappedRpcServerException {
+            throws FatalRpcServerException {
       if (!isSSLEnabled) {
         return;
       }
@@ -2214,7 +2214,7 @@ public abstract class Server {
         String[] subjectTokens = subjectDN.split(",");
         String[] cnTokens = subjectTokens[0].split("=", 2);
         if (cnTokens.length != 2) {
-          throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
+          throw new FatalRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
                   "Problematic CN in client certificate: " + subjectTokens[0]);
         }
         String cn = cnTokens[1];
@@ -2267,12 +2267,12 @@ public abstract class Server {
           }
 
         // Incoming RPC did not manage to authenticate
-        throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
+        throw new FatalRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
                 "Client's certificate CN " + cn +
                         " did not match the supplied RPC username " + protocolUser.getUserName()
                         + " for protocol: " + protocolName);
       } catch (SSLPeerUnverifiedException ex) {
-        throw new WrappedRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED, ex);
+        throw new FatalRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED, ex);
       }
     }
 

@@ -508,7 +508,8 @@ public class RMContextImpl implements RMContext {
     } else {
       return elector.getZookeeperConnectionState();
     }
-    
+  }
+  
   public void setIsDistributed(boolean isDistributed) {
     this.isDistributed = isDistributed;
   }

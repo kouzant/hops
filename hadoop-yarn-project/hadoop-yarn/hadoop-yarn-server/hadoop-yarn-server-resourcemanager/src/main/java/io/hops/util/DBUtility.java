@@ -18,7 +18,6 @@ package io.hops.util;
 import com.google.protobuf.InvalidProtocolBufferException;
 import io.hops.exception.StorageException;
 import io.hops.metadata.yarn.dal.*;
-import io.hops.metadata.yarn.entity.Container;
 import io.hops.metadata.yarn.entity.NextHeartbeat;
 import io.hops.metadata.yarn.dal.util.YARNOperationType;
 import io.hops.metadata.yarn.entity.*;
@@ -28,13 +27,6 @@ import java.util.*;
 import java.util.concurrent.ConcurrentLinkedQueue;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
-
-import io.hops.transaction.handler.ThreadPool;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.net.NetUtils;
@@ -50,6 +42,8 @@ import org.apache.hadoop.yarn.util.ConverterUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.UpdatedContainerInfo;
 import io.hops.metadata.yarn.entity.ContainerStatus;
 import io.hops.transaction.handler.LightWeightRequestHandler;
+import org.apache.hadoop.yarn.api.protocolrecords.SignalContainerRequest;
+import org.apache.hadoop.yarn.api.records.impl.pb.TokenPBImpl;
 
 public class DBUtility {
 
@@ -87,64 +81,205 @@ public class DBUtility {
     }
   }
 
-  public static void removeFinishedApplications(
-          final List<ApplicationId> finishedApplications, final org.apache.hadoop.yarn.api.records.NodeId nodeId)
-          throws IOException {
+  public static void removeContainersToSignal(final Set<SignalContainerRequest> containerRequests, final NodeId nodeId)
+      throws IOException {
     long start = System.currentTimeMillis();
-    AsyncLightWeightRequestHandler removeFinishedApplication
-            = new AsyncLightWeightRequestHandler(
-            YARNOperationType.TEST) {
+    AsyncLightWeightRequestHandler removeContainerToSignal
+        = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
       @Override
       public Object performTask() throws StorageException {
         connector.beginTransaction();
         connector.writeLock();
-        FinishedApplicationsDataAccess faDA
-                = (FinishedApplicationsDataAccess) RMStorageFactory
-                .getDataAccess(FinishedApplicationsDataAccess.class);
-        List<FinishedApplications> finishedApps
-                = new ArrayList<FinishedApplications>();
-        for (ApplicationId appId : finishedApplications) {
-          finishedApps.add(new FinishedApplications(nodeId.toString(), appId.
-                  toString()));
+        ContainerToSignalDataAccess ctsDA = (ContainerToSignalDataAccess) RMStorageFactory.getDataAccess(
+            ContainerToSignalDataAccess.class);
+        List<ContainerToSignal> containersToSignal = new ArrayList<ContainerToSignal>();
+        for (SignalContainerRequest cr : containerRequests) {
+          containersToSignal.add(new ContainerToSignal(nodeId.toString(), cr.getContainerId().toString(), cr.
+              getCommand().toString()));
         }
-        faDA.removeAll(finishedApps);
+        ctsDA.removeAll(containersToSignal);
         connector.commit();
-
         return null;
       }
     };
 
-    removeFinishedApplication.handle();
+    removeContainerToSignal.handle();
     long duration = System.currentTimeMillis() - start;
-    if(duration>10){
+    if (duration > 10) {
       LOG.error("too long " + duration);
     }
   }
 
-  public static void addFinishedApplication(final ApplicationId appId,
-          final org.apache.hadoop.yarn.api.records.NodeId nodeId) throws
-          IOException {
+  public static void addContainerToSignal(final SignalContainerRequest containerRequest, final NodeId nodeId)
+      throws IOException {
     long start = System.currentTimeMillis();
-    AsyncLightWeightRequestHandler addFinishedApplication
-            = new AsyncLightWeightRequestHandler(
-            YARNOperationType.TEST) {
+    AsyncLightWeightRequestHandler addContainerToSignal = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
       @Override
       public Object performTask() throws StorageException {
         connector.beginTransaction();
         connector.writeLock();
-        FinishedApplicationsDataAccess faDA
-                = (FinishedApplicationsDataAccess) RMStorageFactory
-                .getDataAccess(FinishedApplicationsDataAccess.class);
-        faDA.add(new FinishedApplications(nodeId.toString(), appId.toString()));
+        ContainerToSignalDataAccess ctsDA = (ContainerToSignalDataAccess) RMStorageFactory.getDataAccess(
+            ContainerToSignalDataAccess.class);
+        ContainerToSignal containerToSignal = new ContainerToSignal(nodeId.toString(),
+            containerRequest.getContainerId().toString(), containerRequest.getCommand().toString());
+
+        ctsDA.add(containerToSignal);
+        connector.commit();
+        return null;
+      }
+    };
+
+    addContainerToSignal.handle();
+    long duration = System.currentTimeMillis() - start;
+    if (duration > 10) {
+      LOG.error("too long " + duration);
+    }
+  }
+
+  public static void removeContainersToDecrease(
+      final Collection<org.apache.hadoop.yarn.api.records.Container> containers) throws IOException {
+    long start = System.currentTimeMillis();
+    AsyncLightWeightRequestHandler removeContainerToDecrease
+        = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
+      @Override
+      public Object performTask() throws StorageException {
+        connector.beginTransaction();
+        connector.writeLock();
+        ContainerToDecreaseDataAccess ctsDA = (ContainerToDecreaseDataAccess) RMStorageFactory.getDataAccess(
+            ContainerToDecreaseDataAccess.class);
+        List<io.hops.metadata.yarn.entity.Container> containersToDecrease
+            = new ArrayList<io.hops.metadata.yarn.entity.Container>();
+        for (org.apache.hadoop.yarn.api.records.Container container : containers) {
+          containersToDecrease.add(new io.hops.metadata.yarn.entity.Container(container.getId().toString(), container.
+              getNodeId().toString(),
+              container.getNodeHttpAddress(), container.getPriority().getPriority(), container.getResource().
+              getMemorySize(), container.getResource().getVirtualCores(), container.getResource().getGPUs(), container.
+              getVersion()));
+        }
+        ctsDA.removeAll(containersToDecrease);
+        connector.commit();
+        return null;
+      }
+    };
+
+    removeContainerToDecrease.handle();
+    long duration = System.currentTimeMillis() - start;
+    if (duration > 10) {
+      LOG.error("too long " + duration);
+    }
+  }
+
+  public static void addContainersToDecrease(final List<org.apache.hadoop.yarn.api.records.Container> containers) throws
+      IOException {
+    long start = System.currentTimeMillis();
+    AsyncLightWeightRequestHandler addContainerToDecrease = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
+      @Override
+      public Object performTask() throws StorageException {
+        connector.beginTransaction();
+        connector.writeLock();
+        ContainerToDecreaseDataAccess ctsDA = (ContainerToDecreaseDataAccess) RMStorageFactory.getDataAccess(
+            ContainerToDecreaseDataAccess.class);
+        List<io.hops.metadata.yarn.entity.Container> containersToDecrease
+            = new ArrayList<io.hops.metadata.yarn.entity.Container>();
+        for (org.apache.hadoop.yarn.api.records.Container container : containers) {
+          containersToDecrease.add(new io.hops.metadata.yarn.entity.Container(container.getId().toString(), container.
+              getNodeId().toString(), container.getNodeHttpAddress(), container.getPriority().getPriority(), container.
+              getResource().getMemorySize(), container.getResource().getVirtualCores(), container.getResource().
+              getGPUs(), container.getVersion()));
+        }
+        ctsDA.addAll(containersToDecrease);
+        connector.commit();
+        return null;
+      }
+    };
+
+    addContainerToDecrease.handle();
+    long duration = System.currentTimeMillis() - start;
+    if (duration > 10) {
+      LOG.error("too long " + duration);
+    }
+  }
+
+  public static void removeRMNodeApplications(
+      final List<ApplicationId> applications, final org.apache.hadoop.yarn.api.records.NodeId nodeId,
+      final RMNodeApplication.RMNodeApplicationStatus status)
+      throws IOException {
+    long start = System.currentTimeMillis();
+    AsyncLightWeightRequestHandler removeRMNodeApplication
+        = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
+      @Override
+      public Object performTask() throws StorageException {
+        connector.beginTransaction();
+        connector.writeLock();
+        RMNodeApplicationsDataAccess faDA = (RMNodeApplicationsDataAccess) RMStorageFactory.getDataAccess(
+            RMNodeApplicationsDataAccess.class);
+        List<RMNodeApplication> rmNodeApps = new ArrayList<RMNodeApplication>();
+        for (ApplicationId appId : applications) {
+          rmNodeApps.add(new RMNodeApplication(nodeId.toString(), appId.toString(), status));
+        }
+        faDA.removeAll(rmNodeApps);
         connector.commit();
 
         return null;
       }
     };
 
-    addFinishedApplication.handle();
+    removeRMNodeApplication.handle();
     long duration = System.currentTimeMillis() - start;
-    if(duration>10){
+    if (duration > 10) {
+      LOG.error("too long " + duration);
+    }
+  }
+
+  public static void removeRMNodeApplication(final ApplicationId appId,
+      final org.apache.hadoop.yarn.api.records.NodeId nodeId, final RMNodeApplication.RMNodeApplicationStatus status)
+      throws IOException {
+    long start = System.currentTimeMillis();
+    AsyncLightWeightRequestHandler removeRMNodeApplication
+        = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
+      @Override
+      public Object performTask() throws StorageException {
+        connector.beginTransaction();
+        connector.writeLock();
+        RMNodeApplicationsDataAccess faDA = (RMNodeApplicationsDataAccess) RMStorageFactory.getDataAccess(
+            RMNodeApplicationsDataAccess.class);
+        RMNodeApplication rmNodeApp = new RMNodeApplication(nodeId.toString(), appId.toString(), status);
+
+        faDA.remove(rmNodeApp);
+        connector.commit();
+
+        return null;
+      }
+    };
+
+    removeRMNodeApplication.handle();
+    long duration = System.currentTimeMillis() - start;
+    if (duration > 10) {
+      LOG.error("too long " + duration);
+    }
+  }
+    
+  public static void addRMNodeApplication(final ApplicationId appId,
+      final org.apache.hadoop.yarn.api.records.NodeId nodeId, final RMNodeApplication.RMNodeApplicationStatus status)
+      throws IOException {
+    long start = System.currentTimeMillis();
+    AsyncLightWeightRequestHandler addRMNodeApplication = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
+      @Override
+      public Object performTask() throws StorageException {
+        connector.beginTransaction();
+        connector.writeLock();
+        RMNodeApplicationsDataAccess faDA = (RMNodeApplicationsDataAccess) RMStorageFactory.getDataAccess(
+            RMNodeApplicationsDataAccess.class);
+        faDA.add(new RMNodeApplication(nodeId.toString(), appId.toString(), status));
+        connector.commit();
+
+        return null;
+      }
+    };
+
+    addRMNodeApplication.handle();
+    long duration = System.currentTimeMillis() - start;
+    if (duration > 10) {
       LOG.error("too long " + duration);
     }
   }
@@ -293,16 +428,6 @@ public class DBUtility {
 
     return rmNode;
   }
-      @Override
-      public Object performTask() throws StorageException {
-        connector.beginTransaction();
-        connector.writeLock();
-        NextHeartbeatDataAccess nhbDA
-                = (NextHeartbeatDataAccess) RMStorageFactory
-                .getDataAccess(NextHeartbeatDataAccess.class);
-        nhbDA.update(new NextHeartbeat(nodeId, nextHB));
-        connector.commit();
-        return null;
   
   public static void addNextHB(final boolean nextHB, final String nodeId) throws IOException {
            long start = System.currentTimeMillis();
@@ -321,7 +446,6 @@ public class DBUtility {
         return null;
               }
             };
-
     addNextHB.handle();
     long duration = System.currentTimeMillis() - start;
     if(duration>10){
@@ -439,13 +563,15 @@ long start = System.currentTimeMillis();
     final PendingEvent pendingEvent = new PendingEvent(rmNodeId, type, status,
             id, contains);
 
-    AsyncLightWeightRequestHandler removePendingEvents = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
+    AsyncLightWeightRequestHandler removePendingEvents
+            = new AsyncLightWeightRequestHandler(YARNOperationType.TEST) {
       @Override
       public Object performTask() throws IOException {
         connector.beginTransaction();
         connector.writeLock();
 
-        PendingEventDataAccess pendingEventDAO = (PendingEventDataAccess) YarnAPIStorageFactory
+        PendingEventDataAccess pendingEventDAO
+                = (PendingEventDataAccess) YarnAPIStorageFactory
                 .getDataAccess(PendingEventDataAccess.class);
         pendingEventDAO.removePendingEvent(pendingEvent);
         connector.commit();
@@ -455,7 +581,7 @@ long start = System.currentTimeMillis();
     };
     removePendingEvents.handle();
     long duration = System.currentTimeMillis() - start;
-    if(duration>10){
+    if (duration > 10) {
       LOG.error("too long " + duration);
     }
   }

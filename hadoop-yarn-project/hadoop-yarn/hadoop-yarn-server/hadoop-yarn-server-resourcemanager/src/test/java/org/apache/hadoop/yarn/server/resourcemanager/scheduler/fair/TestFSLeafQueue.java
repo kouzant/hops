@@ -60,7 +60,7 @@ public class TestFSLeafQueue extends FairSchedulerTestBase {
 
   @Before
   public void setup() throws IOException {
-    super.setUp();
+    conf = createConfiguration();
     conf.setClass(YarnConfiguration.RM_SCHEDULER, FairScheduler.class,
         ResourceScheduler.class);
   }
