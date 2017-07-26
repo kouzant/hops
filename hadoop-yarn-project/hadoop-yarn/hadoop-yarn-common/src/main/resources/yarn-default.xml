@@ -1268,6 +1268,14 @@
   </property>
 
   <property>
+    <description>
+      Number of gpu that can be allocated for containers.
+    </description>
+    <name>yarn.nodemanager.resource.gpus</name>
+    <value>0</value>
+  </property>
+    
+  <property>
     <description>Enable auto-detection of node capabilities such as
     memory and CPU.
     </description>
@@ -2647,4 +2655,169 @@
     <name>yarn.resourcemanager.node-removal-untracked.timeout-ms</name>
     <value>60000</value>
   </property>
+
+  <!-- Distributed Mode -->
+  <property>
+    <description>
+      set if the resource manager should run in distributed mode or not.
+    </description>
+    <name>yarn.client.failover-distributed</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <description>
+      address of a node to connect to to bootstrap the group membership.
+    </description>
+    <name>yarn.resourcemanager.groupMembership.address</name>
+    <value>localhost:8034</value>
+  </property>
+    
+  <property>
+    <description>
+      choose different implementation of the least loader
+    </description>
+    <name>yarn.client.failover-least-loadedproxy-provider</name>
+    <value>org.apache.hadoop.yarn.client.ConfiguredLeastLoadedRMFailoverHAProxyProvider</value>
+  </property>
+  
+  <property>
+    <description>
+      Port on which the database is listening for events connection.
+    </description>
+    <name>hops.yarn.resourcemanager.ndb-event-streaming.db.port</name>
+    <value>1186</value>
+  </property>
+
+  <!-- SSL -->
+
+  <property>
+    <description>
+      When HA is enabled the address of the CertificateLocalization service
+      in the form of ip:port. The service is responsible for distributing the
+      cryptographic material between the Active and Standby RMs
+    </description>
+    <name>yarn.resourcemanager.ha.cert.loc.address</name>
+    <value>0.0.0.0:8012</value>
+  </property>
+
+
+  <!-- quotas -->
+  
+  <property>
+    <description>
+      interval between to computation of the pricing for the quota system.
+      defined in ms.
+    </description>
+    <name>yarn.resourcemanager.quota.multiplicator.interval</name>
+    <value>1000</value>
+  </property>
+    
+  <property>
+    <description>
+      Number X of monitoring periods for which a quota multiplicator is set.
+      Once this number of periods is passed the job will continue running with
+      the latest multiplicator value computed by the multiplicator service for
+      the next X monitoring periods.
+    </description>
+    <name>yarn.resourcemanager.quota.multiplicator.fixed.period</name>
+    <value>10</value>
+  </property>
+  
+  <property>
+    <description>
+      set if the quota should be computed at regular interval (true) or if they
+      should only be computed at the end of the run (false). Not computing at
+      regular interval increase risk of not computing quota in case of crash of
+      the resource manager and increase possibility of long running jobs
+      overconsuming.
+    </description>
+    <name>yarn.resourcemanager.quota.containers.log.checkpoints.enabled</name>
+    <value>true</value>
+  </property>
+
+  <property>
+    <description>
+      Number of unit of time between to checkpoints.
+    </description>
+    <name>yarn.resourcemanager.quota.containers.log.checkpoints.period</name>
+    <value>10</value>
+  </property>
+  
+  <property>
+    <description>
+      Max size of the batch of containers log on which to compute quota utilisation.
+      Computing and applying quota utilisation on containers imply taking some locks on
+      the database. Small batches result in a lot of contention on the locks, large batches
+      resut in long computation time implying holding the locks for a long time.
+    </description>
+    <name>yarn.resourcemanager.quota.batch.size</name>
+    <value>100</value>
+  </property>
+
+  <property>
+    <description>
+      Max time waiting in ms before to compute quota utilisation on the current batch of container logs.
+      Computing and applying quota utilisation on containers imply taking some locks on
+      the database. Small waiting time results in a lot of contention on the locks. Long
+      waiting time resuts latency in the computation of the quota and risk of loosing information
+      in case of carsh.
+    </description>
+    <name>yarn.resourcemanager.quota.batch.time</name>
+    <value>500</value>
+  </property>
+  
+  <property>
+    <description>
+      unit of time in ms to compute quota utilisation. By default quota are paid for each second of usage.
+    </description>
+    <name>yarn.resourcemanager.quota.containers.log.period</name>
+    <value>1000</value>
+  </property>
+
+  <property>
+    <description>
+      The percentage of cluster utilisation above which we start increasing the amount of qota paid for
+      utilisation. As a float between 0 and 1
+    </description>
+    <name>yarn.resourcemanager.quota.multiplicator.threshold</name>
+    <value>0.2</value>
+  </property>
+  
+  <property>
+    <description>
+      Number of qota used by unit of time and unit of resource when the multiplicator is equal to 1.
+    </description>
+    <name>yarn.resourcemanager.quota.price.base</name>
+    <value>1</value>
+  </property>
+  
+  <property>
+    <description>
+      Unit of memory in Mb for the quota computation. If a container use less than one unit of memory
+      it will be billed for one unit of memory. If a container use more than one unit of memory it will
+      be billed proportionaly to it's useage (usage/unit)
+    </description>
+    <name>yarn.resourcemanager.quota.minimum.charged.mb</name>
+    <value>1024</value>
+  </property>
+  
+  <property>
+    <description>
+      factor by which to increase to cost of resource in regard to cluster utilisation.
+    </description>
+    <name>yarn.resourcemanager.quota.multiplicator.increment</name>
+    <value>1</value>
+  </property>
+    
+  
+  <property>
+    <description>
+      Minimum unit of time charged for one run. A container will always be charged at least this
+      number of unit of time, even if it run for less than it.
+    </description>
+    <name>yarn.resourcemanager.quota.minTicksCharge</name>
+    <value>10</value>
+  </property>
+
 </configuration>

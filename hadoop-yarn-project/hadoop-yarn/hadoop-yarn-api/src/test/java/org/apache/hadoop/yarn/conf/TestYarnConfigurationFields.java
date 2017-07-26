@@ -55,6 +55,8 @@ public class TestYarnConfigurationFields extends TestConfigurationFieldsBase {
     configurationPropsToSkipCompare
         .add(YarnConfiguration.DEFAULT_LEADER_CLIENT_FAILOVER_PROXY_PROVIDER);
     configurationPropsToSkipCompare
+        .add(YarnConfiguration.DEFAULT_LEAST_LOADED_CLIENT_FAILOVER_PROXY_PROVIDER);
+    configurationPropsToSkipCompare
         .add(YarnConfiguration.DEFAULT_IPC_RECORD_FACTORY_CLASS);
     configurationPropsToSkipCompare
         .add(YarnConfiguration.DEFAULT_IPC_CLIENT_FACTORY_CLASS);

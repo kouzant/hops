@@ -100,16 +100,6 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
           Event event;
           try {
             event = eventQueue.take();
-            
-            if (queueContentRemoved.containsKey(event.getType().name())) {
-              queueContentRemoved.put(event.getType().name(),
-                      queueContentRemoved.get(
-                              event.getType().name())
-                      + 1);
-            } else {
-              queueContentRemoved.
-                      put(event.getType().name(), 1);
-            }
           } catch(InterruptedException ie) {
             if (!stopped) {
               LOG.warn("AsyncDispatcher thread interrupted", ie);
@@ -238,8 +228,6 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
     return handlerInstance;
   }
 
-  Map<String, Integer> queueContent = new HashMap<>();
-  Map<String, Integer> queueContentRemoved = new HashMap<>();
   class GenericEventHandler implements EventHandler<Event> {
     public void handle(Event event) {
       if (blockNewEvents) {
@@ -251,17 +239,8 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
       int qSize = eventQueue.size();
       if (qSize != 0 && qSize % 1000 == 0
           && lastEventQueueSizeLogged != qSize) {
-          synchronized(queueContent){
         lastEventQueueSizeLogged = qSize;
         LOG.info("Size of event-queue is " + qSize);
-        for(String key: queueContent.keySet()){
-          LOG.info("inqueue " + key + ": " + queueContent.get(key));
-        }
-        for(String key: queueContentRemoved.keySet()){
-          LOG.info("removed " + key + ": " + queueContentRemoved.get(key));
-        }
-        }
-      
       }
       int remCapacity = eventQueue.remainingCapacity();
       if (remCapacity < 1000) {
@@ -269,12 +248,6 @@ public class AsyncDispatcher extends AbstractService implements Dispatcher {
             + remCapacity);
       }
       try {
-        if(queueContent.containsKey(event.getType().name())){
-          queueContent.put(event.getType().name(), queueContent.get(
-                  event.getType().name())+1);
-        }else{
-          queueContent.put(event.getType().name(), 1);
-        }
         eventQueue.put(event);
       } catch (InterruptedException e) {
         if (!stopped) {

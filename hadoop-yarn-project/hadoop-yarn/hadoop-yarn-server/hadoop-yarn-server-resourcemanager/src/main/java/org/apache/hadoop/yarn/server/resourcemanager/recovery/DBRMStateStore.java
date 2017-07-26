@@ -268,21 +268,12 @@ public class DBRMStateStore extends RMStateStore {
   }
   
   private void loadReservationSystemState(RMState rmState) throws IOException {
-    LightWeightRequestHandler getAllReservationStateHandler = new LightWeightRequestHandler(YARNOperationType.TEST) {
-      @Override
-      public Object performTask() throws StorageException {
-        connector.beginTransaction();
-        connector.readLock();
-        ReservationStateDataAccess DA = (ReservationStateDataAccess) RMStorageFactory.getDataAccess(
-            ReservationStateDataAccess.class);
 
-        List<ReservationState> reservationStates = DA.getAll();
+    ReservationStateDataAccess DA = (ReservationStateDataAccess) RMStorageFactory.getDataAccess(
+        ReservationStateDataAccess.class);
 
-        connector.commit();
-        return reservationStates;
-      }
-    };
-    List<ReservationState> reservationStates = (List<ReservationState>) getAllReservationStateHandler.handle();
+    List<ReservationState> reservationStates = DA.getAll();
+
     for (ReservationState state : reservationStates) {
 
       if (!rmState.getReservationState().containsKey(state.getPlanName())) {

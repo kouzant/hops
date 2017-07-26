@@ -315,6 +315,10 @@ public class TestRMNodeTransitions {
 
     doReturn(completedContainerIdFromNode1).when(containerStatusFromNode1)
         .getContainerId();
+    // HOP :: State, Diagnostics and ExitStatus are needed by the ContainerLogService
+    doReturn(ContainerState.COMPLETE).when(containerStatusFromNode1).getState();
+    doReturn("HEALTHY").when(containerStatusFromNode1).getDiagnostics();
+    doReturn(1).when(containerStatusFromNode1).getExitStatus();
     doReturn(Collections.singletonList(containerStatusFromNode1))
         .when(statusEventFromNode1).getContainers();
     node.handle(statusEventFromNode1);
@@ -326,11 +330,19 @@ public class TestRMNodeTransitions {
 
     doReturn(completedContainerIdFromNode2_1).when(containerStatusFromNode2_1)
         .getContainerId();
+    // HOP :: State, Diagnostics and ExitStatus are needed by the ContainerLogService
+    doReturn(ContainerState.COMPLETE).when(containerStatusFromNode2_1).getState();
+    doReturn("HEALTHY").when(containerStatusFromNode2_1).getDiagnostics();
+    doReturn(1).when(containerStatusFromNode2_1).getExitStatus();
     doReturn(Collections.singletonList(containerStatusFromNode2_1))
         .when(statusEventFromNode2_1).getContainers();
 
     doReturn(completedContainerIdFromNode2_2).when(containerStatusFromNode2_2)
         .getContainerId();
+    // HOP :: State, Diagnostics and ExitStatus are needed by the ContainerLogService
+    doReturn(ContainerState.COMPLETE).when(containerStatusFromNode2_2).getState();
+    doReturn("HEALTHY").when(containerStatusFromNode2_2).getDiagnostics();
+    doReturn(1).when(containerStatusFromNode2_2).getExitStatus();
     doReturn(Collections.singletonList(containerStatusFromNode2_2))
         .when(statusEventFromNode2_2).getContainers();
 
@@ -346,7 +358,7 @@ public class TestRMNodeTransitions {
         .getContainerId());
   }
 
-  @Test (timeout = 5000)
+  @Test (timeout = 500000)
   public void testStatusChange(){
     //Start the node
     node.handle(new RMNodeStartedEvent(null, null, null));
@@ -367,10 +379,19 @@ public class TestRMNodeTransitions {
     ContainerStatus containerStatus2 = mock(ContainerStatus.class);
 
     doReturn(completedContainerId1).when(containerStatus1).getContainerId();
+    // HOP :: State, Diagnostics and ExitStatus are needed by the ContainerLogService
+    doReturn(ContainerState.COMPLETE).when(containerStatus1).getState();
+    doReturn("HEALTHY").when(containerStatus1).getDiagnostics();
+    doReturn(1).when(containerStatus1).getExitStatus();
     doReturn(Collections.singletonList(containerStatus1))
         .when(statusEvent1).getContainers();
      
     doReturn(completedContainerId2).when(containerStatus2).getContainerId();
+    // HOP :: State, Diagnostics and ExitStatus are needed by the ContainerLogService
+    doReturn(ContainerState.COMPLETE).when(containerStatus2).getState();
+    doReturn("HEALTHY").when(containerStatus2).getDiagnostics();
+    doReturn(1).when(containerStatus2).getExitStatus();
+
     doReturn(Collections.singletonList(containerStatus2))
         .when(statusEvent2).getContainers();
 

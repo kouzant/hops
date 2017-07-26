@@ -56,10 +56,6 @@ public class TestPriceMultiplicationFactorService {
   @Before
   public void setup() throws IOException {
     conf = new YarnConfiguration();
-    conf.set(YarnConfiguration.EVENT_RT_CONFIG_PATH,
-            "target/test-classes/RT_EventAPIConfig.ini");
-    conf.set(YarnConfiguration.EVENT_SHEDULER_CONFIG_PATH,
-            "target/test-classes/RM_EventAPIConfig.ini");
 
     YarnAPIStorageFactory.setConfiguration(conf);
     RMStorageFactory.setConfiguration(conf);

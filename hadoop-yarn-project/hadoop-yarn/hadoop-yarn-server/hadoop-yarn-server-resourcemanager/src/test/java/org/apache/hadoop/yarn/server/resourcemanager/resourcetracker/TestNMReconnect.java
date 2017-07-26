@@ -18,6 +18,10 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.resourcetracker;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import org.apache.hadoop.conf.Configuration;
@@ -78,8 +82,11 @@ public class TestNMReconnect {
   ResourceTrackerService resourceTrackerService;
 
   @Before
-  public void setUp() {
+  public void setUp() throws IOException {
     Configuration conf = new Configuration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     // Dispatcher that processes events inline
     dispatcher = new InlineDispatcher();
 

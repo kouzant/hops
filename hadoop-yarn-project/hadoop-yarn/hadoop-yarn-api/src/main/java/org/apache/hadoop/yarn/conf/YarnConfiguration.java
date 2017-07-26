@@ -140,7 +140,6 @@ public class YarnConfiguration extends Configuration {
   /** The address of the applications manager interface in the RM.*/
   public static final String RM_ADDRESS = 
     RM_PREFIX + "address";
-  public static final String RM_PORT = RM_PREFIX + "port";
   public static final int DEFAULT_RM_PORT = 8032;
   public static final String DEFAULT_RM_ADDRESS =
     "0.0.0.0:" + DEFAULT_RM_PORT;
@@ -171,7 +170,6 @@ public class YarnConfiguration extends Configuration {
   /** The address of the scheduler interface.*/
   public static final String RM_SCHEDULER_ADDRESS = 
     RM_PREFIX + "scheduler.address";
-  public static final String RM_SCHEDULER_PORT = RM_PREFIX + "scheduler.port";
   public static final int DEFAULT_RM_SCHEDULER_PORT = 8030;
   public static final String DEFAULT_RM_SCHEDULER_ADDRESS = "0.0.0.0:" +
     DEFAULT_RM_SCHEDULER_PORT;
@@ -269,8 +267,6 @@ public class YarnConfiguration extends Configuration {
   
   public static final String RM_RESOURCE_TRACKER_ADDRESS =
     RM_PREFIX + "resource-tracker.address";
-  public static final String RM_RESOURCE_TRACKER_PORT =
-RM_PREFIX + "resource-tracker.port";
   public static final int DEFAULT_RM_RESOURCE_TRACKER_PORT = 8031;
   public static final String DEFAULT_RM_RESOURCE_TRACKER_ADDRESS =
     "0.0.0.0:" + DEFAULT_RM_RESOURCE_TRACKER_PORT;
@@ -318,7 +314,6 @@ RM_PREFIX + "resource-tracker.port";
   /** The address of the RM admin interface.*/
   public static final String RM_ADMIN_ADDRESS = 
     RM_PREFIX + "admin.address";
-  public static final String RM_ADMIN_PORT = RM_PREFIX + "admin.port";
   public static final int DEFAULT_RM_ADMIN_PORT = 8033;
   public static final String DEFAULT_RM_ADMIN_ADDRESS = "0.0.0.0:" +
       DEFAULT_RM_ADMIN_PORT;
@@ -2552,23 +2547,11 @@ RM_PREFIX + "resource-tracker.port";
   public static final String HOPS_NDB_EVENT_STREAMING_DB_PORT = HOPS_RM_PREFIX
           + "ndb-event-streaming.db.port";
 
-  public static final String EVENT_SHEDULER_CONFIG_PATH = HOPS_RM_PREFIX
-          + "event.scheduler.config.path";
-  public static final String DEFAULT_EVENT_SHEDULER_CONFIG_PATH
-          = "etc/hadoop/RM_EventAPIConfig.ini";
-
-  public static final String EVENT_RT_CONFIG_PATH = HOPS_RM_PREFIX
-          + "event.rt.config.path";
-  public static final String DEFAULT_EVENT_RT_CONFIG_PATH
-          = "etc/hadoop/RT_EventAPIConfig.ini";
-
   /**
    * The address of the RM group membership interface.
    */
   public static final String RM_GROUP_MEMBERSHIP_ADDRESS = RM_PREFIX
           + "groupMembership.address";
-  public static final String RM_GROUP_MEMBERSHIP_PORT = RM_PREFIX
-          + "groupMembership.port";
   public static final int DEFAULT_RM_GROUP_MEMBERSHIP_PORT = 8034;
   public static final String DEFAULT_RM_GROUP_MEMBERSHIP_ADDRESS = "localhost:"
           + DEFAULT_RM_GROUP_MEMBERSHIP_PORT;
@@ -2608,12 +2591,10 @@ RM_PREFIX + "resource-tracker.port";
   public static boolean DEFAULT_QUOTA_CONTAINERS_LOGS_CHECKPOINTS_ENABLED = true;
   public static final String QUOTA_CONTAINERS_LOGS_CHECKPOINTS_MINTICKS = QUOTA_PREFIX + "containers.log.checkpoints.period"; //this period is a multiple of the min charge period
   public static int DEFAULT_QUOTA_CONTAINERS_LOGS_CHECKPOINTS_MINTICKS = 6;
-  public static final String QUOTA_CONTAINERS_LOGS_ALERT_THRESHOLD = QUOTA_PREFIX + "containers.log.alert.threshold";
-  public static int DEFAULT_QUOTA_CONTAINERS_LOGS_ALERT_THRESHOLD=1000;
   public static final String QUOTA_FIXED_MULTIPLICATOR_PERIOD = QUOTA_PREFIX + "multiplicator.fixed.period";
   public static long DEFAULT_QUOTA_FIXED_MULTIPLICATOR_PERIOD = 10;
-  public static final String QUOTA_MINIMUM_CHARGED_MB = QUOTA_PREFIX + "minimum.charged.mv";
-  public static int DEFAULT_QUOTA_MINIMUM_CHARGED_MB=10240;
+  public static final String QUOTA_MINIMUM_CHARGED_MB = QUOTA_PREFIX + "minimum.charged.mb";
+  public static int DEFAULT_QUOTA_MINIMUM_CHARGED_MB=1024;
 
   private static final List<String> RM_SERVICES_ADDRESS_CONF_KEYS_HTTP =
           Collections.unmodifiableList(Arrays.asList(

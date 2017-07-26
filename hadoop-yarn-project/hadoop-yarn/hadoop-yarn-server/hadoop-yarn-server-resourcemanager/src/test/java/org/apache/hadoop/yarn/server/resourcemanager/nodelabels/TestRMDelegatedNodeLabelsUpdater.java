@@ -43,13 +43,16 @@ import org.junit.Test;
 
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Maps;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 
 public class TestRMDelegatedNodeLabelsUpdater extends NodeLabelTestBase {
   private YarnConfiguration conf;
   private static Map<NodeId, Set<NodeLabel>> nodeLabelsMap = Maps.newHashMap();
 
   @Before
-  public void setup() {
+  public void setup() throws IOException {
     conf = new YarnConfiguration();
     conf.setBoolean(YarnConfiguration.NODE_LABELS_ENABLED, true);
     conf.set(YarnConfiguration.NODELABEL_CONFIGURATION_TYPE,
@@ -57,6 +60,9 @@ public class TestRMDelegatedNodeLabelsUpdater extends NodeLabelTestBase {
     conf.setClass(YarnConfiguration.RM_NODE_LABELS_PROVIDER_CONFIG,
         DummyRMNodeLabelsMappingProvider.class,
         RMNodeLabelsMappingProvider.class);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
   }
 
   @Test

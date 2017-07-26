@@ -58,6 +58,9 @@ import org.junit.Test;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 
 public class TestRMNodeLabelsManager extends NodeLabelTestBase {
   private final Resource EMPTY_RESOURCE = Resource.newInstance(0, 0);
@@ -68,10 +71,13 @@ public class TestRMNodeLabelsManager extends NodeLabelTestBase {
   RMNodeLabelsManager lmgr = null;
   boolean checkQueueCall = false;
   @Before
-  public void before() {
+  public void before() throws IOException {
     mgr = new NullRMNodeLabelsManager();
     Configuration conf = new Configuration();
     conf.setBoolean(YarnConfiguration.NODE_LABELS_ENABLED, true);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     mgr.init(conf);
     mgr.start();
   }

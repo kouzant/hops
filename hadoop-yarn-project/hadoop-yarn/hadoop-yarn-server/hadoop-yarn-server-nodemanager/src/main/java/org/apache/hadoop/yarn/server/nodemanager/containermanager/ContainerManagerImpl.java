@@ -775,7 +775,7 @@ public class ContainerManagerImpl extends CompositeService implements
     NMTokenIdentifier nmTokenIdentifier = selectNMTokenIdentifier(remoteUgi);
     authorizeUser(remoteUgi, nmTokenIdentifier);
     
-    if (getConfig().getBoolean(CommonConfigurationKeysPublic
+    if (getConfig()!=null && getConfig().getBoolean(CommonConfigurationKeysPublic
         .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
         .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       ApplicationId appId = nmTokenIdentifier.getApplicationAttemptId()
