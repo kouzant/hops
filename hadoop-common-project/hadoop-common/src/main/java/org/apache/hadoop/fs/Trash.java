@@ -54,7 +54,7 @@ public class Trash extends Configured {
    */
   public Trash(FileSystem fs, Configuration conf) throws IOException {
     super(conf);
-    trashPolicy = TrashPolicy.getInstance(conf, fs);
+    trashPolicy = TrashPolicy.getInstance(conf, fs, fs.getHomeDirectory());
   }
 
   /**

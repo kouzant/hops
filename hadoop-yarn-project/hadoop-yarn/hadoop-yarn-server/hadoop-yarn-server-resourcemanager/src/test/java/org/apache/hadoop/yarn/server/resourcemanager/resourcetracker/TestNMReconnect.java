@@ -236,7 +236,7 @@ public class TestNMReconnect {
     MockRM rm = new MockRM(){
       @Override
       protected Dispatcher createDispatcher() {
-        return dispatcher;
+        return new DrainDispatcher();
       }
     };
     rm.start();

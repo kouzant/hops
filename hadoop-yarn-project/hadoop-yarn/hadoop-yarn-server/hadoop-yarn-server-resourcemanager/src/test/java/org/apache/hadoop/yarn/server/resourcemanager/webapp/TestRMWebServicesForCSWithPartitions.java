@@ -60,6 +60,12 @@ import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import com.sun.jersey.test.framework.WebAppDescriptor;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class TestRMWebServicesForCSWithPartitions extends JerseyTestBase {
   private static final String DEFAULT_PARTITION = "";
@@ -84,27 +90,34 @@ public class TestRMWebServicesForCSWithPartitions extends JerseyTestBase {
   private Injector injector = Guice.createInjector(new ServletModule() {
     @Override
     protected void configureServlets() {
-      bind(JAXBContextResolver.class);
-      bind(RMWebServices.class);
-      bind(GenericExceptionHandler.class);
-      csConf = new CapacitySchedulerConfiguration();
-      setupQueueConfiguration(csConf, rm);
-      conf = new YarnConfiguration(csConf);
-      conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
-          ResourceScheduler.class);
-      rm = new MockRM(conf);
-      Set<NodeLabel> labels = new HashSet<NodeLabel>();
-      labels.add(NodeLabel.newInstance(LABEL_LX));
-      labels.add(NodeLabel.newInstance(LABEL_LY));
       try {
-        RMNodeLabelsManager nodeLabelManager =
-            rm.getRMContext().getNodeLabelManager();
-        nodeLabelManager.addToCluserNodeLabels(labels);
-      } catch (Exception e) {
-        Assert.fail();
+        bind(JAXBContextResolver.class);
+        bind(RMWebServices.class);
+        bind(GenericExceptionHandler.class);
+        csConf = new CapacitySchedulerConfiguration();
+        setupQueueConfiguration(csConf, rm);
+        conf = new YarnConfiguration(csConf);
+        conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
+            ResourceScheduler.class);
+        RMStorageFactory.setConfiguration(conf);
+        YarnAPIStorageFactory.setConfiguration(conf);
+        DBUtility.InitializeDB();
+        rm = new MockRM(conf);
+        Set<NodeLabel> labels = new HashSet<NodeLabel>();
+        labels.add(NodeLabel.newInstance(LABEL_LX));
+        labels.add(NodeLabel.newInstance(LABEL_LY));
+        try {
+          RMNodeLabelsManager nodeLabelManager =
+              rm.getRMContext().getNodeLabelManager();
+          nodeLabelManager.addToCluserNodeLabels(labels);
+        } catch (Exception e) {
+          Assert.fail();
+        }
+        bind(ResourceManager.class).toInstance(rm);
+        serve("/*").with(GuiceContainer.class);
+      } catch (IOException ex) {
+        Logger.getLogger(TestRMWebServicesForCSWithPartitions.class.getName()).log(Level.SEVERE, null, ex);
       }
-      bind(ResourceManager.class).toInstance(rm);
-      serve("/*").with(GuiceContainer.class);
     }
   });
 

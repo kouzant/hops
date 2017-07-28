@@ -53,6 +53,9 @@ import org.junit.runners.Parameterized;
 import org.junit.runners.Parameterized.Parameters;
 
 import com.sun.jersey.api.client.ClientResponse.Status;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 
 /* Just a simple test class to ensure that the RM handles the static web user
  * correctly for secure and un-secure modes
@@ -99,7 +102,7 @@ public class TestRMWebappAuthentication {
         { 2, kerberosConf } });
   }
 
-  public TestRMWebappAuthentication(int run, Configuration conf) {
+  public TestRMWebappAuthentication(int run, Configuration conf) throws IOException {
     super();
     setupAndStartRM(conf);
   }
@@ -134,7 +137,10 @@ public class TestRMWebappAuthentication {
     return testMiniKDC;
   }
 
-  private static void setupAndStartRM(Configuration conf) {
+  private static void setupAndStartRM(Configuration conf) throws IOException {
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     UserGroupInformation.setConfiguration(conf);
     rm = new MockRM(conf);
   }

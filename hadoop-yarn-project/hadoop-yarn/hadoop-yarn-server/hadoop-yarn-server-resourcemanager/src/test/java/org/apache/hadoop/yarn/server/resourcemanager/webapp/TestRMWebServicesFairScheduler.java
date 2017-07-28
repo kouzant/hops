@@ -44,6 +44,12 @@ import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import com.sun.jersey.test.framework.WebAppDescriptor;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class TestRMWebServicesFairScheduler extends JerseyTestBase {
   private static MockRM rm;
@@ -52,15 +58,22 @@ public class TestRMWebServicesFairScheduler extends JerseyTestBase {
   private Injector injector = Guice.createInjector(new ServletModule() {
     @Override
     protected void configureServlets() {
-      bind(JAXBContextResolver.class);
-      bind(RMWebServices.class);
-      bind(GenericExceptionHandler.class);
-      conf = new YarnConfiguration();
-      conf.setClass(YarnConfiguration.RM_SCHEDULER, FairScheduler.class,
-        ResourceScheduler.class);
-      rm = new MockRM(conf);
-      bind(ResourceManager.class).toInstance(rm);
-      serve("/*").with(GuiceContainer.class);
+      try {
+        bind(JAXBContextResolver.class);
+        bind(RMWebServices.class);
+        bind(GenericExceptionHandler.class);
+        conf = new YarnConfiguration();
+        conf.setClass(YarnConfiguration.RM_SCHEDULER, FairScheduler.class,
+            ResourceScheduler.class);
+        RMStorageFactory.setConfiguration(conf);
+        YarnAPIStorageFactory.setConfiguration(conf);
+        DBUtility.InitializeDB();
+        rm = new MockRM(conf);
+        bind(ResourceManager.class).toInstance(rm);
+        serve("/*").with(GuiceContainer.class);
+      } catch (IOException ex) {
+        Logger.getLogger(TestRMWebServicesFairScheduler.class.getName()).log(Level.SEVERE, null, ex);
+      }
     }
   });
   

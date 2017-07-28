@@ -431,11 +431,10 @@ public class TestApplicationCleanup {
     memStore.init(conf);
 
     // start RM
-    final DrainDispatcher dispatcher = new DrainDispatcher();
-    MockRM rm1 = new MockRM(conf, memStore) {
+    MockRM rm1 = new MockRM(conf) {
       @Override
       protected Dispatcher createDispatcher() {
-        return dispatcher;
+        return new DrainDispatcher();
       }
     };
     rm1.start();
@@ -450,11 +449,10 @@ public class TestApplicationCleanup {
     rm1.waitForState(app0.getApplicationId(), RMAppState.RUNNING);
 
     // start new RM
-    final DrainDispatcher dispatcher2 = new DrainDispatcher();
-    MockRM rm2 = new MockRM(conf, memStore) {
+    MockRM rm2 = new MockRM(conf) {
       @Override
       protected Dispatcher createDispatcher() {
-        return dispatcher2;
+        return new DrainDispatcher();
       }
     };
     rm2.start();
@@ -468,7 +466,7 @@ public class TestApplicationCleanup {
     NodeHeartbeatResponse response = nm1.nodeHeartbeat(am0
         .getApplicationAttemptId(), 2, ContainerState.RUNNING);
 
-    waitForContainerCleanup(dispatcher2, nm1, response);
+    waitForContainerCleanup(((DrainDispatcher) rm2.getRmDispatcher()), nm1, response);
 
     rm1.stop();
     rm2.stop();

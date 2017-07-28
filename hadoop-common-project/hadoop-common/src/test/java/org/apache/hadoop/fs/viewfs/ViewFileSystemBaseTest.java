@@ -865,44 +865,4 @@ abstract public class ViewFileSystemBaseTest {
     fsView.removeXAttr(new Path("/internalDir"), "xattrName");
   }
 
-  @Test(expected = AccessControlException.class)
-  public void testInternalCreateSnapshot1() throws IOException {
-    fsView.createSnapshot(new Path("/internalDir"));
-  }
-
-  @Test(expected = AccessControlException.class)
-  public void testInternalCreateSnapshot2() throws IOException {
-    fsView.createSnapshot(new Path("/internalDir"), "snap1");
-  }
-
-  @Test(expected = AccessControlException.class)
-  public void testInternalRenameSnapshot() throws IOException {
-    fsView.renameSnapshot(new Path("/internalDir"), "snapOldName",
-        "snapNewName");
-  }
-
-  @Test(expected = AccessControlException.class)
-  public void testInternalDeleteSnapshot() throws IOException {
-    fsView.deleteSnapshot(new Path("/internalDir"), "snap1");
-  }
-
-  @Test
-  public void testCheckOwnerWithFileStatus()
-      throws IOException, InterruptedException {
-    final UserGroupInformation userUgi = UserGroupInformation
-        .createUserForTesting("user@HADOOP.COM", new String[]{"hadoop"});
-    userUgi.doAs(new PrivilegedExceptionAction<Object>() {
-      @Override
-      public Object run() throws IOException {
-        UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
-        String doAsUserName = ugi.getUserName();
-        assertEquals(doAsUserName, "user@HADOOP.COM");
-        FileSystem vfs = FileSystem.get(FsConstants.VIEWFS_URI, conf);
-        FileStatus stat = vfs.getFileStatus(new Path("/internalDir"));
-        assertEquals(userUgi.getShortUserName(), stat.getOwner());
-        return null;
-      }
-    });
-  }
-
 }

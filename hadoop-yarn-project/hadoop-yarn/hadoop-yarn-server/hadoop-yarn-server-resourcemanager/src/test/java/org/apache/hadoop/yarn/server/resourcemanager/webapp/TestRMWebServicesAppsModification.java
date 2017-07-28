@@ -114,6 +114,11 @@ import com.sun.jersey.api.json.JSONJAXBContext;
 import com.sun.jersey.api.json.JSONMarshaller;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import com.sun.jersey.test.framework.WebAppDescriptor;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @RunWith(Parameterized.class)
 public class TestRMWebServicesAppsModification extends JerseyTestBase {
@@ -174,18 +179,25 @@ public class TestRMWebServicesAppsModification extends JerseyTestBase {
 
     @Override
     protected void configureServlets() {
-      configureScheduler();
-      bind(JAXBContextResolver.class);
-      bind(RMWebServices.class);
-      bind(GenericExceptionHandler.class);
-      conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
-        YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
-      rm = new MockRM(conf);
-      bind(ResourceManager.class).toInstance(rm);
-      if (setAuthFilter) {
-        filter("/*").through(TestRMCustomAuthFilter.class);
+      try {
+        configureScheduler();
+        bind(JAXBContextResolver.class);
+        bind(RMWebServices.class);
+        bind(GenericExceptionHandler.class);
+        conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+            YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
+        RMStorageFactory.setConfiguration(conf);
+        YarnAPIStorageFactory.setConfiguration(conf);
+        DBUtility.InitializeDB();
+        rm = new MockRM(conf);
+        bind(ResourceManager.class).toInstance(rm);
+        if (setAuthFilter) {
+          filter("/*").through(TestRMCustomAuthFilter.class);
+        }
+        serve("/*").with(GuiceContainer.class);
+      } catch (IOException ex) {
+        Logger.getLogger(TestRMWebServicesAppsModification.class.getName()).log(Level.SEVERE, null, ex);
       }
-      serve("/*").with(GuiceContainer.class);
     }
   }
 

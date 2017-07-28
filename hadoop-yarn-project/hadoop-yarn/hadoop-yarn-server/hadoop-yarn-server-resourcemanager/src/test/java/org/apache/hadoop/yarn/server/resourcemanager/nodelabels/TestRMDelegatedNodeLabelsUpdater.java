@@ -86,10 +86,19 @@ public class TestRMDelegatedNodeLabelsUpdater extends NodeLabelTestBase {
         1000);
     MockRM rm = new MockRM(conf);
     rm.init(conf);
-    rm.getRMContext().getRMDelegatedNodeLabelsUpdater().nodeLabelsUpdateInterval
-        = 3 * 1000;
+    
     rm.start();
 
+    while(!rm.getRMContext().isLeader()){
+      Thread.sleep(500);
+    }
+    rm.getRMContext().getRMDelegatedNodeLabelsUpdater().serviceStop();
+    rm.getRMContext().setRMDelegatedNodeLabelsUpdater(new RMDelegatedNodeLabelsUpdater(rm.getRMContext()));
+    rm.getRMContext().getRMDelegatedNodeLabelsUpdater().nodeLabelsUpdateInterval
+        = 3 * 1000;
+    rm.getRMContext().getRMDelegatedNodeLabelsUpdater().serviceInit(conf);
+    rm.getRMContext().getRMDelegatedNodeLabelsUpdater().serviceStart();
+    
     RMNodeLabelsManager mgr = rm.getRMContext().getNodeLabelManager();
     mgr.addToCluserNodeLabelsWithDefaultExclusivity(ImmutableSet.of("x", "y"));
 
@@ -115,10 +124,18 @@ public class TestRMDelegatedNodeLabelsUpdater extends NodeLabelTestBase {
         RMDelegatedNodeLabelsUpdater.DISABLE_DELEGATED_NODE_LABELS_UPDATE);
     MockRM rm = new MockRM(conf);
     rm.init(conf);
+    rm.start();
+    
+    while(!rm.getRMContext().isLeader()){
+      Thread.sleep(500);
+    }
+    rm.getRMContext().getRMDelegatedNodeLabelsUpdater().serviceStop();
+    rm.getRMContext().setRMDelegatedNodeLabelsUpdater(new RMDelegatedNodeLabelsUpdater(rm.getRMContext()));
     rm.getRMContext().getRMDelegatedNodeLabelsUpdater().nodeLabelsUpdateInterval
         = 3 * 1000;
-    rm.start();
-
+    rm.getRMContext().getRMDelegatedNodeLabelsUpdater().serviceInit(conf);
+    rm.getRMContext().getRMDelegatedNodeLabelsUpdater().serviceStart();
+    
     RMNodeLabelsManager mgr = rm.getRMContext().getNodeLabelManager();
     mgr.addToCluserNodeLabelsWithDefaultExclusivity(ImmutableSet.of("x"));
 

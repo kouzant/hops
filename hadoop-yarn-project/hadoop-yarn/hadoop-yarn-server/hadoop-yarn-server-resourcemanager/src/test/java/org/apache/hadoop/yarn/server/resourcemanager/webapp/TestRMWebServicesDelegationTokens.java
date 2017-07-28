@@ -86,6 +86,11 @@ import com.sun.jersey.api.client.ClientResponse.Status;
 import com.sun.jersey.api.client.filter.LoggingFilter;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import com.sun.jersey.test.framework.WebAppDescriptor;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @RunWith(Parameterized.class)
 public class TestRMWebServicesDelegationTokens extends JerseyTestBase {
@@ -145,23 +150,30 @@ public class TestRMWebServicesDelegationTokens extends JerseyTestBase {
 
     @Override
     protected void configureServlets() {
-      bind(JAXBContextResolver.class);
-      bind(RMWebServices.class);
-      bind(GenericExceptionHandler.class);
-      Configuration rmconf = new Configuration();
-      rmconf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
-        YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
-      rmconf.setClass(YarnConfiguration.RM_SCHEDULER, FifoScheduler.class,
-        ResourceScheduler.class);
-      rmconf.setBoolean(YarnConfiguration.YARN_ACL_ENABLE, true);
-      rm = new MockRM(rmconf);
-      bind(ResourceManager.class).toInstance(rm);
-      if (isKerberosAuth == true) {
-        filter("/*").through(TestKerberosAuthFilter.class);
-      } else {
-        filter("/*").through(TestSimpleAuthFilter.class);
+      try {
+        bind(JAXBContextResolver.class);
+        bind(RMWebServices.class);
+        bind(GenericExceptionHandler.class);
+        Configuration rmconf = new Configuration();
+        rmconf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+            YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
+        rmconf.setClass(YarnConfiguration.RM_SCHEDULER, FifoScheduler.class,
+            ResourceScheduler.class);
+        rmconf.setBoolean(YarnConfiguration.YARN_ACL_ENABLE, true);
+        RMStorageFactory.setConfiguration(rmconf);
+        YarnAPIStorageFactory.setConfiguration(rmconf);
+        DBUtility.InitializeDB();
+        rm = new MockRM(rmconf);
+        bind(ResourceManager.class).toInstance(rm);
+        if (isKerberosAuth == true) {
+          filter("/*").through(TestKerberosAuthFilter.class);
+        } else {
+          filter("/*").through(TestSimpleAuthFilter.class);
+        }
+        serve("/*").with(GuiceContainer.class);
+      } catch (IOException ex) {
+        Logger.getLogger(TestRMWebServicesDelegationTokens.class.getName()).log(Level.SEVERE, null, ex);
       }
-      serve("/*").with(GuiceContainer.class);
     }
   }
 

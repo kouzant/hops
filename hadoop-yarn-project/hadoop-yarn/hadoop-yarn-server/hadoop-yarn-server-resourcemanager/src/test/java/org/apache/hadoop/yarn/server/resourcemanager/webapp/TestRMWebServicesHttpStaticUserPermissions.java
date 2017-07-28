@@ -46,6 +46,9 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import com.sun.jersey.api.client.ClientResponse.Status;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 
 public class TestRMWebServicesHttpStaticUserPermissions {
 
@@ -108,6 +111,9 @@ public class TestRMWebServicesHttpStaticUserPermissions {
     rmconf.set("yarn.resourcemanager.keytab",
         spnegoKeytabFile.getAbsolutePath());
     rmconf.setBoolean("mockrm.webapp.enabled", true);
+    RMStorageFactory.setConfiguration(rmconf);
+    YarnAPIStorageFactory.setConfiguration(rmconf);
+    DBUtility.InitializeDB();
     UserGroupInformation.setConfiguration(rmconf);
     rm = new MockRM(rmconf);
     rm.start();

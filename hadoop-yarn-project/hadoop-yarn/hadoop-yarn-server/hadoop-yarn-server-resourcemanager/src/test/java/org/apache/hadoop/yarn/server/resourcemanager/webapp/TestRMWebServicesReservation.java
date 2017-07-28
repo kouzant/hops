@@ -81,6 +81,11 @@ import com.sun.jersey.api.json.JSONJAXBContext;
 import com.sun.jersey.api.json.JSONUnmarshaller;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import com.sun.jersey.test.framework.WebAppDescriptor;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 @RunWith(Parameterized.class)
 public class TestRMWebServicesReservation extends JerseyTestBase {
@@ -146,32 +151,38 @@ public class TestRMWebServicesReservation extends JerseyTestBase {
 
     @Override
     protected void configureServlets() {
-      configureScheduler();
-      bind(JAXBContextResolver.class);
-      bind(RMWebServices.class);
-      bind(GenericExceptionHandler.class);
-      conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
-          YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
-      Configuration conf = new Configuration();
-      conf.setBoolean(YarnConfiguration.RM_RESERVATION_SYSTEM_ENABLE, true);
-      conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
-          YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
-      conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
-          ResourceScheduler.class);
-      CapacitySchedulerConfiguration csconf =
-          new CapacitySchedulerConfiguration(conf);
-      String[] queues = { "default", "dedicated" };
-      csconf.setQueues("root", queues);
-      csconf.setCapacity("root.default", 50.0f);
-      csconf.setCapacity("root.dedicated", 50.0f);
-      csconf.setReservable("root.dedicated", true);
-
-      rm = new MockRM(csconf);
-      bind(ResourceManager.class).toInstance(rm);
-      if (setAuthFilter) {
-        filter("/*").through(TestRMCustomAuthFilter.class);
+      try {
+        configureScheduler();
+        bind(JAXBContextResolver.class);
+        bind(RMWebServices.class);
+        bind(GenericExceptionHandler.class);
+        conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+            YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
+        Configuration conf = new Configuration();
+        conf.setBoolean(YarnConfiguration.RM_RESERVATION_SYSTEM_ENABLE, true);
+        conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
+            YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
+        conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
+            ResourceScheduler.class);
+        CapacitySchedulerConfiguration csconf =
+            new CapacitySchedulerConfiguration(conf);
+        String[] queues = { "default", "dedicated" };
+        csconf.setQueues("root", queues);
+        csconf.setCapacity("root.default", 50.0f);
+        csconf.setCapacity("root.dedicated", 50.0f);
+        csconf.setReservable("root.dedicated", true);
+        RMStorageFactory.setConfiguration(csconf);
+        YarnAPIStorageFactory.setConfiguration(csconf);
+        DBUtility.InitializeDB();
+        rm = new MockRM(csconf);
+        bind(ResourceManager.class).toInstance(rm);
+        if (setAuthFilter) {
+          filter("/*").through(TestRMCustomAuthFilter.class);
+        }
+        serve("/*").with(GuiceContainer.class);
+      } catch (IOException ex) {
+        Logger.getLogger(TestRMWebServicesReservation.class.getName()).log(Level.SEVERE, null, ex);
       }
-      serve("/*").with(GuiceContainer.class);
     }
   }
 

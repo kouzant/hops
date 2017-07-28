@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.monitor.capacity;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -135,7 +138,7 @@ public class TestProportionalCapacityPreemptionPolicy {
 
   @Before
   @SuppressWarnings("unchecked")
-  public void setup() {
+  public void setup() throws IOException {
     conf = new CapacitySchedulerConfiguration(new Configuration(false));
     conf.setLong(
         CapacitySchedulerConfiguration.PREEMPTION_WAIT_TIME_BEFORE_KILL, 10000);
@@ -155,6 +158,10 @@ public class TestProportionalCapacityPreemptionPolicy {
     conf.set("yarn.resourcemanager.scheduler.class",
         CapacityScheduler.class.getName());
 
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+    
     mClock = mock(Clock.class);
     mCS = mock(CapacityScheduler.class);
     when(mCS.getResourceCalculator()).thenReturn(rc);
@@ -319,7 +326,7 @@ public class TestProportionalCapacityPreemptionPolicy {
   }
 
   @Test
-  public void testPerQueueDisablePreemption() {
+  public void testPerQueueDisablePreemption() throws IOException {
     int[][] qData = new int[][]{
         //  /    A    B    C
         { 100,  55,  25,  20 },  // abs
@@ -356,7 +363,7 @@ public class TestProportionalCapacityPreemptionPolicy {
   }
 
   @Test
-  public void testPerQueueDisablePreemptionHierarchical() {
+  public void testPerQueueDisablePreemptionHierarchical() throws IOException {
     int[][] qData = new int[][] {
       //  /    A              D
       //            B    C         E    F
@@ -407,7 +414,7 @@ public class TestProportionalCapacityPreemptionPolicy {
   }
 
   @Test
-  public void testPerQueueDisablePreemptionBroadHierarchical() {
+  public void testPerQueueDisablePreemptionBroadHierarchical() throws IOException {
     int[][] qData = new int[][] {
         //  /    A              D              G    
         //            B    C         E    F         H    I
@@ -458,7 +465,7 @@ public class TestProportionalCapacityPreemptionPolicy {
   }
 
   @Test
-  public void testPerQueueDisablePreemptionInheritParent() {
+  public void testPerQueueDisablePreemptionInheritParent() throws IOException {
     int[][] qData = new int[][] {
         //  /    A                   E          
         //            B    C    D         F    G    H

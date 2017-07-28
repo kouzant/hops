@@ -60,6 +60,12 @@ import com.sun.jersey.api.client.ClientResponse;
 import com.sun.jersey.api.client.WebResource;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import com.sun.jersey.test.framework.WebAppDescriptor;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * Tests partition resource usage per application.
@@ -80,25 +86,32 @@ public class TestRMWebServiceAppsNodelabel extends JerseyTestBase {
 
     @Override
     protected void configureServlets() {
-      bind(JAXBContextResolver.class);
-      bind(RMWebServices.class);
-      bind(GenericExceptionHandler.class);
-      csConf = new CapacitySchedulerConfiguration();
-      setupQueueConfiguration(csConf);
-      conf = new YarnConfiguration(csConf);
-      conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
-          ResourceScheduler.class);
-      rm = new MockRM(conf);
-      Set<NodeLabel> labels = new HashSet<NodeLabel>();
-      labels.add(NodeLabel.newInstance(LABEL_X));
       try {
-        nodeLabelManager = rm.getRMContext().getNodeLabelManager();
-        nodeLabelManager.addToCluserNodeLabels(labels);
-      } catch (Exception e) {
-        Assert.fail();
+        bind(JAXBContextResolver.class);
+        bind(RMWebServices.class);
+        bind(GenericExceptionHandler.class);
+        csConf = new CapacitySchedulerConfiguration();
+        setupQueueConfiguration(csConf);
+        conf = new YarnConfiguration(csConf);
+        conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
+            ResourceScheduler.class);
+        RMStorageFactory.setConfiguration(conf);
+        YarnAPIStorageFactory.setConfiguration(conf);
+        DBUtility.InitializeDB();
+        rm = new MockRM(conf);
+        Set<NodeLabel> labels = new HashSet<NodeLabel>();
+        labels.add(NodeLabel.newInstance(LABEL_X));
+        try {
+          nodeLabelManager = rm.getRMContext().getNodeLabelManager();
+          nodeLabelManager.addToCluserNodeLabels(labels);
+        } catch (Exception e) {
+          Assert.fail();
+        }
+        bind(ResourceManager.class).toInstance(rm);
+        serve("/*").with(GuiceContainer.class);
+      } catch (IOException ex) {
+        Logger.getLogger(TestRMWebServiceAppsNodelabel.class.getName()).log(Level.SEVERE, null, ex);
       }
-      bind(ResourceManager.class).toInstance(rm);
-      serve("/*").with(GuiceContainer.class);
     }
   });
 

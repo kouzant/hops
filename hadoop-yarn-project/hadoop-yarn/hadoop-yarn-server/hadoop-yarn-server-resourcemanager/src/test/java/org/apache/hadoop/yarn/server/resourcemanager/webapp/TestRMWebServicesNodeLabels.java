@@ -60,6 +60,11 @@ import com.sun.jersey.api.json.JSONMarshaller;
 import com.sun.jersey.core.util.MultivaluedMapImpl;
 import com.sun.jersey.guice.spi.container.servlet.GuiceContainer;
 import com.sun.jersey.test.framework.WebAppDescriptor;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 public class TestRMWebServicesNodeLabels extends JerseyTestBase {
 
@@ -79,24 +84,31 @@ public class TestRMWebServicesNodeLabels extends JerseyTestBase {
 
     @Override
     protected void configureServlets() {
-      bind(JAXBContextResolver.class);
       try {
-        userName = UserGroupInformation.getCurrentUser().getShortUserName();
-      } catch (IOException ioe) {
-        throw new RuntimeException("Unable to get current user name "
-            + ioe.getMessage(), ioe);
+        bind(JAXBContextResolver.class);
+        try {
+          userName = UserGroupInformation.getCurrentUser().getShortUserName();
+        } catch (IOException ioe) {
+          throw new RuntimeException("Unable to get current user name "
+              + ioe.getMessage(), ioe);
+        }
+        notUserName = userName + "abc123";
+        conf = new YarnConfiguration();
+        conf.set(YarnConfiguration.YARN_ADMIN_ACL, userName);
+        RMStorageFactory.setConfiguration(conf);
+        YarnAPIStorageFactory.setConfiguration(conf);
+        DBUtility.InitializeDB();
+        rm = new MockRM(conf);
+        rmWebService = new RMWebServices(rm,conf);
+        bind(RMWebServices.class).toInstance(rmWebService);
+        bind(GenericExceptionHandler.class);
+        bind(ResourceManager.class).toInstance(rm);
+        filter("/*").through(
+            TestRMWebServicesAppsModification.TestRMCustomAuthFilter.class);
+        serve("/*").with(GuiceContainer.class);
+      } catch (IOException ex) {
+        Logger.getLogger(TestRMWebServicesNodeLabels.class.getName()).log(Level.SEVERE, null, ex);
       }
-      notUserName = userName + "abc123";
-      conf = new YarnConfiguration();
-      conf.set(YarnConfiguration.YARN_ADMIN_ACL, userName);
-      rm = new MockRM(conf);
-      rmWebService = new RMWebServices(rm,conf);
-      bind(RMWebServices.class).toInstance(rmWebService);
-      bind(GenericExceptionHandler.class);
-      bind(ResourceManager.class).toInstance(rm);
-      filter("/*").through(
-          TestRMWebServicesAppsModification.TestRMCustomAuthFilter.class);
-      serve("/*").with(GuiceContainer.class);
     }
   });
 
