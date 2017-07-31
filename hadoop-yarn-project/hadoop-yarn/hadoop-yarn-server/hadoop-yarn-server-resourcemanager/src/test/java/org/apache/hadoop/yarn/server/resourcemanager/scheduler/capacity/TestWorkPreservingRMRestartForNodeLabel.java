@@ -51,6 +51,9 @@ import org.junit.Test;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 
 public class TestWorkPreservingRMRestartForNodeLabel {
   private Configuration conf;
@@ -66,6 +69,9 @@ public class TestWorkPreservingRMRestartForNodeLabel {
     conf.setBoolean(YarnConfiguration.RECOVERY_ENABLED, true);
     conf.setBoolean(YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_ENABLED, true);
     conf.set(YarnConfiguration.RM_STORE, MemoryRMStateStore.class.getName());
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     mgr = new NullRMNodeLabelsManager();
     mgr.init(conf);
   }

@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 
@@ -52,6 +55,9 @@ public class TestMoveApplication {
         FifoSchedulerWithMove.class);
     conf.set(YarnConfiguration.YARN_ADMIN_ACL, " ");
     conf.setBoolean(YarnConfiguration.YARN_ACL_ENABLE, true);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     resourceManager = new MockRM(conf);
     resourceManager.getRMContext().getContainerTokenSecretManager().rollMasterKey();
     resourceManager.getRMContext().getNMTokenSecretManager().rollMasterKey();

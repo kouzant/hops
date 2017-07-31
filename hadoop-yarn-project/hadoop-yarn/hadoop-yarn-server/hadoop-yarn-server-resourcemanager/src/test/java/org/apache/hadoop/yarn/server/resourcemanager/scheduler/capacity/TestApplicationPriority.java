@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -74,6 +77,9 @@ public class TestApplicationPriority {
     conf = new YarnConfiguration();
     conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
         ResourceScheduler.class);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
   }
 
   @Test

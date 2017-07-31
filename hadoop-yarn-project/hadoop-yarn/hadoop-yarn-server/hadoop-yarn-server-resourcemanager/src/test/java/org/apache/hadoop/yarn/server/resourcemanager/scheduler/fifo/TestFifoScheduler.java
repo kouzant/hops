@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fifo;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -127,6 +130,9 @@ public class TestFifoScheduler {
     conf = new Configuration();
     conf.setClass(YarnConfiguration.RM_SCHEDULER,
         FifoScheduler.class, ResourceScheduler.class);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     resourceManager = new MockRM(conf);
   }
 

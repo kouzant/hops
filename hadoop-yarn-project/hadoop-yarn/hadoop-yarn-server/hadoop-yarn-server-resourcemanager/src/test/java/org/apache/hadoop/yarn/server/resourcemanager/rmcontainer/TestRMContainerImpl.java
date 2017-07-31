@@ -18,6 +18,10 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.rmcontainer;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
@@ -64,6 +68,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.ResourceScheduler
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerUtils;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Matchers;
@@ -72,6 +77,14 @@ import org.mockito.Mockito;
 @SuppressWarnings({ "unchecked", "rawtypes" })
 public class TestRMContainerImpl {
 
+  @Before
+  public void setup() throws IOException {
+    YarnConfiguration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  }
+  
   @Test
   public void testReleaseWhileRunning() {
 

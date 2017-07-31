@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.hadoop.net.NetworkTopology;
 import org.apache.hadoop.util.Time;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -44,11 +47,20 @@ import org.junit.Test;
 import java.io.IOException;
 
 import static org.junit.Assume.assumeTrue;
+import org.junit.Before;
 
 public class TestSchedulerHealth {
 
   private ResourceManager resourceManager;
 
+  @Before
+  public void before() throws IOException {
+    YarnConfiguration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  }
+  
   public void setup() {
     resourceManager = new ResourceManager() {
       @Override

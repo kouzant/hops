@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import static org.junit.Assert.assertEquals;
 
 import java.io.File;
@@ -46,6 +49,9 @@ public class TestFairSchedulerFairShare extends FairSchedulerTestBase {
   public void setup() throws IOException {
     conf = createConfiguration();
     conf.set(FairSchedulerConfiguration.ALLOCATION_FILE, ALLOC_FILE);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
   }
 
   @After

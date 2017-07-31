@@ -68,7 +68,6 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.ReplaceLabelsOnNodeRequ
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.resource.DynamicResourceConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
-import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacityScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 import org.junit.After;
@@ -230,7 +229,7 @@ public class TestRMAdminService {
     NodeId nid = NodeId.fromString("h1:1234");
     RMNode ni = rm.getRMContext().getRMNodes().get(nid);
     Resource resource = ni.getTotalCapability();
-    Assert.assertEquals("<memory:5120, vCores:5>", resource.toString());
+    Assert.assertEquals("<memory:5120, vCores:5, gpus:0>", resource.toString());
 
     DynamicResourceConfiguration drConf =
         new DynamicResourceConfiguration();
@@ -245,7 +244,7 @@ public class TestRMAdminService {
 
     RMNode niAfter = rm.getRMContext().getRMNodes().get(nid);
     Resource resourceAfter = niAfter.getTotalCapability();
-    Assert.assertEquals("<memory:4096, vCores:4>", resourceAfter.toString());
+    Assert.assertEquals("<memory:4096, vCores:4, gpus:0>", resourceAfter.toString());
   }
 
   @Test
@@ -270,7 +269,7 @@ public class TestRMAdminService {
     NodeId nid = NodeId.fromString("h1:1234");
     RMNode ni = rm.getRMContext().getRMNodes().get(nid);
     Resource resource = ni.getTotalCapability();
-    Assert.assertEquals("<memory:2048, vCores:2>", resource.toString());
+    Assert.assertEquals("<memory:2048, vCores:2, gpus:0>", resource.toString());
 
     DynamicResourceConfiguration drConf =
         new DynamicResourceConfiguration();
@@ -292,7 +291,7 @@ public class TestRMAdminService {
 
     RMNode niAfter = rm.getRMContext().getRMNodes().get(nid);
     Resource resourceAfter = niAfter.getTotalCapability();
-    Assert.assertEquals("<memory:4096, vCores:4>", resourceAfter.toString());
+    Assert.assertEquals("<memory:4096, vCores:4, gpus:0>", resourceAfter.toString());
 
     Assert.assertEquals(4096, nm.getMemory());
     Assert.assertEquals(4, nm.getvCores());
@@ -320,7 +319,7 @@ public class TestRMAdminService {
     NodeId nid = NodeId.fromString("h1:1234");
     RMNode ni = rm.getRMContext().getRMNodes().get(nid);
     Resource resource = ni.getTotalCapability();
-    Assert.assertEquals("<memory:2048, vCores:2>", resource.toString());
+    Assert.assertEquals("<memory:2048, vCores:2, gpus:0>", resource.toString());
 
     DynamicResourceConfiguration drConf =
         new DynamicResourceConfiguration();
@@ -341,7 +340,7 @@ public class TestRMAdminService {
 
     RMNode niAfter = rm.getRMContext().getRMNodes().get(nid);
     Resource resourceAfter = niAfter.getTotalCapability();
-    Assert.assertEquals("<memory:4096, vCores:4>", resourceAfter.toString());
+    Assert.assertEquals("<memory:4096, vCores:4, gpus:0>", resourceAfter.toString());
 
     Assert.assertEquals(4096, nm.getMemory());
     Assert.assertEquals(4, nm.getvCores());
@@ -368,7 +367,7 @@ public class TestRMAdminService {
     NodeId nid = NodeId.fromString("h1:1234");
     RMNode ni = rm.getRMContext().getRMNodes().get(nid);
     Resource resource = ni.getTotalCapability();
-    Assert.assertEquals("<memory:5120, vCores:5>", resource.toString());
+    Assert.assertEquals("<memory:5120, vCores:5, gpus:0>", resource.toString());
 
     DynamicResourceConfiguration drConf =
         new DynamicResourceConfiguration();
@@ -390,7 +389,7 @@ public class TestRMAdminService {
 
     RMNode niAfter = rm.getRMContext().getRMNodes().get(nid);
     Resource resourceAfter = niAfter.getTotalCapability();
-    Assert.assertEquals("<memory:4096, vCores:4>", resourceAfter.toString());
+    Assert.assertEquals("<memory:4096, vCores:4, gpus:0>", resourceAfter.toString());
 
     // Replace original dr file with an empty dr file, and validate node
     // registration with new resources will take effective now.
@@ -413,7 +412,7 @@ public class TestRMAdminService {
     resourceAfter = niAfter.getTotalCapability();
     // new resource in registration should take effective as we empty
     // dynamic resource file already.
-    Assert.assertEquals("<memory:8192, vCores:8>", resourceAfter.toString());
+    Assert.assertEquals("<memory:8192, vCores:8, gpus:0>", resourceAfter.toString());
   }
 
   @Test

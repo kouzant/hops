@@ -66,6 +66,9 @@ import org.mockito.Mockito;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 
 public class TestApplicationLimitsByPartition {
   final static int GB = 1024;
@@ -82,6 +85,11 @@ public class TestApplicationLimitsByPartition {
     conf = new YarnConfiguration();
     conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
         ResourceScheduler.class);
+   
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  
     mgr = new NullRMNodeLabelsManager();
     mgr.init(conf);
   }

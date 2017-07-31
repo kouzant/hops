@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -54,8 +57,11 @@ import java.io.IOException;
 public class TestFSAppAttempt extends FairSchedulerTestBase {
 
   @Before
-  public void setup() {
+  public void setup() throws IOException {
     Configuration conf = createConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     resourceManager = new MockRM(conf);
     resourceManager.start();
     scheduler = (FairScheduler) resourceManager.getResourceScheduler();

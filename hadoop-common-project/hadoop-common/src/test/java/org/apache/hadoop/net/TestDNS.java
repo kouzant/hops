@@ -51,7 +51,7 @@ public class TestDNS {
   // This is not a legal hostname (starts with a hyphen). It will never
   // be returned on any test machine.
   private static final String DUMMY_HOSTNAME = "-DUMMY_HOSTNAME";
-  private static final String INVALID_DNS_SERVER = "0.0.0.0";
+  private static final String INVALID_DNS_SERVER = "0.0.0.1";
 
   /**
    * Test that asking for the default hostname works

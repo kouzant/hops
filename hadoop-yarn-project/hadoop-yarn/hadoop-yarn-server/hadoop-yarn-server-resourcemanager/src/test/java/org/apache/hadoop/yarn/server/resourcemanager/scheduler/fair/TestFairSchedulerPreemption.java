@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.Resource;
@@ -74,6 +77,9 @@ public class TestFairSchedulerPreemption extends FairSchedulerTestBase {
   public void setup() throws IOException {
     conf = createConfiguration();
     clock = new ControlledClock();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
   }
 
   @After

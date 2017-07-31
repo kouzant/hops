@@ -22,6 +22,10 @@ import java.util.*;
 
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeLabel;
 import org.apache.hadoop.yarn.server.resourcemanager.MockAM;
@@ -37,15 +41,24 @@ import org.junit.Test;
 
 import org.apache.hadoop.yarn.api.records.Priority;
 import org.apache.hadoop.yarn.api.records.Resource;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.CapacitySchedulerConfiguration;
 
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.common.fica.FiCaSchedulerApp;
+import org.junit.Before;
 
 public class TestFairOrderingPolicy {
 
   final static int GB = 1024;
 
+  @Before
+  public void setup() throws IOException{
+    YarnConfiguration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  }
   @Test
   public void testSimpleComparison() {
     FairOrderingPolicy<MockSchedulableEntity> policy =

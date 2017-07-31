@@ -62,6 +62,9 @@ import org.junit.Test;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
 import com.google.common.collect.Sets;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 
 public class TestNodeLabelContainerAllocation {
   private final int GB = 1024;
@@ -75,6 +78,9 @@ public class TestNodeLabelContainerAllocation {
     conf = new YarnConfiguration();
     conf.setClass(YarnConfiguration.RM_SCHEDULER, CapacityScheduler.class,
       ResourceScheduler.class);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     mgr = new NullRMNodeLabelsManager();
     mgr.init(conf);
   }

@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -72,6 +75,9 @@ public class CapacitySchedulerPreemptionTestBase {
         1.0f);
     conf.setLong(CapacitySchedulerConfiguration.PREEMPTION_MONITORING_INTERVAL,
         60000L);
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     mgr = new NullRMNodeLabelsManager();
     mgr.init(this.conf);
     clock = mock(Clock.class);

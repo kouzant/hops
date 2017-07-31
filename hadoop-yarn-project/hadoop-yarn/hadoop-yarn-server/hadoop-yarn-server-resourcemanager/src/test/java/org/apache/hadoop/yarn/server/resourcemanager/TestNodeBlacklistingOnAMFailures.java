@@ -18,6 +18,10 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
 import java.util.List;
 
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
@@ -46,6 +50,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEv
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.resource.Resources;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 
 /**
@@ -53,6 +58,14 @@ import org.junit.Test;
  * an application because of AM failures.
  */
 public class TestNodeBlacklistingOnAMFailures {
+
+  @Before
+  public void setup() throws IOException{
+    YarnConfiguration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  }
 
   @Test(timeout = 100000)
   public void testNodeBlacklistingOnAMFailure() throws Exception {
@@ -63,8 +76,7 @@ public class TestNodeBlacklistingOnAMFailures {
     conf.setBoolean(YarnConfiguration.AM_SCHEDULING_NODE_BLACKLISTING_ENABLED,
         true);
 
-    DrainDispatcher dispatcher = new DrainDispatcher();
-    MockRM rm = startRM(conf, dispatcher);
+    MockRM rm = startRM(conf);
     CapacityScheduler scheduler = (CapacityScheduler) rm.getResourceScheduler();
 
     // Register 5 nodes, so that we can blacklist atleast one if AM container
@@ -120,7 +132,7 @@ public class TestNodeBlacklistingOnAMFailures {
     // Try the current node a few times
     for (int i = 0; i <= 2; i++) {
       currentNode.nodeHeartbeat(true);
-      dispatcher.await();
+      ((DrainDispatcher)rm.getRMContext().getDispatcher()).await();
 
       Assert.assertEquals(
           "AppAttemptState should still be SCHEDULED if currentNode is "
@@ -130,7 +142,7 @@ public class TestNodeBlacklistingOnAMFailures {
 
     // Now try the other node
     otherNode.nodeHeartbeat(true);
-    dispatcher.await();
+    ((DrainDispatcher)rm.getRMContext().getDispatcher()).await();
 
     // Now the AM container should be allocated
     rm.waitForState(attempt.getAppAttemptId(), RMAppAttemptState.ALLOCATED,
@@ -171,8 +183,7 @@ public class TestNodeBlacklistingOnAMFailures {
         1.5f);
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 100);
 
-    DrainDispatcher dispatcher = new DrainDispatcher();
-    MockRM rm = startRM(conf, dispatcher);
+    MockRM rm = startRM(conf);
 
     MockNM node =
         new MockNM("127.0.0.1:1234", 8000, rm.getResourceTrackerService());
@@ -186,7 +197,7 @@ public class TestNodeBlacklistingOnAMFailures {
     // Now the AM container should be allocated
     RMAppAttempt attempt = MockRM.waitForAttemptScheduled(app, rm);
     node.nodeHeartbeat(true);
-    dispatcher.await();
+    ((DrainDispatcher)rm.getRMContext().getDispatcher()).await();
     rm.waitForState(attempt.getAppAttemptId(), RMAppAttemptState.ALLOCATED,
         20000);
     rm.sendAMLaunched(attempt.getAppAttemptId());
@@ -214,7 +225,7 @@ public class TestNodeBlacklistingOnAMFailures {
           .println("New AppAttempt launched " + attempt.getAppAttemptId());
 
       node.nodeHeartbeat(true);
-      dispatcher.await();
+      ((DrainDispatcher)rm.getRMContext().getDispatcher()).await();
 
       rm.waitForState(attempt.getAppAttemptId(), RMAppAttemptState.ALLOCATED,
           20000);
@@ -239,8 +250,7 @@ public class TestNodeBlacklistingOnAMFailures {
     rm.waitForState(amAttemptID.getApplicationId(), RMAppState.ACCEPTED);
   }
 
-  private MockRM startRM(YarnConfiguration conf,
-      final DrainDispatcher dispatcher) {
+  private MockRM startRM(YarnConfiguration conf) {
 
     MemoryRMStateStore memStore = new MemoryRMStateStore();
     memStore.init(conf);
@@ -258,7 +268,7 @@ public class TestNodeBlacklistingOnAMFailures {
 
       @Override
       protected Dispatcher createDispatcher() {
-        return dispatcher;
+        return new DrainDispatcher();
       }
     };
 

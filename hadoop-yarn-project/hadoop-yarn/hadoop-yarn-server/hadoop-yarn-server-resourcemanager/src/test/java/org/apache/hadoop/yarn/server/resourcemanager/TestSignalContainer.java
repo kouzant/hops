@@ -18,6 +18,10 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,6 +35,7 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerState;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.SignalContainerCommand;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
@@ -38,12 +43,21 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptS
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
+import org.junit.Before;
 import org.junit.Test;
 
 public class TestSignalContainer {
 
   private static final Log LOG = LogFactory
     .getLog(TestSignalContainer.class);
+
+  @Before
+  public void setup() throws IOException {
+    YarnConfiguration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  }
 
   @Test
   public void testSignalRequestDeliveryToNM() throws Exception {

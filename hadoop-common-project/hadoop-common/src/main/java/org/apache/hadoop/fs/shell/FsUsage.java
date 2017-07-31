@@ -150,9 +150,9 @@ class FsUsage extends FsCommand {
     protected void processPath(PathData item) throws IOException {
       ContentSummary contentSummary = item.fs.getContentSummary(item.path);
       long length = contentSummary.getLength();
-      if (excludeSnapshots) {
-        length -= contentSummary.getSnapshotLength();
-      }
+//      if (excludeSnapshots) {
+//        length -= contentSummary.getSnapshotLength();
+//      }
       usagesTable.addRow(formatSize(length), item);
     }
   }

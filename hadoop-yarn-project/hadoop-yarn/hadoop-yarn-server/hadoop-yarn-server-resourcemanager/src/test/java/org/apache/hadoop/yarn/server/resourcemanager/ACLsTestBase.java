@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.security.PrivilegedExceptionAction;
@@ -61,6 +64,10 @@ public abstract class ACLsTestBase {
   @Before
   public void setup() throws InterruptedException, IOException {
     conf = createConfiguration();
+        YarnConfiguration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     rpc = YarnRPC.create(conf);
     rmAddress = conf.getSocketAddr(
       YarnConfiguration.RM_ADDRESS, YarnConfiguration.DEFAULT_RM_ADDRESS,

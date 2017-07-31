@@ -125,6 +125,9 @@ import org.mockito.Mockito;
 import org.xml.sax.SAXException;
 
 import com.google.common.collect.Sets;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.junit.Ignore;
 
 @SuppressWarnings("unchecked")
@@ -137,6 +140,9 @@ public class TestFairScheduler extends FairSchedulerTestBase {
   public void setUp() throws IOException {
     scheduler = new FairScheduler();
     conf = createConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     resourceManager = new MockRM(conf);
 
     // TODO: This test should really be using MockRM. For now starting stuff

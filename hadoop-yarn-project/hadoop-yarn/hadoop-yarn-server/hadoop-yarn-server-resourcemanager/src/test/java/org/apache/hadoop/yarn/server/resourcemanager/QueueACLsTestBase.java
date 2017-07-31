@@ -21,9 +21,6 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 import java.util.HashMap;
 import java.util.Map;
 
-import io.hops.util.DBUtility;
-import io.hops.util.RMStorageFactory;
-import io.hops.util.YarnAPIStorageFactory;
 import org.junit.Assert;
 
 import org.apache.hadoop.security.authorize.AccessControlList;
@@ -45,7 +42,7 @@ import org.junit.After;
 import org.junit.Test;
 
 public abstract class QueueACLsTestBase extends ACLsTestBase {
-
+  
   @After
   public void tearDown() {
     if (resourceManager != null) {

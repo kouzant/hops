@@ -29,9 +29,12 @@ import java.util.Map;
 import io.hops.util.DBUtility;
 import io.hops.util.RMStorageFactory;
 import io.hops.util.YarnAPIStorageFactory;
+import java.io.File;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.FileSystem;
+import org.apache.hadoop.fs.Path;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
@@ -50,6 +53,7 @@ import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NMContainerStatus;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.FileSystemRMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.MemoryRMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
@@ -72,6 +76,8 @@ public class TestApplicationCleanup {
     .getLog(TestApplicationCleanup.class);
   
   private YarnConfiguration conf;
+  private FileSystem fs;
+  private Path tmpDir;
   
   @Before
   public void setup() throws UnknownHostException, IOException {
@@ -80,13 +86,24 @@ public class TestApplicationCleanup {
     conf = new YarnConfiguration();
     UserGroupInformation.setConfiguration(conf);
     conf.set(YarnConfiguration.RECOVERY_ENABLED, "true");
-    conf.set(YarnConfiguration.RM_STORE, MemoryRMStateStore.class.getName());
+    conf.set(YarnConfiguration.RM_STORE, FileSystemRMStateStore.class.getName());
+    fs = FileSystem.get(conf);
+    tmpDir = new Path(new File("target", this.getClass().getSimpleName()
+            + "-tmpDir").getAbsolutePath());
+    fs.delete(tmpDir, true);
+    fs.mkdirs(tmpDir);
+    conf.set(YarnConfiguration.FS_RM_STATE_STORE_URI,tmpDir.toString());
 
     RMStorageFactory.setConfiguration(conf);
     YarnAPIStorageFactory.setConfiguration(conf);
     DBUtility.InitializeDB();
 
     Assert.assertTrue(YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS > 1);
+  }
+
+  @After
+  public void tearDown() throws IOException {
+    fs.delete(tmpDir, true);
   }
 
   @SuppressWarnings("resource")
@@ -323,14 +340,12 @@ public class TestApplicationCleanup {
   }
   
   @SuppressWarnings("resource")
-  @Test (timeout = 60000)
+  @Test (timeout = 6000000)
   public void testAppCleanupWhenRMRestartedAfterAppFinished() throws Exception {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
 
     // start RM
-    MockRM rm1 = new MockRM(conf, memStore);
+    MockRM rm1 = new MockRM(conf);
     rm1.init(conf);
     rm1.start();
     MockNM nm1 =
@@ -347,7 +362,7 @@ public class TestApplicationCleanup {
     Configuration conf2 = new YarnConfiguration(conf);
     conf2.set(YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS,
             "localhost:8035");
-    MockRM rm2 = new MockRM(conf2, memStore);
+    MockRM rm2 = new MockRM(conf2);
     rm2.start();
     
     // nm1 register to rm2, and do a heartbeat
@@ -366,11 +381,9 @@ public class TestApplicationCleanup {
   @Test(timeout = 60000)
   public void testAppCleanupWhenRMRestartedBeforeAppFinished() throws Exception {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
 
     // start RM
-    MockRM rm1 = new MockRM(conf, memStore);
+    MockRM rm1 = new MockRM(conf);
     rm1.start();
     MockNM nm1 =
         new MockNM("127.0.0.1:1234", 1024, rm1.getResourceTrackerService());
@@ -396,7 +409,7 @@ public class TestApplicationCleanup {
     }
 
     // start new RM
-    MockRM rm2 = new MockRM(conf, memStore);
+    MockRM rm2 = new MockRM(conf);
     rm2.start();
 
     // nm1/nm2 register to rm2, and do a heartbeat
@@ -427,8 +440,6 @@ public class TestApplicationCleanup {
   public void testContainerCleanupWhenRMRestartedAppNotRegistered() throws
       Exception {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
-    MemoryRMStateStore memStore = new MemoryRMStateStore();
-    memStore.init(conf);
 
     // start RM
     MockRM rm1 = new MockRM(conf) {

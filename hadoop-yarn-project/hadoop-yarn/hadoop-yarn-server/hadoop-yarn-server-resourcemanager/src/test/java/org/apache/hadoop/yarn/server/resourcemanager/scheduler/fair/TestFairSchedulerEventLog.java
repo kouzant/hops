@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import java.io.File;
 import java.io.IOException;
 
@@ -49,6 +52,9 @@ public class TestFairSchedulerEventLog {
 
     // All tests assume only one assignment per node update
     conf.set(FairSchedulerConfiguration.ASSIGN_MULTIPLE, "false");
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     resourceManager = new MockRM(conf);
     ((AsyncDispatcher)resourceManager.getRMContext().getDispatcher()).start();
     scheduler.init(conf);
