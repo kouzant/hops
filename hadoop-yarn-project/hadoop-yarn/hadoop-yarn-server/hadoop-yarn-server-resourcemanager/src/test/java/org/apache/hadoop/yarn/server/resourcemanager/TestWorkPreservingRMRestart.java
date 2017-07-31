@@ -142,10 +142,6 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     conf.setLong(YarnConfiguration.RM_WORK_PRESERVING_RECOVERY_SCHEDULING_WAIT_MS, 0);
     conf.setBoolean(YarnConfiguration.DISTRIBUTED_RM, false);
 
-    RMStorageFactory.setConfiguration(conf);
-    YarnAPIStorageFactory.setConfiguration(conf);
-    DBUtility.InitializeDB();
-
     DefaultMetricsSystem.setMiniClusterMode(true);
   }
 
@@ -812,7 +808,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
   //   false and once with fail fast as true.
   //3. Verify that app was killed if fail fast is false.
   //4. Verify that QueueException was thrown if fail fast is true.
-  @Test (timeout = 300000)
+  @Test (timeout = 30000)
   public void testCapacitySchedulerQueueRemovedRecovery() throws Exception {
     if (getSchedulerType() != SchedulerType.CAPACITY) {
       return;
@@ -963,7 +959,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     assertNull(scheduler.getRMContainer(completedContainer.getContainerId()));
   }
 
-  @Test (timeout = 600000)
+  @Test (timeout = 60000)
   public void testAppReregisterOnRMWorkPreservingRestart() throws Exception {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
 
@@ -1422,7 +1418,7 @@ public class TestWorkPreservingRMRestart extends ParameterizedSchedulerTestBase 
     assertEquals(RMAppAttemptState.FINISHED, recoveredApp1.getCurrentAppAttempt().getState());
   }
 
-  @Test(timeout = 600000)
+  @Test(timeout = 60000)
   public void testUAMRecoveryOnRMWorkPreservingRestart() throws Exception {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, 1);
     MemoryRMStateStore memStore = new MemoryRMStateStore();

@@ -189,9 +189,11 @@ public class DominantResourceFairnessPolicy extends SchedulingPolicy {
         if (shares.getWeight(MEMORY) > shares.getWeight(CPU)) {
           resourceOrder[0] = MEMORY;
           resourceOrder[1] = CPU;
+          resourceOrder[2] = GPU;
         } else  {
           resourceOrder[0] = CPU;
           resourceOrder[1] = MEMORY;
+          resourceOrder[2] = GPU;
         }
       }
     }

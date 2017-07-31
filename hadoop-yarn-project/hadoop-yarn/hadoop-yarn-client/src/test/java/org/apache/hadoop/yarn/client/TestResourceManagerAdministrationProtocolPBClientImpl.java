@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.yarn.client;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 
@@ -72,6 +75,9 @@ public class TestResourceManagerAdministrationProtocolPBClientImpl {
           InterruptedException {
     Configuration.addDefaultResource("config-with-security.xml");
     Configuration configuration = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(configuration);
+    YarnAPIStorageFactory.setConfiguration(configuration);
+    DBUtility.InitializeDB();
     resourceManager = new ResourceManager() {
       @Override
       protected void doSecureLogin() throws IOException {
