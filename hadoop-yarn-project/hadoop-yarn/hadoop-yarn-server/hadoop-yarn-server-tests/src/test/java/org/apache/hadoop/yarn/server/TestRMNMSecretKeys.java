@@ -18,6 +18,9 @@
 
 package org.apache.hadoop.yarn.server;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import java.io.IOException;
 
 import org.junit.Assert;
@@ -32,10 +35,19 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerResp
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
 import org.apache.hadoop.yarn.server.resourcemanager.ResourceManager;
+import org.junit.Before;
 import org.junit.Test;
 
 public class TestRMNMSecretKeys {
 
+  @Before
+  public void setup() throws IOException{
+    YarnConfiguration conf = new YarnConfiguration();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+  }
+  
   @Test(timeout = 1000000)
   public void testNMUpdation() throws Exception {
     YarnConfiguration conf = new YarnConfiguration();

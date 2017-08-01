@@ -85,6 +85,9 @@ import org.junit.Test;
 import org.junit.rules.Timeout;
 
 import com.sun.jersey.api.client.ClientHandlerException;
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 
 public class TestDistributedShell {
 
@@ -130,7 +133,9 @@ public class TestDistributedShell {
     conf.setBoolean(YarnConfiguration.NODE_LABELS_ENABLED, true);
     conf.set("mapreduce.jobhistory.address",
         "0.0.0.0:" + ServerSocketUtil.getPort(10021, 10));
-
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
     // ATS version specific settings
     if (timelineVersion == 1.0f) {
       conf.setFloat(YarnConfiguration.TIMELINE_SERVICE_VERSION, 1.0f);

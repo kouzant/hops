@@ -2459,7 +2459,7 @@ public class YarnConfiguration extends Configuration {
         System.out.println("<Leader> " + HAUtil.addSuffix(YarnConfiguration.RM_GROUP_MEMBERSHIP_ADDRESS, rmHAId) + ": " + tmpLeaderHost);
         System.out.println("<Leader> " + HAUtil.addSuffix(name, rmHAId) + ": " + tmpProxy);
 
-        if (tmpLeaderHost.equals(host)) {
+        if (tmpLeaderHost.equals(host) || rmHAId.equals(host)) {
           found = true;
           address = tmpProxy;
           break;
