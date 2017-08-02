@@ -1005,7 +1005,7 @@ public class Client implements AutoCloseable {
       // before all messages are sent.
       final DataOutputStream out = streams.out;
       synchronized (out) {
-
+        
         out.write(RpcConstants.HEADER.array());
         out.write(RpcConstants.CURRENT_VERSION);
         out.write(serviceClass);
@@ -1528,7 +1528,7 @@ public class Client implements AutoCloseable {
         if (call.error instanceof RemoteException) {
           call.error.fillInStackTrace();
           throw call.error;
-        } else if (call.error.getCause() instanceof SSLException) {
+        } else if (call.error instanceof SSLException) {
           LOG.error("Connection " + connection.getName() + " encountered TLS error", call.error.getCause());
           throw new SSLException(call.error.getMessage());
         } else { // local exception
