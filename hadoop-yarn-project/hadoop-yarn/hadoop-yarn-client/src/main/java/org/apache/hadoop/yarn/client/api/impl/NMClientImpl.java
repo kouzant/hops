@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.yarn.client.api.impl;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -31,6 +33,7 @@ import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 import io.hops.security.HopsUtil;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -248,11 +251,12 @@ public class NMClientImpl extends NMClient {
       throws IOException {
     Path kStorePath = Paths.get("k_certificate");
     Path tStorePath = Paths.get("t_certificate");
+    Path passwdPath = Paths.get("material_passwd");
     
     byte[] keyStoreBin = Files.readAllBytes(kStorePath);
     ByteBuffer kStore = ByteBuffer.wrap(keyStoreBin);
     ByteBuffer tStore = ByteBuffer.wrap(Files.readAllBytes(tStorePath));
-    String password = getPasswordFromHopsworks(user, keyStoreBin);
+    String password = readCryptoMaterialPassword(passwdPath.toFile());
     
     request.setKeyStore(kStore);
     request.setKeyStorePassword(password);
@@ -260,19 +264,14 @@ public class NMClientImpl extends NMClient {
     request.setTrustStorePassword(password);
   }
   
-  private String getPasswordFromHopsworks(String username, byte[] keyStore)
+  private String readCryptoMaterialPassword(File passwdFile)
       throws IOException {
     if (null != certificatePassword) {
       return certificatePassword;
     }
     
-    try {
-      certificatePassword = HopsUtil
-          .getCertificatePasswordFromHopsworks(keyStore, username, getConfig());
-      return certificatePassword;
-    } catch (JSONException ex) {
-      throw new IOException(ex);
-    }
+    certificatePassword = HopsUtil.readCryptoMaterialPassword(passwdFile);
+    return certificatePassword;
   }
   
   @Override

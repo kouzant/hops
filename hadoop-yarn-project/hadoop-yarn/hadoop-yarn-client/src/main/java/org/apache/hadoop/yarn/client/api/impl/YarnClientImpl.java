@@ -18,6 +18,8 @@
 
 package org.apache.hadoop.yarn.client.api.impl;
 
+import java.io.File;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.file.Files;
@@ -32,6 +34,7 @@ import java.util.Map;
 import java.util.Set;
 
 import io.hops.security.HopsUtil;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -354,31 +357,29 @@ public class YarnClientImpl extends YarnClient {
     appContext.setKeyStore(kstoreBB);
     appContext.setTrustStore(tstoreBB);
   
-    // Passwords have not been set, get them from the REST endpoint
+    // Passwords have not been set, read them from the file containing the
+    // password
     if (appContext.getKeyStorePassword() == null || appContext
         .getKeyStorePassword().isEmpty()
         || appContext.getTrustStorePassword() == null || appContext
         .getTrustStorePassword().isEmpty()) {
-      String password = getPasswordFromHopsworks(username, keyStoreBin);
+      Path passwdFile = Paths.get(clientMaterializeDir, username
+          + "__cert.key");
+      String password = readCryptoMaterialPassword(passwdFile.toFile());
       appContext.setKeyStorePassword(password);
       appContext.setTrustStorePassword(password);
     }
   }
   
-  private String getPasswordFromHopsworks(String username, byte[] keyStore)
-      throws IOException {
-    
+  private String readCryptoMaterialPassword(File passwdFile) throws
+      IOException {
     if (null != certificatePassword) {
       return certificatePassword;
     }
     
-    try {
-      certificatePassword = HopsUtil
-          .getCertificatePasswordFromHopsworks(keyStore, username, getConfig());
-      return certificatePassword;
-    } catch (JSONException ex) {
-      throw new IOException(ex);
-    }
+    certificatePassword = HopsUtil.readCryptoMaterialPassword(passwdFile);
+    
+    return certificatePassword;
   }
   
   private void addTimelineDelegationToken(

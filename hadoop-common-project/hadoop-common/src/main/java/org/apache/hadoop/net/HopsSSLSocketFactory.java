@@ -17,11 +17,13 @@ package org.apache.hadoop.net;
 
 import com.google.common.annotations.VisibleForTesting;
 import io.hops.security.HopsUtil;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.ipc.RpcSSLEngineAbstr;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.ssl.CertificateLocalization;
@@ -35,6 +37,7 @@ import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
@@ -130,25 +133,16 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
       this.conf = conf;
     }
   
-    // ONLY for testing
-    @VisibleForTesting
-    public void setPaswordFromHopsworks(String password) {
-      this.cryptoPassword = password;
-    }
-    
-    public String getPasswordFromHopsworks(String username, String
-        keystorePath) throws JSONException, IOException {
-      
+    private String readMaterialPasswordFromFile(File passwdFile)
+      throws IOException {
       if (null != cryptoPassword) {
         return cryptoPassword;
       }
       
-      cryptoPassword = HopsUtil
-          .getCertificatePasswordFromHopsworks(keystorePath, username, conf);
-          
+      cryptoPassword = HopsUtil.readCryptoMaterialPassword(passwdFile);
       return cryptoPassword;
     }
-  
+    
   public void configureCryptoMaterial(CertificateLocalization
       certificateLocalization, Set<String> proxySuperusers)
       throws SSLCertificateException {
@@ -175,8 +169,8 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
           LOG.debug("Crypto material found in NM localized directory");
         }
         
-        String password = getPasswordFromHopsworks(username, localized
-            .toString());
+        String password = readMaterialPasswordFromFile(
+            new File("material_passwd"));
         setTlsConfiguration("k_certificate", password, "t_certificate",
             password, conf);
         cryptoConfigured = true;
@@ -214,8 +208,9 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
                     .getMaterialLocation(username);
                 password = material.getKeyStorePass();
               } else {
-                password = getPasswordFromHopsworks(username, fd
-                    .toString());
+                Path passwdFile = Paths.get(hopsworksMaterializeDir, username
+                  + "__cert.key");
+                password = readMaterialPasswordFromFile(passwdFile.toFile());
               }
               
               setTlsConfiguration(Paths.get(hopsworksMaterializeDir,
