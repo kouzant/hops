@@ -33,7 +33,7 @@ public class SuperUserHopsSSLCheck extends AbstractHopsSSLCheck {
   private final static Log LOG = LogFactory.getLog(SuperUserHopsSSLCheck.class);
   
   public SuperUserHopsSSLCheck() {
-    super(85);
+    super(-1);
   }
   
   @Override
@@ -54,9 +54,6 @@ public class SuperUserHopsSSLCheck extends AbstractHopsSSLCheck {
         }
         
         if (certificateLocalization != null) {
-          String keystorePassword = certificateLocalization.getSuperKeystorePass();
-          String truststorePassword = certificateLocalization.getSuperTruststorePass();
-          
           return new HopsSSLCryptoMaterial(
               certificateLocalization.getSuperKeystoreLocation(),
               certificateLocalization.getSuperKeystorePass(),

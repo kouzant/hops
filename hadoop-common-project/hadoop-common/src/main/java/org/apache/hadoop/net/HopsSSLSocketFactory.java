@@ -22,6 +22,13 @@ import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.ipc.RpcSSLEngineAbstr;
+import org.apache.hadoop.net.hopssslchecks.HopsSSLCheck;
+import org.apache.hadoop.net.hopssslchecks.HopsSSLCryptoMaterial;
+import org.apache.hadoop.net.hopssslchecks.LocalResourceHopsSSLCheck;
+import org.apache.hadoop.net.hopssslchecks.NormalUserCertLocServiceHopsSSLCheck;
+import org.apache.hadoop.net.hopssslchecks.NormalUserMaterilizeDirSSLCheck;
+import org.apache.hadoop.net.hopssslchecks.SSLMaterialAlreadyConfiguredException;
+import org.apache.hadoop.net.hopssslchecks.SuperUserHopsSSLCheck;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.ssl.CertificateLocalization;
 import org.apache.hadoop.security.ssl.CryptoMaterial;
@@ -41,6 +48,7 @@ import java.net.UnknownHostException;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.Set;
+import java.util.TreeSet;
 
 public class HopsSSLSocketFactory extends SocketFactory implements Configurable {
 
@@ -77,7 +85,31 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     public static final String USERNAME_PATTERN = "\\w*__\\w*";
     private String cryptoPassword = null;
   
-    private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
+    private final static Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
+    
+  // Configuration checks
+  private final static HopsSSLCheck LOCAL_RESOURCE = new LocalResourceHopsSSLCheck();
+  private final static HopsSSLCheck NORMAL_USER_MATERIALIZE_DIR = new NormalUserMaterilizeDirSSLCheck();
+  private final static HopsSSLCheck NORMAL_USER_CERTIFICATE_LOCALIZATION = new NormalUserCertLocServiceHopsSSLCheck();
+  private final static HopsSSLCheck SUPER_USER = new SuperUserHopsSSLCheck();
+  private final static Set<HopsSSLCheck> HOPS_SSL_CHECKS = new TreeSet<>();
+  
+  /**
+   * Configuration checks will run according to their priority
+   * LOCAL_RESOURCE - Priority: 100 - Checks if the crypto material exist in the container's CWD
+   * NORMAL_USER_MATERIALIZE_DIR - Priority: 95 - Checks if the crypto material exist in Hopsworks materialize
+   *    directory. Certificates are materialized there by Hopsworks
+   * NORMAL_USER_CERTIFICATE_LOCALIZATION - Priority: 90 - Checks if the crypto material has been localized by
+   *    the CertificateLocalizationService of ResourceManager or NodeManager
+   * SUPER_USER - Priority: -1 - Checks if the user is a super user and picks the machine certificates.
+   *    NOTE: It should have the lowest priority
+   */
+  static {
+    HOPS_SSL_CHECKS.add(LOCAL_RESOURCE);
+    HOPS_SSL_CHECKS.add(NORMAL_USER_MATERIALIZE_DIR);
+    HOPS_SSL_CHECKS.add(NORMAL_USER_CERTIFICATE_LOCALIZATION);
+    HOPS_SSL_CHECKS.add(SUPER_USER);
+  }
 
     public enum PropType {
         FILEPATH,
@@ -143,7 +175,73 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
       return cryptoPassword;
     }
     
-  public void configureCryptoMaterial(CertificateLocalization
+    public void configureCryptoMaterial(CertificateLocalization certificateLocalization, Set<String> proxySuperusers)
+      throws SSLCertificateException {
+      
+      String username = null;
+      try {
+        username = UserGroupInformation.getCurrentUser().getUserName();
+        HopsSSLCryptoMaterial sslCryptoMaterial = null;
+        boolean configured = false;
+        for (HopsSSLCheck checks : HOPS_SSL_CHECKS) {
+          try {
+            sslCryptoMaterial = checks.check(username, proxySuperusers, conf, certificateLocalization);
+            if (sslCryptoMaterial != null) {
+              configured = true;
+              break;
+            }
+          } catch (SSLMaterialAlreadyConfiguredException ex) {
+            configured = true;
+            if (LOG.isDebugEnabled()) {
+              LOG.debug(ex.getMessage());
+            }
+            break;
+          }
+        }
+  
+        if (!configured) {
+          String message = "> HopsSSLSocketFactory could not determine cryptographic material for user <" + username +
+              ">. Check your configuration!";
+          SSLCertificateException ex = new SSLCertificateException(message);
+          LOG.error(message, ex);
+          throw ex;
+        }
+        
+        // sslCryptoMaterial will be null when the factory is already configured
+        if (sslCryptoMaterial != null) {
+          setTlsConfiguration(
+              sslCryptoMaterial.getKeyStoreLocation(),
+              sslCryptoMaterial.getKeyStorePassword(),
+              sslCryptoMaterial.getTrustStoreLocation(),
+              sslCryptoMaterial.getTrustStorePassword(),
+              conf);
+        }
+  
+        // *ClientCache* caches client instances based on their socket factory.
+        // In order to distinguish two client with the same socket factory but
+        // with different certificates, the hashCode is computed by the
+        // keystore filepath as well
+        this.keyStoreFilePath = conf.get(CryptoKeys.KEY_STORE_FILEPATH_KEY.getValue(),
+            KEY_STORE_FILEPATH_DEFAULT);
+        if (LOG.isDebugEnabled()) {
+          LOG.debug("Finally, the keystore that is used is: " + keyStoreFilePath);
+        }
+        conf.setBoolean(FORCE_CONFIGURE, false);
+      } catch (IOException ex) {
+        String user = username != null ? username : "Could not find user from UGI";
+        LOG.error("Error while configuring SocketFactory for user <" + user + ">");
+        throw new SSLCertificateException(ex);
+      }
+    }
+  
+  /**
+   * Burn to hell!!!
+   *
+   * @param certificateLocalization
+   * @param proxySuperusers
+   * @throws SSLCertificateException
+   */
+  public void configureCryptoMaterial2(CertificateLocalization
       certificateLocalization, Set<String> proxySuperusers)
       throws SSLCertificateException {
     boolean cryptoConfigured = false;
