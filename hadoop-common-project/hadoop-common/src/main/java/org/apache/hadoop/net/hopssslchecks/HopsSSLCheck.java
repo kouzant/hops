@@ -18,10 +18,14 @@
 package org.apache.hadoop.net.hopssslchecks;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.security.ssl.CertificateLocalization;
 
 import java.io.IOException;
+import java.util.Set;
 
 public interface HopsSSLCheck {
-  HopsSSLCryptoMaterial check(Configuration configuration) throws IOException;
+  HopsSSLCryptoMaterial check(String username, Set<String> proxySuperUsers, Configuration configuration,
+      CertificateLocalization certificateLocalization)
+      throws IOException, SSLMaterialAlreadyConfiguredException;
   Integer getPriority();
 }

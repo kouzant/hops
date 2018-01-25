@@ -22,9 +22,11 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
+import org.apache.hadoop.security.ssl.CertificateLocalization;
 
 import java.io.File;
 import java.io.IOException;
+import java.util.Set;
 
 public class LocalResourceHopsSSLCheck extends AbstractHopsSSLCheck {
   private final static Log LOG = LogFactory.getLog(LocalResourceHopsSSLCheck.class);
@@ -34,7 +36,8 @@ public class LocalResourceHopsSSLCheck extends AbstractHopsSSLCheck {
   }
   
   @Override
-  public HopsSSLCryptoMaterial check(Configuration configuration) throws IOException {
+  public HopsSSLCryptoMaterial check(String username, Set<String> proxySuperusers, Configuration configuration,
+      CertificateLocalization certificateLocalization) throws IOException {
     File localizedKeystore = new File(HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME);
     if (localizedKeystore.exists()) {
       if (LOG.isDebugEnabled()) {

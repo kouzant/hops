@@ -79,7 +79,7 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
   
     private final Log LOG = LogFactory.getLog(HopsSSLSocketFactory.class);
 
-    private enum PropType {
+    public enum PropType {
         FILEPATH,
         LITERAL
     }
@@ -337,6 +337,12 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     conf.setBoolean(FORCE_CONFIGURE, false);
   }
   
+  /**
+   * MOVED TO AbstractHopsSSLCheck
+   * @param conf
+   * @return
+   * @throws IOException
+   */
     private String[] readSuperPasswordFromFile(Configuration conf)
       throws IOException {
       Configuration sslConf = new Configuration(false);
@@ -429,7 +435,14 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
         conf.set(CommonConfigurationKeys.HADOOP_RPC_SOCKET_FACTORY_CLASS_DEFAULT_KEY,
             SOCKET_FACTORY_NAME);
     }
-
+  
+  
+  /**
+   * MOVED TO AbstractHopsSSLCheck
+   * @param conf
+   * @param username
+   * @return
+   */
     private boolean isCryptoMaterialSet(Configuration conf, String username) {
         for (CryptoKeys key : CryptoKeys.values()) {
             String propValue = conf.get(key.getValue(), key.getDefaultValue());
@@ -462,6 +475,8 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
     }
 
     /**
+     * MOVED TO AbstractHopsSSLCheck
+     *
      * Checks if the username is part of the property value. For example,
      * projectName__userName should be part of value /tmp/projectName__userName__kstore.jks
      * @param username
@@ -475,7 +490,13 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
 
         return true;
     }
-
+  
+  /**
+   * MOVED TO AbstractHopsSSLCheck
+   * @param key
+   * @param propValue
+   * @return
+   */
     private boolean checkForDefaultInProperty(CryptoKeys key, String propValue) {
       if (key.getType() != PropType.LITERAL) {
         if (key.getDefaultValue().equals(propValue)) {
