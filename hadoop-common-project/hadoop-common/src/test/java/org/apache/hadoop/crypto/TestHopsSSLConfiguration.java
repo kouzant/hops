@@ -246,7 +246,7 @@ public class TestHopsSSLConfiguration {
         String tstore = "/tmp/" + hostname + "__tstore.jks";
         touchFile(tstore);
 
-        createServerSSLConfig(pass, pass, conf);
+        createServerSSLConfig(kstore, pass, tstore, pass, conf);
         UserGroupInformation ugi = UserGroupInformation.createRemoteUser("glassfish");
         final Set<String> superusers = new HashSet<>(1);
         superusers.add("glassfish");
@@ -283,7 +283,7 @@ public class TestHopsSSLConfiguration {
         touchFile(tstore);
         String password = "a_strong_password";
         
-        createServerSSLConfig(password, password, conf);
+        createServerSSLConfig(kstore, password, tstore, password, conf);
     
         UserGroupInformation ugi = UserGroupInformation.createRemoteUser("glassfish");
         final Set<String> superusers = new HashSet<>(1);
@@ -307,8 +307,8 @@ public class TestHopsSSLConfiguration {
             .TRUST_STORE_PASSWORD_KEY.getValue()));
     }
     
-    private void createServerSSLConfig(String keyStorePassword,
-        String trustStorePassword, Configuration conf) throws IOException {
+    private void createServerSSLConfig(String keystoreLocation, String keyStorePassword,
+        String truststoreLocation, String trustStorePassword, Configuration conf) throws IOException {
         
         Configuration sslConf = new Configuration(false);
         
@@ -319,8 +319,16 @@ public class TestHopsSSLConfiguration {
         sslConf.set(
             FileBasedKeyStoresFactory.resolvePropertyName(
                 SSLFactory.Mode.SERVER,
+                FileBasedKeyStoresFactory.SSL_KEYSTORE_LOCATION_TPL_KEY), keystoreLocation);
+        sslConf.set(
+            FileBasedKeyStoresFactory.resolvePropertyName(
+                SSLFactory.Mode.SERVER,
                 FileBasedKeyStoresFactory.SSL_KEYSTORE_PASSWORD_TPL_KEY),
             keyStorePassword);
+        sslConf.set(
+            FileBasedKeyStoresFactory.resolvePropertyName(
+                SSLFactory.Mode.SERVER,
+                FileBasedKeyStoresFactory.SSL_TRUSTSTORE_LOCATION_TPL_KEY), truststoreLocation);
         sslConf.set(
             FileBasedKeyStoresFactory.resolvePropertyName(
                 SSLFactory.Mode.SERVER,
