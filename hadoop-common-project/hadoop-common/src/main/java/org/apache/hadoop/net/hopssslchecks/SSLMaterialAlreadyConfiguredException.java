@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.net.hopssslchecks;
 
+/**
+ * Exception thrown by HopsSSLCheck when the supplied Hadoop configuration's RPC TLS properties are already set.
+ */
 public class SSLMaterialAlreadyConfiguredException extends Exception {
   public SSLMaterialAlreadyConfiguredException() {
     super();

@@ -28,6 +28,10 @@ import java.io.File;
 import java.io.IOException;
 import java.util.Set;
 
+/**
+ * Checks for valid crypto material in the current working directory.
+ * That is the case when HopsSSLSocketFactory is called from a container
+ */
 public class LocalResourceHopsSSLCheck extends AbstractHopsSSLCheck {
   private final static Log LOG = LogFactory.getLog(LocalResourceHopsSSLCheck.class);
   

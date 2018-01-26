@@ -31,6 +31,11 @@ import java.nio.file.Paths;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
+/**
+ * Checks for valid crypto material in Hopsworks materialize directory.
+ * Hopsworks CertificateMaterializer should have materilized them in the configured directory.
+ * It succeeds when HopsSSLSocketFactory is called by a client from Hopsworks
+ */
 public class NormalUserMaterilizeDirSSLCheck extends AbstractHopsSSLCheck {
   private final static Log LOG = LogFactory.getLog(NormalUserMaterilizeDirSSLCheck.class);
   

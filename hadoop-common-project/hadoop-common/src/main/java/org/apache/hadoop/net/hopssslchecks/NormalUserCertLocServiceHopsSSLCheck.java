@@ -26,6 +26,10 @@ import java.io.IOException;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
+/**
+ * Checks for crypto material information provided by the CertificateLocalizationService of RM or NM
+ * It succeeds when HopsSSLSocketFactory is called from RM or NM for a normal user.
+ */
 public class NormalUserCertLocServiceHopsSSLCheck extends AbstractHopsSSLCheck {
   public NormalUserCertLocServiceHopsSSLCheck() {
     super(90);

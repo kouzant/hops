@@ -29,6 +29,11 @@ import java.io.IOException;
 import java.nio.file.Paths;
 import java.util.Set;
 
+/**
+ * Checks for valid crypto material information in the case of a proxy superuser.
+ * Superusers are defined in core-site.xml
+ * It succeeds when HopsSSLSocketFactory is called and the current user is a superuser
+ */
 public class SuperUserHopsSSLCheck extends AbstractHopsSSLCheck {
   private final static Log LOG = LogFactory.getLog(SuperUserHopsSSLCheck.class);
   

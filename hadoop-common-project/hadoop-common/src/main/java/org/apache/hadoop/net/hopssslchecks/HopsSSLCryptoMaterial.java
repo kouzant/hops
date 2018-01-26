@@ -17,6 +17,9 @@
  */
 package org.apache.hadoop.net.hopssslchecks;
 
+/**
+ * Contains paths to keystore, truststore and their password. It is returned by HopsSSLCheck if the check succeeds
+ */
 public class HopsSSLCryptoMaterial {
   private final String keyStoreLocation;
   private final String keyStorePassword;

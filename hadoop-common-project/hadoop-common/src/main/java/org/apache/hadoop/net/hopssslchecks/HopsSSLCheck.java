@@ -23,7 +23,23 @@ import org.apache.hadoop.security.ssl.CertificateLocalization;
 import java.io.IOException;
 import java.util.Set;
 
+/**
+ * Interface for HopsSSLSocketFactory auto-configuration for cryptographic material
+ */
 public interface HopsSSLCheck {
+  /**
+   * Method that checks for proper keystore, truststore depending the username of the current user.
+   *
+   * @param username Current user username
+   * @param proxySuperUsers Set of proxy superusers defined in core-site.xml
+   * @param configuration Hadoop configuration
+   * @param certificateLocalization If in ResourceManager or NodeManager, a CertificateLocalizationService reference,
+   *                               otherwise null
+   * @return HopsSSLCryptoMaterial if able to pass the tests and find proper material, null otherwise.
+   * @throws IOException
+   * @throws SSLMaterialAlreadyConfiguredException When the configuration already contains correct values for TLS
+   * configuration properties
+   */
   HopsSSLCryptoMaterial check(String username, Set<String> proxySuperUsers, Configuration configuration,
       CertificateLocalization certificateLocalization)
       throws IOException, SSLMaterialAlreadyConfiguredException;
