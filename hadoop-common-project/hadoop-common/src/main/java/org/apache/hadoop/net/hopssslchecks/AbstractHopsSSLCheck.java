@@ -46,9 +46,18 @@ public abstract class AbstractHopsSSLCheck implements HopsSSLCheck, Comparable<H
     return priority;
   }
   
+  /**
+   * HopsSSLCheck object with wither priority should be ordered first
+   */
   @Override
   public int compareTo(HopsSSLCheck hopsSSLCheck) {
-    return priority.compareTo(hopsSSLCheck.getPriority());
+    if (priority < hopsSSLCheck.getPriority()) {
+      return 1;
+    }
+    if (priority > hopsSSLCheck.getPriority()) {
+      return -1;
+    }
+    return 0;
   }
   
   protected void isConfigurationNeededForNormalUser(String username, Configuration configuration)

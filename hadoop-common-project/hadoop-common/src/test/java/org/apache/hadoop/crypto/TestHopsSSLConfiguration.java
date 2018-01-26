@@ -76,11 +76,14 @@ public class TestHopsSSLConfiguration {
         conf.set(HopsSSLSocketFactory.CryptoKeys.TRUST_STORE_PASSWORD_KEY.getValue(), tstorePass);
 
         UserGroupInformation ugi = UserGroupInformation.createRemoteUser("project__user");
-        ugi.doAs(new PrivilegedAction<Object>() {
+        final Set<String> superusers = new HashSet<>(1);
+        superusers.add("superuser");
+        ugi.doAs(new PrivilegedExceptionAction<Object>() {
 
             @Override
-            public Object run() {
+            public Object run() throws SSLCertificateException {
                 hopsFactory.setConf(conf);
+                hopsFactory.configureCryptoMaterial(null, superusers);
                 return null;
             }
         });
@@ -347,10 +350,13 @@ public class TestHopsSSLConfiguration {
         touchFile(Paths.get(cwd, "glassfish__tstore.jks").toString());
 
         UserGroupInformation ugi = UserGroupInformation.createRemoteUser("glassfish");
-        ugi.doAs(new PrivilegedAction<Object>() {
+        final Set<String> superusers = new HashSet<>(1);
+        superusers.add("glassfish");
+        ugi.doAs(new PrivilegedExceptionAction<Object>() {
             @Override
-            public Object run() {
+            public Object run() throws SSLCertificateException {
                 hopsFactory.setConf(conf);
+                hopsFactory.configureCryptoMaterial(null, superusers);
                 return null;
             }
         });
