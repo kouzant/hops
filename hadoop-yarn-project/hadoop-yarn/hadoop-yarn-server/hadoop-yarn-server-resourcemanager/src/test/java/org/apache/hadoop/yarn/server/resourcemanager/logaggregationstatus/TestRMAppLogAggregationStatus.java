@@ -127,6 +127,7 @@ public class TestRMAppLogAggregationStatus {
     conf.setLong(YarnConfiguration.LOG_AGGREGATION_STATUS_TIME_OUT_MS, 1500);
     RMApp rmApp = createRMApp(conf);
     this.rmContext.getRMApps().put(appId, rmApp);
+    rmApp.handle(new RMAppEvent(this.appId, RMAppEventType.GENERATE_CERTS));
     rmApp.handle(new RMAppEvent(this.appId, RMAppEventType.START));
     rmApp.handle(new RMAppEvent(this.appId, RMAppEventType.APP_NEW_SAVED));
     rmApp.handle(new RMAppEvent(this.appId, RMAppEventType.APP_ACCEPTED));

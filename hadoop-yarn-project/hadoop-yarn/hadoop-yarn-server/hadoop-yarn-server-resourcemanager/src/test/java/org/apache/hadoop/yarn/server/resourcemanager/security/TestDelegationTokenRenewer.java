@@ -614,7 +614,7 @@ public class TestDelegationTokenRenewer {
     if (!eventQueue.isEmpty()){
       Event evt = eventQueue.take();
       if (evt instanceof RMAppEvent) {
-        Assert.assertEquals(((RMAppEvent)evt).getType(), RMAppEventType.START);
+        Assert.assertEquals(((RMAppEvent)evt).getType(), RMAppEventType.GENERATE_CERTS);
       } else {
         fail("RMAppEvent.START was expected!!");
       }
