@@ -15,22 +15,28 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.yarn.server.resourcemanager;
+package org.apache.hadoop.yarn.server.resourcemanager.security;
 
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.event.AbstractEvent;
 
 public class RMAppCertificateManagerEvent extends AbstractEvent<RMAppCertificateManagerEventType> {
   private final ApplicationId applicationId;
+  private final String applicationUser;
   
   public RMAppCertificateManagerEvent(
-      ApplicationId applicationId,
+      ApplicationId applicationId, String applicationUser,
       RMAppCertificateManagerEventType rmAppCertificateManagerEventType) {
     super(rmAppCertificateManagerEventType);
     this.applicationId = applicationId;
+    this.applicationUser = applicationUser;
   }
   
   public ApplicationId getApplicationId() {
     return applicationId;
+  }
+  
+  public String getApplicationUser() {
+    return applicationUser;
   }
 }

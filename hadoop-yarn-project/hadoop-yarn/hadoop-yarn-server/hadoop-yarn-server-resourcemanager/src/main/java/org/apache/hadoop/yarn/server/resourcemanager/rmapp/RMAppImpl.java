@@ -37,7 +37,6 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -51,7 +50,6 @@ import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
-import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -76,9 +74,8 @@ import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.security.client.ClientToAMTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
-import org.apache.hadoop.yarn.server.resourcemanager.RMAppCertificateManagerEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.RMAppCertificateManagerEventType;
-import org.apache.hadoop.yarn.server.resourcemanager.RMAppCertificateManagerRevokeEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAppManagerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAppManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger;
@@ -1157,8 +1154,8 @@ public class RMAppImpl implements RMApp, Recoverable {
     @Override
     public void transition(RMAppImpl app, RMAppEvent event) {
       LOG.info("Generating certificates for application " + app.applicationId);
-      RMAppCertificateManagerEvent genCertsEvent = new RMAppCertificateManagerEvent(app.getApplicationId(),
-          RMAppCertificateManagerEventType.GENERATE_CERTIFICATE);
+      RMAppCertificateManagerEvent genCertsEvent = new RMAppCertificateManagerEvent(app.applicationId,
+          app.user, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE);
       app.handler.handle(genCertsEvent);
     }
   }

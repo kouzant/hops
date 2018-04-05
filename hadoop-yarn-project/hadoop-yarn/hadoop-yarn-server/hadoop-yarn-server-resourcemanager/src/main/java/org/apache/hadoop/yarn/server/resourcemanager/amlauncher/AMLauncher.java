@@ -39,9 +39,8 @@ import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.ssl.CryptoMaterial;
-import org.apache.hadoop.yarn.server.resourcemanager.RMAppCertificateManagerEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.RMAppCertificateManagerRevokeEvent;
-import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
 import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.util.StringUtils;
@@ -73,8 +72,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptI
 import org.apache.hadoop.yarn.util.ConverterUtils;
 
 import com.google.common.annotations.VisibleForTesting;
-
-import javax.ws.rs.core.Application;
 
 /**
  * The launch of the AM itself.
@@ -189,8 +186,8 @@ public class AMLauncher implements Runnable {
     } finally {
       RMApp application = rmContext.getRMApps().get(
           this.application.getAppAttemptId().getApplicationId());
-      RMAppCertificateManagerEvent certsCleanup = new RMAppCertificateManagerRevokeEvent(
-          application.getApplicationId(), application.getUser());
+      RMAppCertificateManagerEvent certsCleanup = new RMAppCertificateManagerEvent(
+          application.getApplicationId(), application.getUser(), RMAppCertificateManagerEventType.REVOKE_CERTIFICATE);
       handler.handle(certsCleanup);
     }
   }

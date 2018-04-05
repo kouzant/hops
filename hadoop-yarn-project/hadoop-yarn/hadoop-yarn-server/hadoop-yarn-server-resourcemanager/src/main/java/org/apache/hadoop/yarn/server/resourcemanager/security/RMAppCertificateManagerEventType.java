@@ -15,19 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.yarn.server.resourcemanager;
+package org.apache.hadoop.yarn.server.resourcemanager.security;
 
-import org.apache.hadoop.yarn.api.records.ApplicationId;
-
-public class RMAppCertificateManagerRevokeEvent extends RMAppCertificateManagerEvent {
-  private final String applicationUser;
-  
-  public RMAppCertificateManagerRevokeEvent(ApplicationId applicationId, String applicationUser) {
-    super(applicationId, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE);
-    this.applicationUser = applicationUser;
-  }
-  
-  public String getApplicationUser() {
-    return applicationUser;
-  }
+public enum RMAppCertificateManagerEventType {
+  GENERATE_CERTIFICATE,
+  REVOKE_CERTIFICATE
 }

@@ -43,6 +43,8 @@ import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHa
 import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
 import org.apache.hadoop.security.ssl.RevocationListFetcherService;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
 import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.service.CompositeService;
@@ -118,6 +120,7 @@ import java.io.InputStream;
 import java.io.PrintStream;
 import java.net.InetSocketAddress;
 import java.nio.charset.Charset;
+import java.security.GeneralSecurityException;
 import java.security.PrivilegedExceptionAction;
 import java.security.SecureRandom;
 import java.util.ArrayList;
@@ -511,7 +514,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       this.applicationACLsManager, this.conf);
   }
   
-  protected RMAppCertificateManager createRMAppCertificateManager() {
+  protected RMAppCertificateManager createRMAppCertificateManager() throws GeneralSecurityException {
     return new RMAppCertificateManager(this.rmContext, this.conf);
   }
 
