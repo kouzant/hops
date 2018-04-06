@@ -17,25 +17,40 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+import org.apache.commons.httpclient.HttpStatus;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.http.HttpEntity;
+import org.apache.http.HttpHeaders;
 import org.apache.http.client.methods.CloseableHttpResponse;
 import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.methods.RequestBuilder;
+import org.apache.http.entity.StringEntity;
 import org.apache.http.impl.client.BasicCookieStore;
 import org.apache.http.impl.client.CloseableHttpClient;
 import org.apache.http.impl.client.HttpClients;
 import org.apache.http.util.EntityUtils;
+import org.bouncycastle.openssl.jcajce.JcaMiscPEMGenerator;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+import org.bouncycastle.util.io.pem.PemObjectGenerator;
+import org.bouncycastle.util.io.pem.PemWriter;
 
+import java.io.BufferedInputStream;
+import java.io.ByteArrayInputStream;
 import java.io.IOException;
+import java.io.StringReader;
+import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.net.URL;
+import java.security.GeneralSecurityException;
+import java.security.cert.CertificateFactory;
+import java.security.cert.X509Certificate;
 
 public class HopsworksRMAppCertificateActions implements RMAppCertificateActions {
   private static final Log LOG = LogFactory.getLog(HopsworksRMAppCertificateActions.class);
@@ -45,42 +60,82 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
   private final URL loginEndpoint;
   private final URL signEndpoint;
   private final String revokeEndpoint;
+  private final CertificateFactory certificateFactory;
   
-  public HopsworksRMAppCertificateActions(Configuration conf) throws MalformedURLException {
+  public HopsworksRMAppCertificateActions(Configuration conf) throws MalformedURLException, GeneralSecurityException {
     this.conf = conf;
     
     // TODO(Antonis) Read them from configuration
     this.hopsworksHost = new URL("http://bbc4.sics.se:34821");
     this.loginEndpoint = new URL(hopsworksHost, "hopsworks-api/api/auth/login");
-    this.signEndpoint = new URL(this.hopsworksHost, "sign/endpoint");
+    this.signEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/sign");
     this.revokeEndpoint = "";
+    this.certificateFactory = CertificateFactory.getInstance("X.509", "BC");
   }
   
   @Override
-  public byte[] sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException {
-    BasicCookieStore cookieStore = new BasicCookieStore();
-    CloseableHttpClient httpClient = HttpClients.custom()
-        .setDefaultCookieStore(cookieStore)
-        .build();
-    HttpPost req = new HttpPost("http://bbc4.sics.se:34821/hopsworks-api/api/auth/login");
+  public X509Certificate sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException, GeneralSecurityException {
+    CloseableHttpClient httpClient = null;
+    try {
+      BasicCookieStore cookieStore = new BasicCookieStore();
+      httpClient = HttpClients.custom()
+          .setDefaultCookieStore(cookieStore)
+          .build();
   
-    HttpUriRequest login = RequestBuilder.post()
-        .setUri(loginEndpoint.toURI())
-        .addParameter("email", "admin@kth.se")
-        .addParameter("password", "admin")
-        .build();
-    CloseableHttpResponse resp = httpClient.execute(login);
-    LOG.info(resp);
+      HttpUriRequest login = RequestBuilder.post()
+          .setUri(loginEndpoint.toURI())
+          .addParameter("email", "agent@hops.io")
+          .addParameter("password", "admin")
+          .build();
+      CloseableHttpResponse loginResponse = httpClient.execute(login);
   
-    HttpEntity entity = resp.getEntity();
-    LOG.info(entity);
+      checkHTTPResponseCode(loginResponse.getStatusLine().getStatusCode(), "Could not login to Hopsworks");
   
-    HttpGet getReq = new HttpGet("http://bbc4.sics.se:34821/hopsworks-api/api/admin/materializer/");
-    CloseableHttpResponse resp2 = httpClient.execute(getReq);
-    resp2.getStatusLine();
-    HttpEntity entity1 = resp2.getEntity();
-    String bla = EntityUtils.toString(entity1);
-    LOG.info(bla);
-    return new byte[0];
+      String csrStr = stringifyCSR(csr);
+      JsonObject json = new JsonObject();
+      json.addProperty("csr", csrStr);
+  
+      HttpPost signReq = new HttpPost(signEndpoint.toURI());
+      signReq.setEntity(new StringEntity(json.toString()));
+      signReq.addHeader(HttpHeaders.CONTENT_TYPE, "application/json");
+  
+      CloseableHttpResponse signResponse = httpClient.execute(signReq);
+      
+      checkHTTPResponseCode(signResponse.getStatusLine().getStatusCode(), "Hopsworks CA could not sign CSR");
+      
+      String signResponseEntity = EntityUtils.toString(signResponse.getEntity());
+      JsonObject jsonResponse = new JsonParser().parse(signResponseEntity).getAsJsonObject();
+      String signedCert = jsonResponse.get("pubAgentCert").getAsString();
+      LOG.info("Signed cert is: " + signedCert);
+      return parseCertificate(signedCert);
+    } finally {
+      if (httpClient != null) {
+        httpClient.close();
+      }
+    }
+  }
+  
+  private X509Certificate parseCertificate(String certificateStr) throws IOException, GeneralSecurityException {
+    try (ByteArrayInputStream bis = new ByteArrayInputStream(certificateStr.getBytes())) {
+      return (X509Certificate) certificateFactory.generateCertificate(bis);
+    }
+  }
+  
+  private void checkHTTPResponseCode(int responseCode, String msg) throws IOException {
+    if (responseCode != HttpStatus.SC_OK) {
+      throw new IOException("HTTP error, response code " + responseCode + " Message: " + msg);
+    }
+  }
+  
+  private String stringifyCSR(PKCS10CertificationRequest csr) throws IOException {
+    try (StringWriter sw = new StringWriter()) {
+      PemWriter pw = new PemWriter(sw);
+      PemObjectGenerator pog = new JcaMiscPEMGenerator(csr);
+      pw.writeObject(pog.generate());
+      pw.flush();
+      sw.flush();
+      pw.close();
+      return sw.toString();
+    }
   }
 }

@@ -47,6 +47,7 @@ import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.Security;
+import java.security.cert.X509Certificate;
 import java.util.concurrent.ExecutionException;
 
 public class RMAppCertificateManager implements EventHandler<RMAppCertificateManagerEvent> {
@@ -79,13 +80,16 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     return rmAppCertificateActions;
   }
   
+  protected RMContext getRmContext() {
+    return rmContext;
+  }
+  
   // Scope is protected to ease testing
   @SuppressWarnings("unchecked")
   protected void generateCertificate(ApplicationId appId, String appUser) {
     try {
       PKCS10CertificationRequest csr = generateKeysAndCSR(appId, appUser);
-      // TODO(Antonis): Send CSR for signing
-      byte[] signedCertificate = sendCSRAndGetSigned(csr);
+      X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
       
       // TODO(Antonis): Construct keystore and truststore
       
@@ -97,7 +101,7 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     }
   }
   
-  protected byte[] sendCSRAndGetSigned(PKCS10CertificationRequest csr)
+  protected X509Certificate sendCSRAndGetSigned(PKCS10CertificationRequest csr)
       throws URISyntaxException, IOException, GeneralSecurityException {
     return rmAppCertificateActions.sign(csr);
   }

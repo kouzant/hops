@@ -22,7 +22,8 @@ import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
+import java.security.cert.X509Certificate;
 
 public interface RMAppCertificateActions {
-  byte[] sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException, GeneralSecurityException;
+  X509Certificate sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException, GeneralSecurityException;
 }

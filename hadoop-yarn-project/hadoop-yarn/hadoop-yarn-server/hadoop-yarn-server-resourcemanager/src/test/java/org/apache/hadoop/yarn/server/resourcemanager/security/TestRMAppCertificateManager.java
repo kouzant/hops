@@ -25,15 +25,23 @@ import org.apache.hadoop.yarn.event.AsyncDispatcher;
 import org.apache.hadoop.yarn.event.Dispatcher;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
+import org.bouncycastle.openssl.jcajce.JcaMiscPEMGenerator;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+import org.bouncycastle.util.io.pem.PemObjectGenerator;
+import org.bouncycastle.util.io.pem.PemWriter;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.StringWriter;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.TimeUnit;
 
 public class TestRMAppCertificateManager {
   private static final Log LOG = LogFactory.getLog(TestRMAppCertificateManager.class);
@@ -46,16 +54,20 @@ public class TestRMAppCertificateManager {
   
   @Test
   public void testNormalCertificateCreation() throws Exception {
-    Dispatcher dispatcher = new AsyncDispatcher();
+    AsyncDispatcher dispatcher = new AsyncDispatcher();
     RMContext rmContext = new RMContextImpl(dispatcher, null, null, null, null, null, null, null, null);
-    RMAppCertificateActions testActor = new TestingRMAppCertificateActions();
-    RMAppCertificateActionsFactory.getInstance(conf).register(testActor);
+    dispatcher.init(conf);
+    dispatcher.start();
+    /*RMAppCertificateActions testActor = new TestingRMAppCertificateActions();
+    RMAppCertificateActionsFactory.getInstance(conf).register(testActor);*/
     
     MockRMAppCertificateManager manager = new MockRMAppCertificateManager(rmContext, conf);
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
         RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
+  
+    TimeUnit.SECONDS.sleep(2);
   }
   
   private class MockRMAppCertificateManager extends RMAppCertificateManager {
@@ -80,16 +92,15 @@ public class TestRMAppCertificateManager {
         Assert.assertEquals(applicationId.toString(), o);
         
         // Sign CSR
-        byte[] signedCertificate = sendCSRAndGetSigned(csr);
+        X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
         
         // Build X509Certificate from raw bytes
-        CertificateFactory certificateFactory = CertificateFactory.getInstance("X.509", "BC");
-        bio = new ByteArrayInputStream(signedCertificate);
-        X509Certificate certificate = (X509Certificate) certificateFactory.generateCertificate(bio);
-        certificate.checkValidity();
-        TestingRMAppCertificateActions actor = (TestingRMAppCertificateActions) getRmAppCertificateActions();
+        signedCertificate.checkValidity();
+        /*TestingRMAppCertificateActions actor = (TestingRMAppCertificateActions) getRmAppCertificateActions();
         X509Certificate caCert = actor.getCaCert();
-        certificate.verify(caCert.getPublicKey(), "BC");
+        signedCertificate.verify(caCert.getPublicKey(), "BC");*/
+        getRmContext().getDispatcher().getEventHandler().handle(new RMAppEvent(applicationId, RMAppEventType.START));
+        
       } catch (Exception ex) {
         LOG.error(ex);
         exceptionThrown = true;
