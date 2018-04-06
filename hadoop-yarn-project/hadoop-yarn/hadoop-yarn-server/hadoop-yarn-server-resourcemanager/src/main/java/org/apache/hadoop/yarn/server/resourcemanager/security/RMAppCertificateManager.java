@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -41,6 +42,7 @@ import org.bouncycastle.util.io.pem.PemWriter;
 
 import java.io.FileWriter;
 import java.io.IOException;
+import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
@@ -59,8 +61,9 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   private final EventHandler handler;
   private final CertificateLocalizationService certificateLocalizationService;
   private final KeyPairGenerator keyPairGenerator;
+  private final RMAppCertificateActions rmAppCertificateActions;
   
-  public RMAppCertificateManager(RMContext rmContext, Configuration conf) throws GeneralSecurityException {
+  public RMAppCertificateManager(RMContext rmContext, Configuration conf) throws Exception {
     Security.addProvider(new BouncyCastleProvider());
     this.rmContext = rmContext;
     this.conf = conf;
@@ -68,6 +71,12 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     this.certificateLocalizationService = rmContext.getCertificateLocalizationService();
     keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
     keyPairGenerator.initialize(KEY_SIZE);
+    rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance(conf).getActor();
+  }
+  
+  @VisibleForTesting
+  public RMAppCertificateActions getRmAppCertificateActions() {
+    return rmAppCertificateActions;
   }
   
   // Scope is protected to ease testing
@@ -76,15 +85,21 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     try {
       PKCS10CertificationRequest csr = generateKeysAndCSR(appId, appUser);
       // TODO(Antonis): Send CSR for signing
+      byte[] signedCertificate = sendCSRAndGetSigned(csr);
       
       // TODO(Antonis): Construct keystore and truststore
       
       // TODO(Antonis): Send them along with the START event
       handler.handle(new RMAppEvent(appId, RMAppEventType.START));
-    } catch (OperatorCreationException ex) {
+    } catch (Exception ex) {
       LOG.error("Error while generating certificate for application " + appId);
       handler.handle(new RMAppEvent(appId, RMAppEventType.KILL, "Error while generating application certificate"));
     }
+  }
+  
+  protected byte[] sendCSRAndGetSigned(PKCS10CertificationRequest csr)
+      throws URISyntaxException, IOException, GeneralSecurityException {
+    return rmAppCertificateActions.sign(csr);
   }
   
   // Scope is protected to ease testing

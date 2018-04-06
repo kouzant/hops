@@ -514,7 +514,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       this.applicationACLsManager, this.conf);
   }
   
-  protected RMAppCertificateManager createRMAppCertificateManager() throws GeneralSecurityException {
+  protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
     return new RMAppCertificateManager(this.rmContext, this.conf);
   }
 
