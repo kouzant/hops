@@ -106,7 +106,6 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
       String signResponseEntity = EntityUtils.toString(signResponse.getEntity());
       JsonObject jsonResponse = new JsonParser().parse(signResponseEntity).getAsJsonObject();
       String signedCert = jsonResponse.get("pubAgentCert").getAsString();
-      LOG.info("Signed cert is: " + signedCert);
       return parseCertificate(signedCert);
     } finally {
       if (httpClient != null) {

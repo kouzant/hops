@@ -244,7 +244,7 @@ public class TestRMAppTransitions {
     rmDispatcher.register(SchedulerEventType.class,
         schedulerDispatcher);
   
-    RMAppCertificateActionsFactory.getInstance(conf).register(new TestingRMAppCertificateActions());
+    RMAppCertificateActionsFactory.getInstance(conf).register(new TestingRMAppCertificateActions(conf));
     rmDispatcher.register(RMAppCertificateManagerEventType.class,
         new RMAppCertificateManager(rmContext, conf));
     

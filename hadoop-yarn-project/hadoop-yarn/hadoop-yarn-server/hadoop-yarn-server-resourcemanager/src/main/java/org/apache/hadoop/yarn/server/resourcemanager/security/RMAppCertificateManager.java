@@ -22,6 +22,8 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
+import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
@@ -37,16 +39,18 @@ import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.pkcs.PKCS10CertificationRequestBuilder;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
-import org.bouncycastle.util.io.pem.PemObject;
-import org.bouncycastle.util.io.pem.PemWriter;
 
-import java.io.FileWriter;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.KeyStore;
+import java.security.PrivateKey;
 import java.security.Security;
+import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.ExecutionException;
 
@@ -88,12 +92,18 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   @SuppressWarnings("unchecked")
   protected void generateCertificate(ApplicationId appId, String appUser) {
     try {
-      PKCS10CertificationRequest csr = generateKeysAndCSR(appId, appUser);
-      X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
-      
-      // TODO(Antonis): Construct keystore and truststore
-      
-      // TODO(Antonis): Send them along with the START event
+      if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+        KeyPair keyPair = generateKeyPair();
+        PKCS10CertificationRequest csr = generateKeysAndCSR(appId, appUser, keyPair);
+        X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
+  
+        // TODO(Antonis): Construct keystore and truststore
+        KeyStore trustStore = loadTrustStore(conf);
+        KeyStore keyStore = createApplicationKeyStore(signedCertificate, keyPair.getPrivate(), appUser);
+  
+        // TODO(Antonis): Send them along with the START event
+      }
       handler.handle(new RMAppEvent(appId, RMAppEventType.START));
     } catch (Exception ex) {
       LOG.error("Error while generating certificate for application " + appId);
@@ -107,18 +117,52 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   }
   
   // Scope is protected to ease testing
-  protected PKCS10CertificationRequest generateKeysAndCSR(ApplicationId appId, String applicationUser)
+  protected PKCS10CertificationRequest generateKeysAndCSR(ApplicationId appId, String applicationUser, KeyPair keyPair)
       throws OperatorCreationException {
     LOG.info("Generating certificate for application: " + appId);
-    // 1) Generate key-pair
-    KeyPair kp = generateKeyPair();
-    // 2) Create X500 subject CN=APPLICATION_ID, O=USER
+    // Create X500 subject CN=USER, O=APPLICATION_ID
     X500Name subject = createX500Subject(appId, applicationUser);
-    // 3) Create Certificate Signing Request
-    return createCSR(subject, kp);
+    // Create Certificate Signing Request
+    return createCSR(subject, keyPair);
   }
   
-  private KeyPair generateKeyPair() {
+  protected KeyStore loadTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
+    String sslConfName = conf.get(SSLFactory.SSL_SERVER_CONF_KEY, "ssl-server.xml");
+    Configuration sslConf = new Configuration();
+    sslConf.addResource(sslConfName);
+    String trustStoreLocation = sslConf.get(
+        FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+            FileBasedKeyStoresFactory.SSL_TRUSTSTORE_LOCATION_TPL_KEY));
+    String trustStoreType = sslConf.get(
+        FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+            FileBasedKeyStoresFactory.SSL_TRUSTSTORE_TYPE_TPL_KEY),
+        FileBasedKeyStoresFactory.DEFAULT_KEYSTORE_TYPE);
+    String trustStorePassword = sslConf.get(
+        FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+            FileBasedKeyStoresFactory.SSL_TRUSTSTORE_PASSWORD_TPL_KEY));
+    /*String trustStoreLocation = "/tmp/tstore.jks";
+    String trustStorePassword = "R0AMHDYWZ360PGNX94QCFHEH72D2NIZ51QQOY8OKOII4W2J239GIVHSJWXZ0BI8H";
+    String trustStoreType = "JKS";*/
+    KeyStore trustStore = KeyStore.getInstance(trustStoreType);
+    try (FileInputStream in = new FileInputStream(trustStoreLocation)) {
+      trustStore.load(in, trustStorePassword.toCharArray());
+    }
+    return trustStore;
+  }
+  
+  protected KeyStore createApplicationKeyStore(X509Certificate certificate, PrivateKey privateKey, String appUser)
+    throws GeneralSecurityException, IOException {
+    KeyStore keyStore = KeyStore.getInstance("JKS");
+    keyStore.load(null, null);
+    X509Certificate[] chain = new X509Certificate[1];
+    chain[0] = certificate;
+    keyStore.setKeyEntry(appUser, privateKey, "pass".toCharArray(), chain);
+    
+    //keyStore.store(new FileOutputStream("/tmp/kstore.jks"), "pass".toCharArray());
+    return keyStore;
+  }
+  
+  protected KeyPair generateKeyPair() {
     return keyPairGenerator.genKeyPair();
   }
   

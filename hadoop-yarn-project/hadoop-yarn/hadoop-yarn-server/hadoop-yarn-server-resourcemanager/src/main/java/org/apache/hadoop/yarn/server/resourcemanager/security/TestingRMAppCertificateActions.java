@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
+import org.apache.hadoop.conf.Configuration;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
 import org.bouncycastle.asn1.x500.style.BCStyle;
 import org.bouncycastle.asn1.x509.BasicConstraints;
@@ -51,8 +52,9 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions {
   private final KeyPair caKeyPair;
   private final X509Certificate caCert;
   private final ContentSigner sigGen;
+  private final Configuration conf;
   
-  public TestingRMAppCertificateActions() throws Exception {
+  public TestingRMAppCertificateActions(Configuration conf) throws Exception {
     Security.addProvider(new BouncyCastleProvider());
     KeyPairGenerator kpg = KeyPairGenerator.getInstance(KEY_ALGORITHM, "BC");
     kpg.initialize(KEY_SIZE);
@@ -71,6 +73,7 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions {
     caCert.checkValidity();
     caCert.verify(caKeyPair.getPublic());
     caCert.verify(caCert.getPublicKey());
+    this.conf = conf;
   }
   
   public X509Certificate getCaCert() {
