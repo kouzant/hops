@@ -177,7 +177,12 @@ public class RMAppImpl implements RMApp, Recoverable {
   private Map<NodeId, List<String>> logAggregationFailureMessagesForNMs =
       new HashMap<NodeId, List<String>>();
   private final int maxLogAggregationDiagnosticsInMemory;
-
+  
+  private byte[] keyStore = null;
+  private char[] keyStorePassword = null;
+  private byte[] trustStore = null;
+  private char[] trustStorePassword = null;
+  
   // These states stored are only valid when app is at killing or final_saving.
   private RMAppState stateBeforeKilling;
   private RMAppState stateBeforeFinalSaving;
@@ -1137,6 +1142,13 @@ public class RMAppImpl implements RMApp, Recoverable {
     return msg;
   }
 
+  private void updateApplicationWithCryptoMaterial(RMAppStartWithCertificateEvent event) {
+    keyStore = event.getKeyStore();
+    keyStorePassword = event.getKeyStorePassword();
+    trustStore = event.getTrustStore();
+    trustStorePassword = event.getTrustStorePassword();
+  }
+  
   private static final class RMAppNewlySavingTransition extends RMAppTransition {
     @Override
     public void transition(RMAppImpl app, RMAppEvent event) {
@@ -1145,6 +1157,11 @@ public class RMAppImpl implements RMApp, Recoverable {
       // non-blocking call so make sure that RM has stored the information
       // needed to restart the AM after RM restart without further client
       // communication
+      
+      if (event instanceof RMAppStartWithCertificateEvent) {
+        app.updateApplicationWithCryptoMaterial((RMAppStartWithCertificateEvent) event);
+      }
+      
       LOG.info("Storing application with id " + app.applicationId);
       app.rmContext.getStateStore().storeNewApplication(app);
     }

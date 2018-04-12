@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppStartWithCertificateEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.junit.After;
@@ -49,6 +50,8 @@ import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertNotNull;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -140,7 +143,7 @@ public class TestRMAppCertificateManager {
     MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.START);
     rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
     
-    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(rmContext, conf);
+    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(rmContext, conf, true);
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
@@ -154,7 +157,7 @@ public class TestRMAppCertificateManager {
   // Normally it should be ignored as it requires Hopsworks instance to be running
   @Test
   public void testSuccessfulCertificateCreationRemote() throws Exception {
-    MockRMAppCertificateManagerNoTrustStore manager = new MockRMAppCertificateManagerNoTrustStore(rmContext, conf);
+    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(rmContext, conf, false);
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
@@ -213,6 +216,10 @@ public class TestRMAppCertificateManager {
         assertionFailure = true;
       } else if (!expectedEventType.equals(event.getType())) {
         assertionFailure = true;
+      } else if (event.getType().equals(RMAppEventType.START)) {
+        if (!(event instanceof RMAppStartWithCertificateEvent)) {
+          assertionFailure = true;
+        }
       }
     }
     
@@ -222,67 +229,12 @@ public class TestRMAppCertificateManager {
     
   }
   
-  // This Manager is used by Remote test. The difference is that this mock
-  // does not load any trust store, as normally it would be the same as the Host trust store
-  private class MockRMAppCertificateManagerNoTrustStore extends RMAppCertificateManager {
-  
-    public MockRMAppCertificateManagerNoTrustStore(RMContext rmContext, Configuration conf) throws Exception {
-      super(rmContext, conf);
-    }
-  
-    @Override
-    protected void generateCertificate(ApplicationId applicationId, String appUser) {
-      boolean exceptionThrown = false;
-      ByteArrayInputStream bio = null;
-      try {
-        KeyPair keyPair = generateKeyPair();
-        // Generate CSR
-        PKCS10CertificationRequest csr = generateKeysAndCSR(applicationId, appUser, keyPair);
-      
-        assertEquals(appUser, extractCNFromSubject(csr.getSubject().toString()));
-        assertEquals(applicationId.toString(), extractOFromSubject(csr.getSubject().toString()));
-      
-        // Sign CSR
-        X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
-        signedCertificate.checkValidity();
-      
-        RMAppCertificateActions actor = getRmAppCertificateActions();
-        if (actor instanceof TestingRMAppCertificateActions) {
-          X509Certificate caCert = ((TestingRMAppCertificateActions) actor).getCaCert();
-          signedCertificate.verify(caCert.getPublicKey(), "BC");
-        }
-        KeyStore appKeystore = createApplicationKeyStore(signedCertificate, keyPair.getPrivate(), appUser);
-        X509Certificate extractedCert = (X509Certificate) appKeystore.getCertificate(appUser);
-      
-        if (actor instanceof TestingRMAppCertificateActions) {
-          X509Certificate caCert = ((TestingRMAppCertificateActions) actor).getCaCert();
-          extractedCert.verify(caCert.getPublicKey(), "BC");
-        }
-        assertEquals(appUser, extractCNFromSubject(extractedCert.getSubjectX500Principal().getName()));
-        assertEquals(applicationId.toString(), extractOFromSubject(extractedCert.getSubjectX500Principal().getName()));
-      
-        getRmContext().getDispatcher().getEventHandler().handle(new RMAppEvent(applicationId, RMAppEventType.START));
-      } catch (Exception ex) {
-        LOG.error(ex, ex);
-        exceptionThrown = true;
-      } finally {
-        if (bio != null) {
-          try {
-            bio.close();
-          } catch (IOException ex) {
-            // Ignore
-          }
-        }
-      }
-      assertFalse(exceptionThrown);
-    }
-  }
-  
   private class MockRMAppCertificateManager extends RMAppCertificateManager {
+    private final boolean loadTrustStore;
   
-    public MockRMAppCertificateManager(RMContext rmContext,
-        Configuration conf) throws Exception {
+    public MockRMAppCertificateManager(RMContext rmContext, Configuration conf, boolean loadTrustStore) throws Exception {
       super(rmContext, conf);
+      this.loadTrustStore = loadTrustStore;
     }
   
     @Override
@@ -307,9 +259,23 @@ public class TestRMAppCertificateManager {
           signedCertificate.verify(caCert.getPublicKey(), "BC");
         }
         
-        loadTrustStore(conf);
-        KeyStore appKeystore = createApplicationKeyStore(signedCertificate, keyPair.getPrivate(), appUser);
-        X509Certificate extractedCert = (X509Certificate) appKeystore.getCertificate(appUser);
+        byte[] rawTrustStore = null;
+        if (loadTrustStore) {
+          rawTrustStore = loadRawTrustStore(conf);
+        }
+        KeyStoreWrapper appKeystoreWrapper = createApplicationKeyStore(signedCertificate, keyPair.getPrivate(),
+            appUser, applicationId);
+        X509Certificate extractedCert = (X509Certificate) appKeystoreWrapper.getKeystore().getCertificate(appUser);
+        byte[] rawKeystore = appKeystoreWrapper.getRawKeyStore();
+        assertNotNull(rawKeystore);
+        assertNotEquals(0, rawKeystore.length);
+        String systemTMP = System.getProperty("java.io.tmpdir");
+        File keystoreFile = Paths.get(systemTMP, appUser + "-" + applicationId.toString() + "_kstore.jks").toFile();
+        // Keystore should have been deleted
+        assertFalse(keystoreFile.exists());
+        char[] password = appKeystoreWrapper.getPassword();
+        assertNotNull(password);
+        assertNotEquals(0, password.length);
         
         if (actor instanceof TestingRMAppCertificateActions) {
           X509Certificate caCert = ((TestingRMAppCertificateActions) actor).getCaCert();
@@ -317,8 +283,10 @@ public class TestRMAppCertificateManager {
         }
         assertEquals(appUser, extractCNFromSubject(extractedCert.getSubjectX500Principal().getName()));
         assertEquals(applicationId.toString(), extractOFromSubject(extractedCert.getSubjectX500Principal().getName()));
-        
-        getRmContext().getDispatcher().getEventHandler().handle(new RMAppEvent(applicationId, RMAppEventType.START));
+  
+        RMAppStartWithCertificateEvent startEvent = new RMAppStartWithCertificateEvent(applicationId,
+            rawKeystore, password, rawTrustStore, password);
+        getRmContext().getDispatcher().getEventHandler().handle(startEvent);
       } catch (Exception ex) {
         LOG.error(ex, ex);
         exceptionThrown = true;

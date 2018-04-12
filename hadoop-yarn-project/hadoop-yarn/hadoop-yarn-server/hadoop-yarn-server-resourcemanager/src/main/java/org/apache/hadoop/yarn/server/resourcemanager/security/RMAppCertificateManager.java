@@ -18,6 +18,8 @@
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.io.FileUtils;
+import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -29,6 +31,7 @@ import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppStartWithCertificateEvent;
 import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
@@ -40,17 +43,19 @@ import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.pkcs.PKCS10CertificationRequestBuilder;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequestBuilder;
 
-import java.io.FileInputStream;
+import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
 import java.security.KeyStore;
 import java.security.PrivateKey;
+import java.security.SecureRandom;
 import java.security.Security;
-import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.concurrent.ExecutionException;
 
@@ -67,6 +72,8 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   private final CertificateLocalizationService certificateLocalizationService;
   private final KeyPairGenerator keyPairGenerator;
   private final RMAppCertificateActions rmAppCertificateActions;
+  private final SecureRandom rng;
+  private final String TMP = System.getProperty("java.io.tmpdir");
   
   public RMAppCertificateManager(RMContext rmContext, Configuration conf) throws Exception {
     Security.addProvider(new BouncyCastleProvider());
@@ -77,6 +84,20 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
     keyPairGenerator.initialize(KEY_SIZE);
     rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance(conf).getActor();
+    rng = new SecureRandom();
+  }
+  
+  @Override
+  public void handle(RMAppCertificateManagerEvent event) {
+    ApplicationId applicationId = event.getApplicationId();
+    LOG.info("Processing event type: " + event.getType() + " for application: " + applicationId);
+    if (event.getType().equals(RMAppCertificateManagerEventType.GENERATE_CERTIFICATE)) {
+      generateCertificate(applicationId, event.getApplicationUser());
+    } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE)) {
+      revokeCertificate(applicationId, event.getApplicationUser());
+    } else {
+      LOG.warn("Unknown event type " + event.getType());
+    }
   }
   
   @VisibleForTesting
@@ -98,13 +119,19 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
         PKCS10CertificationRequest csr = generateKeysAndCSR(appId, appUser, keyPair);
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
   
-        // TODO(Antonis): Construct keystore and truststore
-        KeyStore trustStore = loadTrustStore(conf);
-        KeyStore keyStore = createApplicationKeyStore(signedCertificate, keyPair.getPrivate(), appUser);
-  
+        byte[] rawTrustStore = loadRawTrustStore(conf);
+        KeyStoreWrapper keyStoreWrapper = createApplicationKeyStore(signedCertificate, keyPair.getPrivate(), appUser,
+            appId);
+        byte[] rawProtectedKeyStore = keyStoreWrapper.getRawKeyStore();
+        
         // TODO(Antonis): Send them along with the START event
+        handler.handle(new RMAppStartWithCertificateEvent(
+            appId,
+            rawProtectedKeyStore, keyStoreWrapper.password,
+            rawTrustStore, keyStoreWrapper.password));
+      } else {
+        handler.handle(new RMAppEvent(appId, RMAppEventType.START));
       }
-      handler.handle(new RMAppEvent(appId, RMAppEventType.START));
     } catch (Exception ex) {
       LOG.error("Error while generating certificate for application " + appId);
       handler.handle(new RMAppEvent(appId, RMAppEventType.KILL, "Error while generating application certificate"));
@@ -126,40 +153,31 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     return createCSR(subject, keyPair);
   }
   
-  protected KeyStore loadTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
+  protected byte[] loadRawTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
     String sslConfName = conf.get(SSLFactory.SSL_SERVER_CONF_KEY, "ssl-server.xml");
     Configuration sslConf = new Configuration();
     sslConf.addResource(sslConfName);
     String trustStoreLocation = sslConf.get(
         FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
             FileBasedKeyStoresFactory.SSL_TRUSTSTORE_LOCATION_TPL_KEY));
-    String trustStoreType = sslConf.get(
-        FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
-            FileBasedKeyStoresFactory.SSL_TRUSTSTORE_TYPE_TPL_KEY),
-        FileBasedKeyStoresFactory.DEFAULT_KEYSTORE_TYPE);
-    String trustStorePassword = sslConf.get(
-        FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
-            FileBasedKeyStoresFactory.SSL_TRUSTSTORE_PASSWORD_TPL_KEY));
-    /*String trustStoreLocation = "/tmp/tstore.jks";
-    String trustStorePassword = "R0AMHDYWZ360PGNX94QCFHEH72D2NIZ51QQOY8OKOII4W2J239GIVHSJWXZ0BI8H";
-    String trustStoreType = "JKS";*/
-    KeyStore trustStore = KeyStore.getInstance(trustStoreType);
-    try (FileInputStream in = new FileInputStream(trustStoreLocation)) {
-      trustStore.load(in, trustStorePassword.toCharArray());
-    }
-    return trustStore;
+    return Files.readAllBytes(Paths.get(trustStoreLocation));
   }
   
-  protected KeyStore createApplicationKeyStore(X509Certificate certificate, PrivateKey privateKey, String appUser)
+  protected KeyStoreWrapper createApplicationKeyStore(X509Certificate certificate, PrivateKey privateKey,
+      String appUser, ApplicationId appId)
     throws GeneralSecurityException, IOException {
     KeyStore keyStore = KeyStore.getInstance("JKS");
     keyStore.load(null, null);
     X509Certificate[] chain = new X509Certificate[1];
     chain[0] = certificate;
-    keyStore.setKeyEntry(appUser, privateKey, "pass".toCharArray(), chain);
+    char[] password = RandomStringUtils.random(20, 0, 0, true, true, null, rng)
+        .toCharArray();
     
-    //keyStore.store(new FileOutputStream("/tmp/kstore.jks"), "pass".toCharArray());
-    return keyStore;
+    // TODO (Antonis) Remove it !!!
+    LOG.info("Password is: " + String.valueOf(password));
+    keyStore.setKeyEntry(appUser, privateKey, password, chain);
+    
+    return new KeyStoreWrapper(keyStore, password, appUser, appId);
   }
   
   protected KeyPair generateKeyPair() {
@@ -195,16 +213,35 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     }
   }
   
-  @Override
-  public void handle(RMAppCertificateManagerEvent event) {
-    ApplicationId applicationId = event.getApplicationId();
-    LOG.info("Processing event type: " + event.getType() + " for application: " + applicationId);
-    if (event.getType().equals(RMAppCertificateManagerEventType.GENERATE_CERTIFICATE)) {
-      generateCertificate(applicationId, event.getApplicationUser());
-    } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE)) {
-      revokeCertificate(applicationId, event.getApplicationUser());
-    } else {
-      LOG.warn("Unknown event type " + event.getType());
+  protected class KeyStoreWrapper {
+    private final KeyStore keystore;
+    private final char[] password;
+    private final String appUser;
+    private final ApplicationId appId;
+    
+    private KeyStoreWrapper(KeyStore keyStore, char[] password, String appUser, ApplicationId appId) {
+      this.keystore = keyStore;
+      this.password = password;
+      this.appUser = appUser;
+      this.appId = appId;
+    }
+    
+    protected KeyStore getKeystore() {
+      return keystore;
+    }
+    
+    protected char[] getPassword() {
+      return password;
+    }
+    
+    protected byte[] getRawKeyStore() throws GeneralSecurityException, IOException {
+      File target = Paths.get(TMP, appUser + "-" + appId.toString() + "_kstore.jks").toFile();
+      try (FileOutputStream targetStream = new FileOutputStream(target, false)) {
+        keystore.store(targetStream, password);
+      }
+      byte[] rawKeystore = Files.readAllBytes(target.toPath());
+      FileUtils.deleteQuietly(target);
+      return rawKeystore;
     }
   }
 }

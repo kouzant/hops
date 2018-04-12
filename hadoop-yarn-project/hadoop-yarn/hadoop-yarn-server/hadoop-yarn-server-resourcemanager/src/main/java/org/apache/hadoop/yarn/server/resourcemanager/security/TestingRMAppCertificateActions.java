@@ -94,7 +94,7 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions {
         .addExtension(Extension.authorityKeyIdentifier, false, extensionUtils.createAuthorityKeyIdentifier(caCert))
         .addExtension(Extension.subjectKeyIdentifier, false, extensionUtils
             .createSubjectKeyIdentifier(jcaRequest.getPublicKey()))
-        .addExtension(Extension.basicConstraints, true, new BasicConstraints(0))
+        .addExtension(Extension.basicConstraints, true, new BasicConstraints(false))
         .addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
     
     return new JcaX509CertificateConverter().setProvider("BC")
