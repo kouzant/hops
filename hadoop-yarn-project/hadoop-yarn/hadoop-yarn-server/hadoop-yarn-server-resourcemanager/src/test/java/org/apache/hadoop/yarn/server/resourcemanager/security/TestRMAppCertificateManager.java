@@ -22,6 +22,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.yarn.MockApps;
@@ -55,6 +56,7 @@ import static org.junit.Assert.assertNotNull;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -66,6 +68,8 @@ import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.util.Arrays;
+import java.util.Enumeration;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -231,10 +235,22 @@ public class TestRMAppCertificateManager {
   
   private class MockRMAppCertificateManager extends RMAppCertificateManager {
     private final boolean loadTrustStore;
+    private final String systemTMP;
   
     public MockRMAppCertificateManager(RMContext rmContext, Configuration conf, boolean loadTrustStore) throws Exception {
       super(rmContext, conf);
       this.loadTrustStore = loadTrustStore;
+      systemTMP = System.getProperty("java.io.tmpdir");
+    }
+  
+    @Override
+    protected KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
+      if (loadTrustStore) {
+        return super.loadSystemTrustStore(conf);
+      }
+      KeyStore emptyTrustStore = KeyStore.getInstance("JKS");
+      emptyTrustStore.load(null, null);
+      return emptyTrustStore;
     }
   
     @Override
@@ -259,23 +275,29 @@ public class TestRMAppCertificateManager {
           signedCertificate.verify(caCert.getPublicKey(), "BC");
         }
         
-        byte[] rawTrustStore = null;
-        if (loadTrustStore) {
-          rawTrustStore = loadRawTrustStore(conf);
-        }
-        KeyStoreWrapper appKeystoreWrapper = createApplicationKeyStore(signedCertificate, keyPair.getPrivate(),
+        KeyStoresWrapper appKeystoreWrapper = createApplicationStores(signedCertificate, keyPair.getPrivate(),
             appUser, applicationId);
         X509Certificate extractedCert = (X509Certificate) appKeystoreWrapper.getKeystore().getCertificate(appUser);
-        byte[] rawKeystore = appKeystoreWrapper.getRawKeyStore();
+        byte[] rawKeystore = appKeystoreWrapper.getRawKeyStore(TYPE.KEYSTORE);
         assertNotNull(rawKeystore);
         assertNotEquals(0, rawKeystore.length);
-        String systemTMP = System.getProperty("java.io.tmpdir");
+        
         File keystoreFile = Paths.get(systemTMP, appUser + "-" + applicationId.toString() + "_kstore.jks").toFile();
         // Keystore should have been deleted
         assertFalse(keystoreFile.exists());
-        char[] password = appKeystoreWrapper.getPassword();
-        assertNotNull(password);
-        assertNotEquals(0, password.length);
+        char[] keyStorePassword = appKeystoreWrapper.getKeyStorePassword();
+        assertNotNull(keyStorePassword);
+        assertNotEquals(0, keyStorePassword.length);
+        
+        byte[] rawTrustStore = appKeystoreWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
+        File trustStoreFile = Paths.get(systemTMP, appUser + "-" + applicationId.toString() + "_tstore.jks").toFile();
+        // Truststore should have been deleted
+        assertFalse(trustStoreFile.exists());
+        char[] trustStorePassword = appKeystoreWrapper.getTrustStorePassword();
+        assertNotNull(trustStorePassword);
+        assertNotEquals(0, trustStorePassword.length);
+        
+        verifyContentOfAppTrustStore(rawTrustStore, trustStorePassword, appUser, applicationId);
         
         if (actor instanceof TestingRMAppCertificateActions) {
           X509Certificate caCert = ((TestingRMAppCertificateActions) actor).getCaCert();
@@ -285,7 +307,7 @@ public class TestRMAppCertificateManager {
         assertEquals(applicationId.toString(), extractOFromSubject(extractedCert.getSubjectX500Principal().getName()));
   
         RMAppStartWithCertificateEvent startEvent = new RMAppStartWithCertificateEvent(applicationId,
-            rawKeystore, password, rawTrustStore, password);
+            rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword);
         getRmContext().getDispatcher().getEventHandler().handle(startEvent);
       } catch (Exception ex) {
         LOG.error(ex, ex);
@@ -300,6 +322,42 @@ public class TestRMAppCertificateManager {
         }
       }
       assertFalse(exceptionThrown);
+    }
+    
+    private void verifyContentOfAppTrustStore(byte[] appTrustStore, char[] password, String appUser,
+        ApplicationId appId)
+        throws GeneralSecurityException, IOException {
+      File trustStoreFile = Paths.get(systemTMP, appUser + "-" + appId.toString() + "_tstore.jks").toFile();
+      boolean certificateMissing = false;
+      
+      try {
+        KeyStore systemTrustStore = loadSystemTrustStore(conf);
+        FileUtils.writeByteArrayToFile(trustStoreFile, appTrustStore, false);
+        KeyStore ts = KeyStore.getInstance("JKS");
+        try (FileInputStream fis = new FileInputStream(trustStoreFile)) {
+          ts.load(fis, password);
+        }
+  
+        Enumeration<String> sysAliases = systemTrustStore.aliases();
+        while (sysAliases.hasMoreElements()) {
+          String alias = sysAliases.nextElement();
+          
+          X509Certificate appCert = (X509Certificate) ts.getCertificate(alias);
+          if (appCert == null) {
+            certificateMissing = true;
+            break;
+          }
+          
+          X509Certificate sysCert = (X509Certificate) systemTrustStore.getCertificate(alias);
+          if (!Arrays.equals(sysCert.getSignature(), appCert.getSignature())) {
+            certificateMissing = true;
+            break;
+          }
+        }
+      } finally {
+        FileUtils.deleteQuietly(trustStoreFile);
+        assertFalse(certificateMissing);
+      }
     }
   }
   
