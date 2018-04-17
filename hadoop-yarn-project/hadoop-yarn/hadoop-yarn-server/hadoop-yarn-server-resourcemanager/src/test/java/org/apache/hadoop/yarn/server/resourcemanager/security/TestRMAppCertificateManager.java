@@ -17,15 +17,18 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
+import io.hops.util.DBUtility;
+import io.hops.util.RMStorageFactory;
+import io.hops.util.YarnAPIStorageFactory;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
-import org.apache.hadoop.fs.FileUtil;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.yarn.MockApps;
+import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
@@ -33,6 +36,8 @@ import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPB
 import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
+import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
+import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
@@ -40,6 +45,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppStartWithCertificateEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.junit.After;
@@ -53,6 +59,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -70,6 +77,7 @@ import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -96,7 +104,11 @@ public class TestRMAppCertificateManager {
   @Before
   public void beforeTest() throws Exception {
     conf = new Configuration();
-    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
+    RMAppCertificateActionsFactory.getInstance(conf).clean();
+    RMStorageFactory.setConfiguration(conf);
+    YarnAPIStorageFactory.setConfiguration(conf);
+    DBUtility.InitializeDB();
+    //conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
     dispatcher = new DrainDispatcher();
     rmContext = new RMContextImpl(dispatcher, null, null, null, null, null, null, null, null);
     dispatcher.init(conf);
@@ -188,6 +200,39 @@ public class TestRMAppCertificateManager {
     eventHandler.verifyEvent();
   }
   
+  @Test
+  public void testApplicationSubmission() throws Exception {
+    RMAppCertificateActions testActor = new TestingRMAppCertificateActions(conf);
+    RMAppCertificateActionsFactory.getInstance(conf).register(testActor);
+    
+    MockRM rm  = new MyMockRM(conf);
+    rm.start();
+  
+    MockNM nm = new MockNM("127.0.0.1:8032", 15 * 1024, rm.getResourceTrackerService());
+    nm.registerNode();
+    
+    RMApp application = rm.submitApp(1024, "application1", "Phil",
+        new HashMap<ApplicationAccessType, String>(), false, "default", 2, null,
+        "MAPREDUCE", true, false);
+    
+    nm.nodeHeartbeat(true);
+    
+    assertNotNull(application);
+    byte[] keyStore = application.getKeyStore();
+    assertNotNull(keyStore);
+    assertNotEquals(0, keyStore.length);
+    char[] keyStorePassword = application.getKeyStorePassword();
+    assertNotNull(keyStorePassword);
+    assertNotEquals(0, keyStorePassword.length);
+    byte[] trustStore = application.getTrustStore();
+    assertNotNull(trustStore);
+    assertNotEquals(0, trustStore.length);
+    char[] trustStorePassword = application.getTrustStorePassword();
+    assertNotNull(trustStorePassword);
+    assertNotEquals(0, trustStorePassword.length);
+    rm.stop();
+  }
+  
   private RMApp createNewTestApplication(int appId) throws IOException {
     ApplicationId applicationID = MockApps.newAppID(appId);
     String user = MockApps.newUserName();
@@ -233,6 +278,18 @@ public class TestRMAppCertificateManager {
     
   }
   
+  private class MyMockRM extends MockRM {
+  
+    public MyMockRM(Configuration conf) {
+      super(conf);
+    }
+  
+    @Override
+    protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
+      return new MockRMAppCertificateManager(super.rmContext, super.getConfig(), false);
+    }
+  }
+  
   private class MockRMAppCertificateManager extends RMAppCertificateManager {
     private final boolean loadTrustStore;
     private final String systemTMP;
@@ -260,7 +317,7 @@ public class TestRMAppCertificateManager {
       try {
         KeyPair keyPair = generateKeyPair();
         // Generate CSR
-        PKCS10CertificationRequest csr = generateKeysAndCSR(applicationId, appUser, keyPair);
+        PKCS10CertificationRequest csr = generateCSR(applicationId, appUser, keyPair);
         
         assertEquals(appUser, extractCNFromSubject(csr.getSubject().toString()));
         assertEquals(applicationId.toString(), extractOFromSubject(csr.getSubject().toString()));

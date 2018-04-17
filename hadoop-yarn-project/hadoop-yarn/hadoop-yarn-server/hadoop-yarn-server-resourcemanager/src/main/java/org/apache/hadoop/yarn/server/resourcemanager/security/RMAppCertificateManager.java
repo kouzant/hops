@@ -118,7 +118,7 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
       if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
         KeyPair keyPair = generateKeyPair();
-        PKCS10CertificationRequest csr = generateKeysAndCSR(appId, appUser, keyPair);
+        PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair);
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
         
         KeyStoresWrapper keyStoresWrapper = createApplicationStores(signedCertificate, keyPair.getPrivate(), appUser,
@@ -146,7 +146,7 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   }
   
   // Scope is protected to ease testing
-  protected PKCS10CertificationRequest generateKeysAndCSR(ApplicationId appId, String applicationUser, KeyPair keyPair)
+  protected PKCS10CertificationRequest generateCSR(ApplicationId appId, String applicationUser, KeyPair keyPair)
       throws OperatorCreationException {
     LOG.info("Generating certificate for application: " + appId);
     // Create X500 subject CN=USER, O=APPLICATION_ID

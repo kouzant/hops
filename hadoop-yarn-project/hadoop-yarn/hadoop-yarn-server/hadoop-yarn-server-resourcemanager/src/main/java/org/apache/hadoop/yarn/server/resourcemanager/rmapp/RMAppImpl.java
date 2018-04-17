@@ -1864,4 +1864,24 @@ public class RMAppImpl implements RMApp, Recoverable {
     rmContext.getRMApplicationHistoryWriter().applicationStarted(this);
     rmContext.getSystemMetricsPublisher().appCreated(this, this.startTime);
   }
+  
+  @Override
+  public byte[] getKeyStore() {
+    return keyStore;
+  }
+  
+  @Override
+  public char[] getKeyStorePassword() {
+    return keyStorePassword;
+  }
+  
+  @Override
+  public byte[] getTrustStore() {
+    return trustStore;
+  }
+  
+  @Override
+  public char[] getTrustStorePassword() {
+    return trustStorePassword;
+  }
 }
