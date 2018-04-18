@@ -208,10 +208,10 @@ public class RMAppImpl implements RMApp, Recoverable {
      // Transitions from NEW state
     .addTransition(RMAppState.NEW, RMAppState.NEW,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
-      
-    .addTransition(RMAppState.NEW, RMAppState.GENERATING_CERTS,
-        RMAppEventType.GENERATE_CERTS, new RMAppGeneratingCertsTransition())
-      
+    .addTransition(RMAppState.NEW, RMAppState.NEW_SAVING,
+        RMAppEventType.START, new RMAppNewlySavingTransition())
+     
+     // TODO(Antonis): Recover to GENERATING_CERTS state
     .addTransition(RMAppState.NEW, EnumSet.of(RMAppState.SUBMITTED,
             RMAppState.ACCEPTED, RMAppState.FINISHED, RMAppState.FAILED,
             RMAppState.KILLED, RMAppState.FINAL_SAVING),
@@ -223,21 +223,12 @@ public class RMAppImpl implements RMApp, Recoverable {
         new FinalSavingTransition(new AppRejectedTransition(),
           RMAppState.FAILED))
       
-    // Transitions from GENERATING_CERTS
-    .addTransition(RMAppState.GENERATING_CERTS, RMAppState.NEW_SAVING,
-          RMAppEventType.START, new RMAppNewlySavingTransition())
-    .addTransition(RMAppState.GENERATING_CERTS, RMAppState.FINAL_SAVING,
-        RMAppEventType.KILL, new FinalSavingTransition(
-            new AppKilledTransition(), RMAppState.KILLED))
-    .addTransition(RMAppState.GENERATING_CERTS, RMAppState.GENERATING_CERTS,
-        RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
-      
     // Transitions from NEW_SAVING state
     .addTransition(RMAppState.NEW_SAVING, RMAppState.NEW_SAVING,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
       
-    .addTransition(RMAppState.NEW_SAVING, RMAppState.SUBMITTED,
-        RMAppEventType.APP_NEW_SAVED, new AddApplicationToSchedulerTransition())
+    .addTransition(RMAppState.NEW_SAVING, RMAppState.GENERATING_CERTS,
+        RMAppEventType.APP_NEW_SAVED, new RMAppGeneratingCertsTransition())
       
     .addTransition(RMAppState.NEW_SAVING, RMAppState.FINAL_SAVING,
         RMAppEventType.KILL,
@@ -251,7 +242,16 @@ public class RMAppImpl implements RMApp, Recoverable {
       
     .addTransition(RMAppState.NEW_SAVING, RMAppState.NEW_SAVING,
         RMAppEventType.MOVE, new RMAppMoveTransition())
-
+      
+     // Transitions from GENERATING_CERTS state
+     .addTransition(RMAppState.GENERATING_CERTS, RMAppState.GENERATING_CERTS,
+         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
+     .addTransition(RMAppState.GENERATING_CERTS, RMAppState.SUBMITTED,
+         RMAppEventType.CERTS_GENERATED, new AddApplicationToSchedulerTransition())
+     .addTransition(RMAppState.GENERATING_CERTS, RMAppState.FINAL_SAVING,
+         RMAppEventType.KILL, new FinalSavingTransition(
+             new AppKilledTransition(), RMAppState.KILLED))
+      
      // Transitions from SUBMITTED state
     .addTransition(RMAppState.SUBMITTED, RMAppState.SUBMITTED,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())

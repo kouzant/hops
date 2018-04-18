@@ -299,10 +299,8 @@ public class RMAppManager implements EventHandler<RMAppManagerEvent>,
         // Dispatcher is not yet started at this time, so these START events
         // enqueued should be guaranteed to be first processed when dispatcher
         // gets started.
-        /*this.rmContext.getDispatcher().getEventHandler()
-            .handle(new RMAppEvent(applicationId, RMAppEventType.START));*/
         this.rmContext.getDispatcher().getEventHandler()
-            .handle(new RMAppEvent(applicationId, RMAppEventType.GENERATE_CERTS));
+            .handle(new RMAppEvent(applicationId, RMAppEventType.START));
       }
     } catch (Exception e) {
       LOG.warn("Unable to parse credentials.", e);

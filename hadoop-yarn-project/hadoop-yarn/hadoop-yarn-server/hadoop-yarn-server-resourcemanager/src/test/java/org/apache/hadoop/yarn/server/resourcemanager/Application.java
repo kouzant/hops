@@ -170,10 +170,7 @@ public class Application {
     
     resourceManager.getClientRMService().submitApplication(request);
 
-    RMAppEvent event = new RMAppEvent(this.applicationId, RMAppEventType.GENERATE_CERTS);
-    resourceManager.getRMContext().getRMApps().get(applicationId).handle(event);
-    event =
-        new RMAppEvent(this.applicationId, RMAppEventType.START);
+    RMAppEvent event = new RMAppEvent(this.applicationId, RMAppEventType.START);
     resourceManager.getRMContext().getRMApps().get(applicationId).handle(event);
     event =
         new RMAppEvent(this.applicationId, RMAppEventType.APP_NEW_SAVED);

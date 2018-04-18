@@ -56,9 +56,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateActionsFactory;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAppManagerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAppManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
@@ -85,7 +82,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSec
 import org.apache.hadoop.yarn.server.resourcemanager.security.DelegationTokenRenewer;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
-import org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.Records;
 import org.junit.Assert;
@@ -243,10 +239,6 @@ public class TestRMAppTransitions {
     schedulerDispatcher = new TestSchedulerEventDispatcher();
     rmDispatcher.register(SchedulerEventType.class,
         schedulerDispatcher);
-  
-    RMAppCertificateActionsFactory.getInstance(conf).register(new TestingRMAppCertificateActions(conf));
-    rmDispatcher.register(RMAppCertificateManagerEventType.class,
-        new RMAppCertificateManager(rmContext, conf));
     
     rmDispatcher.init(conf);
     rmDispatcher.start();
@@ -376,20 +368,13 @@ public class TestRMAppTransitions {
     rmDispatcher.await();
   }
 
-  protected RMApp testCreateAppGenerateCerts(ApplicationSubmissionContext submissionContext) throws IOException {
-    RMApp application = createNewTestApp(submissionContext);
-    // NEW => GENERATING_CERTS
-    RMAppEvent event = new RMAppEvent(application.getApplicationId(), RMAppEventType.GENERATE_CERTS);
-    application.handle(event);
-    assertAppState(RMAppState.GENERATING_CERTS, application);
-    return application;
-  }
-  
   protected RMApp testCreateAppNewSaving(
       ApplicationSubmissionContext submissionContext) throws IOException {
-    RMApp application = testCreateAppGenerateCerts(submissionContext);
-    // GENERATING_CERTS => NEW_SAVING event RMAppEventType.START will be sent by RMAppCertificateManager
-    rmDispatcher.await();
+    RMApp application = createNewTestApp(submissionContext);
+    // NEW => NEW_SAVING event RMAppEventType.START
+    RMAppEvent event = 
+        new RMAppEvent(application.getApplicationId(), RMAppEventType.START);
+    application.handle(event);
     assertStartTimeSet(application);
     assertAppState(RMAppState.NEW_SAVING, application);
     // verify sendATSCreateEvent() is not get called during
@@ -585,21 +570,6 @@ public class TestRMAppTransitions {
     verifyAppRemovedSchedulerEvent(RMAppState.KILLED);
   }
 
-  @Test
-  public void testAppGeneratingCertsKill() throws IOException {
-    LOG.info("--- START: testAppGeneratingCertsKill ---");
-    RMApp application = testCreateAppGenerateCerts(null);
-    // GENERATING_CERTS => FINAL_SAVING event RMAppEventType.KILL
-    RMAppEvent event = new RMAppEvent(application.getApplicationId(), RMAppEventType.KILL,
-        "Application killed by user.");
-    application.handle(event);
-    rmDispatcher.await();
-    sendAppUpdateSavedEvent(application);
-    assertKilled(application);
-    verifyApplicationFinished(RMAppState.KILLED);
-    verifyAppRemovedSchedulerEvent(RMAppState.KILLED);
-  }
-  
   @Test
   public void testAppNewReject() throws IOException {
     LOG.info("--- START: testAppNewReject ---");

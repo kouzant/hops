@@ -20,12 +20,13 @@ package org.apache.hadoop.yarn.server.resourcemanager.rmapp;
 
 public enum RMAppEventType {
   // Source: ClientRMService
-  GENERATE_CERTS,
   START,
   RECOVER,
   KILL,
   MOVE, // Move app to a new queue
 
+  CERTS_GENERATED,
+  
   // Source: Scheduler and RMAppManager
   APP_REJECTED,
 
