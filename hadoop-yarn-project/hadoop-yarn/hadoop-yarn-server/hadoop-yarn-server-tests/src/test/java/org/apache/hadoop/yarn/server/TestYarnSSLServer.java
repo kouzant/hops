@@ -67,7 +67,7 @@ public class TestYarnSSLServer extends HopsSSLTestUtils {
     public TestYarnSSLServer(CERT_ERR error_mode) {
         super.error_mode = error_mode;
     }
-
+    
     @Before
     public void setUp() throws Exception {
         LOG.debug("Error mode: " + error_mode.name());
