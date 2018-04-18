@@ -24,7 +24,6 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.yarn.MockApps;
@@ -44,8 +43,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppStartWithCertificateEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppCertificateGeneratedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.junit.After;
@@ -156,7 +154,7 @@ public class TestRMAppCertificateManager {
     Configuration sslServerConf = createSSLConfig("", "", "", trustStore, password, "");
     saveConfig(sslServerFile.getAbsoluteFile(), sslServerConf);
     
-    MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.START);
+    MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.CERTS_GENERATED);
     rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
     
     MockRMAppCertificateManager manager = new MockRMAppCertificateManager(rmContext, conf, true);
@@ -265,8 +263,8 @@ public class TestRMAppCertificateManager {
         assertionFailure = true;
       } else if (!expectedEventType.equals(event.getType())) {
         assertionFailure = true;
-      } else if (event.getType().equals(RMAppEventType.START)) {
-        if (!(event instanceof RMAppStartWithCertificateEvent)) {
+      } else if (event.getType().equals(RMAppEventType.CERTS_GENERATED)) {
+        if (!(event instanceof RMAppCertificateGeneratedEvent)) {
           assertionFailure = true;
         }
       }
@@ -363,7 +361,7 @@ public class TestRMAppCertificateManager {
         assertEquals(appUser, extractCNFromSubject(extractedCert.getSubjectX500Principal().getName()));
         assertEquals(applicationId.toString(), extractOFromSubject(extractedCert.getSubjectX500Principal().getName()));
   
-        RMAppStartWithCertificateEvent startEvent = new RMAppStartWithCertificateEvent(applicationId,
+        RMAppCertificateGeneratedEvent startEvent = new RMAppCertificateGeneratedEvent(applicationId,
             rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword);
         getRmContext().getDispatcher().getEventHandler().handle(startEvent);
       } catch (Exception ex) {

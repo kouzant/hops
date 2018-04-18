@@ -19,15 +19,15 @@ package org.apache.hadoop.yarn.server.resourcemanager.rmapp;
 
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 
-public class RMAppStartWithCertificateEvent extends RMAppEvent {
+public class RMAppCertificateGeneratedEvent extends RMAppEvent {
   private final byte[] keyStore;
   private final char[] keyStorePassword;
   private final byte[] trustStore;
   private final char[] trustStorePassword;
   
-  public RMAppStartWithCertificateEvent(ApplicationId appId, byte[] keyStore, char[] keyStorePassword,
+  public RMAppCertificateGeneratedEvent(ApplicationId appId, byte[] keyStore, char[] keyStorePassword,
       byte[] trustStore, char[] trustStorePassword) {
-    super(appId, RMAppEventType.START);
+    super(appId, RMAppEventType.CERTS_GENERATED);
     this.keyStore = keyStore;
     this.keyStorePassword = keyStorePassword;
     this.trustStore = trustStore;

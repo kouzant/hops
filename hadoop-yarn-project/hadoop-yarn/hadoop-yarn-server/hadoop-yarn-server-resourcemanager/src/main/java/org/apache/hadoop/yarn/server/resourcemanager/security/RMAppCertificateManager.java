@@ -31,7 +31,7 @@ import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppStartWithCertificateEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppCertificateGeneratedEvent;
 import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
@@ -127,12 +127,12 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
         byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
         
         // TODO(Antonis): Send them along with the START event
-        handler.handle(new RMAppStartWithCertificateEvent(
+        handler.handle(new RMAppCertificateGeneratedEvent(
             appId,
             rawProtectedKeyStore, keyStoresWrapper.keyStorePassword,
             rawTrustStore, keyStoresWrapper.trustStorePassword));
       } else {
-        handler.handle(new RMAppEvent(appId, RMAppEventType.START));
+        handler.handle(new RMAppEvent(appId, RMAppEventType.CERTS_GENERATED));
       }
     } catch (Exception ex) {
       LOG.error("Error while generating certificate for application " + appId);

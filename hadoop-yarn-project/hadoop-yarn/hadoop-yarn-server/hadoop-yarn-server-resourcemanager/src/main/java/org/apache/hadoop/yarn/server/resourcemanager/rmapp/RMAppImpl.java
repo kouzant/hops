@@ -1066,10 +1066,21 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
   }
 
+  private void updateApplicationWithCryptoMaterial(RMAppCertificateGeneratedEvent event) {
+    keyStore = event.getKeyStore();
+    keyStorePassword = event.getKeyStorePassword();
+    trustStore = event.getTrustStore();
+    trustStorePassword = event.getTrustStorePassword();
+  }
+  
   private static final class AddApplicationToSchedulerTransition extends
       RMAppTransition {
     @Override
     public void transition(RMAppImpl app, RMAppEvent event) {
+      if (event instanceof RMAppCertificateGeneratedEvent) {
+        app.updateApplicationWithCryptoMaterial((RMAppCertificateGeneratedEvent) event);
+      }
+      
       app.handler.handle(new AppAddedSchedulerEvent(app.user,
           app.submissionContext, false));
       // send the ATS create Event
@@ -1141,13 +1152,6 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
     return msg;
   }
-
-  private void updateApplicationWithCryptoMaterial(RMAppStartWithCertificateEvent event) {
-    keyStore = event.getKeyStore();
-    keyStorePassword = event.getKeyStorePassword();
-    trustStore = event.getTrustStore();
-    trustStorePassword = event.getTrustStorePassword();
-  }
   
   private static final class RMAppNewlySavingTransition extends RMAppTransition {
     @Override
@@ -1157,10 +1161,6 @@ public class RMAppImpl implements RMApp, Recoverable {
       // non-blocking call so make sure that RM has stored the information
       // needed to restart the AM after RM restart without further client
       // communication
-      
-      if (event instanceof RMAppStartWithCertificateEvent) {
-        app.updateApplicationWithCryptoMaterial((RMAppStartWithCertificateEvent) event);
-      }
       
       LOG.info("Storing application with id " + app.applicationId);
       app.rmContext.getStateStore().storeNewApplication(app);

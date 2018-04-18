@@ -33,6 +33,7 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Random;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -109,6 +110,7 @@ public class TestRMAppTransitions {
   private SystemMetricsPublisher publisher;
   private YarnScheduler scheduler;
   private TestSchedulerEventDispatcher schedulerDispatcher;
+  private final Random rnd = new Random();
 
   // ignore all the RM application attempt events
   private static final class TestApplicationAttemptEventDispatcher implements
@@ -383,19 +385,46 @@ public class TestRMAppTransitions {
     return application;
   }
 
-  protected RMApp testCreateAppSubmittedNoRecovery(
-      ApplicationSubmissionContext submissionContext) throws IOException {
+  protected RMApp testCreateAppGeneratingCerts(ApplicationSubmissionContext submissionContext) throws IOException {
     RMApp application = testCreateAppNewSaving(submissionContext);
-    // NEW_SAVING => SUBMITTED event RMAppEventType.APP_NEW_SAVED
+    // NEW_SAVING => GENERATING_CERTS event RMAppEventType.APP_NEW_SAVED
     RMAppEvent event =
         new RMAppEvent(application.getApplicationId(),
-        RMAppEventType.APP_NEW_SAVED);
+            RMAppEventType.APP_NEW_SAVED);
     application.handle(event);
     assertStartTimeSet(application);
+    assertAppState(RMAppState.GENERATING_CERTS, application);
+    return application;
+  }
+  
+  protected RMApp testCreateAppSubmittedNoRecovery(
+      ApplicationSubmissionContext submissionContext) throws IOException {
+    RMApp application = testCreateAppGeneratingCerts(submissionContext);
+    // GENERATING_CERTS => SUBMITTED event RMAppEventType.CERTS_GENERATED
+    String cryptoPassword = "password";
+    char[] password = cryptoPassword.toCharArray();
+    byte[] keystore = new byte[256];
+    byte[] truststore = new byte[256];
+    rnd.nextBytes(keystore);
+    rnd.nextBytes(truststore);
+    RMAppEvent event = new RMAppCertificateGeneratedEvent(application.getApplicationId(),
+        keystore, password, truststore, password);
+    application.handle(event);
     assertAppState(RMAppState.SUBMITTED, application);
+    Assert.assertNotNull(application.getKeyStore());
+    Assert.assertNotEquals(0, application.getKeyStore().length);
+    Assert.assertNotNull(application.getTrustStore());
+    Assert.assertNotEquals(0, application.getTrustStore().length);
+    Assert.assertNotNull(application.getKeyStorePassword());
+    Assert.assertNotEquals(0, application.getKeyStorePassword().length);
+    Assert.assertTrue(Arrays.equals(password, application.getKeyStorePassword()));
+    Assert.assertNotNull(application.getTrustStorePassword());
+    Assert.assertNotEquals(0, application.getTrustStorePassword().length);
+    Assert.assertTrue(Arrays.equals(password, application.getTrustStorePassword()));
     // verify sendATSCreateEvent() is get called during
     // AddApplicationToSchedulerTransition.
     verify(publisher).appCreated(eq(application), anyLong());
+    
     return application;
   }
 
