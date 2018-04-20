@@ -68,25 +68,28 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   private final static String SIGNATURE_ALGORITHM = "SHA256withRSA";
   private final static int KEY_SIZE = 1024;
   
-  private final RMContext rmContext;
-  private final Configuration conf;
-  private final EventHandler handler;
-  private final CertificateLocalizationService certificateLocalizationService;
-  private final KeyPairGenerator keyPairGenerator;
-  private final RMAppCertificateActions rmAppCertificateActions;
+  private RMContext rmContext;
+  private Configuration conf;
+  private EventHandler handler;
+  private CertificateLocalizationService certificateLocalizationService;
+  private KeyPairGenerator keyPairGenerator;
+  private RMAppCertificateActions rmAppCertificateActions;
   private final SecureRandom rng;
   private final String TMP = System.getProperty("java.io.tmpdir");
   
-  public RMAppCertificateManager(RMContext rmContext, Configuration conf) throws Exception {
+  public RMAppCertificateManager() {
     Security.addProvider(new BouncyCastleProvider());
+    rng = new SecureRandom();
+  }
+  
+  public void init(RMContext rmContext, Configuration conf) throws Exception {
     this.rmContext = rmContext;
     this.conf = conf;
     this.handler = rmContext.getDispatcher().getEventHandler();
     this.certificateLocalizationService = rmContext.getCertificateLocalizationService();
+    rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance(conf).getActor();
     keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
     keyPairGenerator.initialize(KEY_SIZE);
-    rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance(conf).getActor();
-    rng = new SecureRandom();
   }
   
   @Override
@@ -113,7 +116,7 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   
   // Scope is protected to ease testing
   @SuppressWarnings("unchecked")
-  protected void generateCertificate(ApplicationId appId, String appUser) {
+  public void generateCertificate(ApplicationId appId, String appUser) {
     try {
       if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
@@ -126,7 +129,6 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
         byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
         byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
         
-        // TODO(Antonis): Send them along with the START event
         handler.handle(new RMAppCertificateGeneratedEvent(
             appId,
             rawProtectedKeyStore, keyStoresWrapper.keyStorePassword,
@@ -155,7 +157,8 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     return createCSR(subject, keyPair);
   }
   
-  protected KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
+  // Scope is
+  public KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
     String sslConfName = conf.get(SSLFactory.SSL_SERVER_CONF_KEY, "ssl-server.xml");
     Configuration sslConf = new Configuration();
     sslConf.addResource(sslConfName);
@@ -181,8 +184,7 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   protected KeyStoresWrapper createApplicationStores(X509Certificate certificate, PrivateKey privateKey,
       String appUser, ApplicationId appId)
       throws GeneralSecurityException, IOException {
-    char[] password = RandomStringUtils.random(20, 0, 0, true, true, null, rng)
-        .toCharArray();
+    char[] password = generateRandomPassword();
     // TODO (Antonis) Remove it !!!
     LOG.info("Password is: " + String.valueOf(password));
     
@@ -208,6 +210,11 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   
   protected KeyPair generateKeyPair() {
     return keyPairGenerator.genKeyPair();
+  }
+  
+  public char[] generateRandomPassword() {
+    return RandomStringUtils.random(20, 0, 0, true, true, null, rng)
+        .toCharArray();
   }
   
   private X500Name createX500Subject(ApplicationId appId, String applicationUser) {

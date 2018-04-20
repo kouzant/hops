@@ -157,7 +157,8 @@ public class TestRMAppCertificateManager {
     MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.CERTS_GENERATED);
     rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
     
-    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(rmContext, conf, true);
+    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(true);
+    manager.init(rmContext, conf);
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
@@ -171,7 +172,8 @@ public class TestRMAppCertificateManager {
   // Normally it should be ignored as it requires Hopsworks instance to be running
   @Test
   public void testSuccessfulCertificateCreationRemote() throws Exception {
-    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(rmContext, conf, false);
+    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(false);
+    manager.init(rmContext, conf);
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
@@ -189,7 +191,8 @@ public class TestRMAppCertificateManager {
     MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.KILL);
     rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
     
-    MockFailingRMAppCertificateManager manager = new MockFailingRMAppCertificateManager(rmContext, conf);
+    MockFailingRMAppCertificateManager manager = new MockFailingRMAppCertificateManager();
+    manager.init(rmContext, conf);
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
@@ -284,7 +287,9 @@ public class TestRMAppCertificateManager {
   
     @Override
     protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
-      return new MockRMAppCertificateManager(super.rmContext, super.getConfig(), false);
+      RMAppCertificateManager rmAppCertificateManager = new MockRMAppCertificateManager(false);
+      rmAppCertificateManager.init(super.rmContext, super.getConfig());
+      return rmAppCertificateManager;
     }
   }
   
@@ -292,14 +297,14 @@ public class TestRMAppCertificateManager {
     private final boolean loadTrustStore;
     private final String systemTMP;
   
-    public MockRMAppCertificateManager(RMContext rmContext, Configuration conf, boolean loadTrustStore) throws Exception {
-      super(rmContext, conf);
+    public MockRMAppCertificateManager(boolean loadTrustStore) throws Exception {
+      super();
       this.loadTrustStore = loadTrustStore;
       systemTMP = System.getProperty("java.io.tmpdir");
     }
   
     @Override
-    protected KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
+    public KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
       if (loadTrustStore) {
         return super.loadSystemTrustStore(conf);
       }
@@ -309,7 +314,7 @@ public class TestRMAppCertificateManager {
     }
   
     @Override
-    protected void generateCertificate(ApplicationId applicationId, String appUser) {
+    public void generateCertificate(ApplicationId applicationId, String appUser) {
       boolean exceptionThrown = false;
       ByteArrayInputStream bio = null;
       try {
@@ -434,12 +439,12 @@ public class TestRMAppCertificateManager {
   
   private class MockFailingRMAppCertificateManager extends RMAppCertificateManager {
   
-    public MockFailingRMAppCertificateManager(RMContext rmContext, Configuration conf) throws Exception {
-      super(rmContext, conf);
+    public MockFailingRMAppCertificateManager() {
+      super();
     }
   
     @Override
-    protected void generateCertificate(ApplicationId appId, String appUser) {
+    public void generateCertificate(ApplicationId appId, String appUser) {
       getRmContext().getDispatcher().getEventHandler().handle(new RMAppEvent(appId, RMAppEventType.KILL));
     }
   }

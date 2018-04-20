@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.rmapp;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
+import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
@@ -27,9 +28,12 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Map;
@@ -38,6 +42,7 @@ import java.util.Random;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.security.Credentials;
@@ -82,7 +87,11 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.AMRMTokenSecretMan
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.DelegationTokenRenewer;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateActionsFactory;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.Records;
 import org.junit.Assert;
@@ -92,6 +101,7 @@ import org.junit.runner.RunWith;
 import org.junit.runners.Parameterized;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Matchers;
+import org.mockito.Mock;
 
 
 @RunWith(value = Parameterized.class)
@@ -110,7 +120,8 @@ public class TestRMAppTransitions {
   private SystemMetricsPublisher publisher;
   private YarnScheduler scheduler;
   private TestSchedulerEventDispatcher schedulerDispatcher;
-  private final Random rnd = new Random();
+  private RMAppCertificateManager rmAppCertificateManager;
+  private final char[] cryptoPassword = "password".toCharArray();
 
   // ignore all the RM application attempt events
   private static final class TestApplicationAttemptEventDispatcher implements
@@ -195,6 +206,7 @@ public class TestRMAppTransitions {
   @Before
   public void setUp() throws Exception {
     conf = new YarnConfiguration();
+    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
     AuthenticationMethod authMethod = AuthenticationMethod.SIMPLE;
     if (isSecurityEnabled) {
       authMethod = AuthenticationMethod.KERBEROS;
@@ -241,11 +253,25 @@ public class TestRMAppTransitions {
     schedulerDispatcher = new TestSchedulerEventDispatcher();
     rmDispatcher.register(SchedulerEventType.class,
         schedulerDispatcher);
+  
+    RMAppCertificateActionsFactory.getInstance(conf).register(new TestingRMAppCertificateActions(conf));
+    rmAppCertificateManager = spy(new RMAppCertificateManager());
+    rmAppCertificateManager.init(rmContext, conf);
+    when(rmAppCertificateManager.generateRandomPassword()).thenReturn(cryptoPassword);
+    doReturn(loadMockTrustStore()).when(rmAppCertificateManager).loadSystemTrustStore(any(Configuration.class));
+    
+    rmDispatcher.register(RMAppCertificateManagerEventType.class, rmAppCertificateManager);
     
     rmDispatcher.init(conf);
     rmDispatcher.start();
   }
 
+  private KeyStore loadMockTrustStore() throws IOException, GeneralSecurityException {
+    KeyStore trustStore = KeyStore.getInstance("JKS");
+    trustStore.load(null, null);
+    return trustStore;
+  }
+  
   protected RMApp createNewTestApp(ApplicationSubmissionContext submissionContext) throws IOException {
     ApplicationId applicationId = MockApps.newAppID(appId++);
     String user = MockApps.newUserName();
@@ -400,16 +426,9 @@ public class TestRMAppTransitions {
   protected RMApp testCreateAppSubmittedNoRecovery(
       ApplicationSubmissionContext submissionContext) throws IOException {
     RMApp application = testCreateAppGeneratingCerts(submissionContext);
-    // GENERATING_CERTS => SUBMITTED event RMAppEventType.CERTS_GENERATED
-    String cryptoPassword = "password";
-    char[] password = cryptoPassword.toCharArray();
-    byte[] keystore = new byte[256];
-    byte[] truststore = new byte[256];
-    rnd.nextBytes(keystore);
-    rnd.nextBytes(truststore);
-    RMAppEvent event = new RMAppCertificateGeneratedEvent(application.getApplicationId(),
-        keystore, password, truststore, password);
-    application.handle(event);
+    // GENERATING_CERTS => SUBMITTED event RMAppEventType.CERTS_GENERATED will be sent by RMAppCertificateManager
+    rmDispatcher.await();
+    verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()));
     assertAppState(RMAppState.SUBMITTED, application);
     Assert.assertNotNull(application.getKeyStore());
     Assert.assertNotEquals(0, application.getKeyStore().length);
@@ -417,10 +436,10 @@ public class TestRMAppTransitions {
     Assert.assertNotEquals(0, application.getTrustStore().length);
     Assert.assertNotNull(application.getKeyStorePassword());
     Assert.assertNotEquals(0, application.getKeyStorePassword().length);
-    Assert.assertTrue(Arrays.equals(password, application.getKeyStorePassword()));
+    Assert.assertTrue(Arrays.equals(cryptoPassword, application.getKeyStorePassword()));
     Assert.assertNotNull(application.getTrustStorePassword());
     Assert.assertNotEquals(0, application.getTrustStorePassword().length);
-    Assert.assertTrue(Arrays.equals(password, application.getTrustStorePassword()));
+    Assert.assertTrue(Arrays.equals(cryptoPassword, application.getTrustStorePassword()));
     // verify sendATSCreateEvent() is get called during
     // AddApplicationToSchedulerTransition.
     verify(publisher).appCreated(eq(application), anyLong());
