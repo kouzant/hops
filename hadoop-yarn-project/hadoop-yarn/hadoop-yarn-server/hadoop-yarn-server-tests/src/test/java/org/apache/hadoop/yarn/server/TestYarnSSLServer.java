@@ -73,9 +73,9 @@ public class TestYarnSSLServer extends HopsSSLTestUtils {
         LOG.debug("Error mode: " + error_mode.name());
 
         conf = new YarnConfiguration();
-        filesToPurge = prepareCryptoMaterial(conf, KeyStoreTestUtil
-            .getClasspathDir(TestYarnSSLServer.class));
-        setCryptoConfig(conf);
+        String classPathDir = KeyStoreTestUtil.getClasspathDir(TestYarnSSLServer.class);
+        filesToPurge = prepareCryptoMaterial(conf, classPathDir);
+        setCryptoConfig(conf, classPathDir);
 
         conf.setBoolean(YarnConfiguration.YARN_MINICLUSTER_FIXED_PORTS, true);
         conf.setBoolean(YarnConfiguration.YARN_MINICLUSTER_USE_RPC, true);

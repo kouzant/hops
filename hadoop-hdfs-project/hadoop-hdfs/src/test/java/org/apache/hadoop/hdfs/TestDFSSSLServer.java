@@ -50,8 +50,9 @@ public class TestDFSSSLServer extends HopsSSLTestUtils {
     @Before
     public void setUp() throws Exception {
         conf = new HdfsConfiguration();
-        filesToPurge = prepareCryptoMaterial(conf, KeyStoreTestUtil.getClasspathDir(TestDFSSSLServer.class));
-        setCryptoConfig(conf);
+        String classPathDir = KeyStoreTestUtil.getClasspathDir(TestDFSSSLServer.class);
+        filesToPurge = prepareCryptoMaterial(conf, classPathDir);
+        setCryptoConfig(conf, classPathDir);
 
         String testDataPath = System
                 .getProperty(MiniDFSCluster.PROP_TEST_BUILD_DATA, "build/test/data");
