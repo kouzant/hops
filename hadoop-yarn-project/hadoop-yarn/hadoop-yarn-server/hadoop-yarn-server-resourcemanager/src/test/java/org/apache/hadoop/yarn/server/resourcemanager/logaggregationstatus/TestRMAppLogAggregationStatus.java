@@ -498,6 +498,6 @@ public class TestRMAppLogAggregationStatus {
       scheduler,
       this.rmContext.getApplicationMasterService(),
       System.currentTimeMillis(), "test",
-      null, null, null, null, null, null);
+      null, null);
   }
 }

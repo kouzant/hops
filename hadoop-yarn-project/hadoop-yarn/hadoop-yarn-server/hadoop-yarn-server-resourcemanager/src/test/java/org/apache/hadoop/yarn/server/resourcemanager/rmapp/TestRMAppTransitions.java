@@ -293,7 +293,7 @@ public class TestRMAppTransitions {
 
     RMApp application = new RMAppImpl(applicationId, rmContext, conf, name,
         user, queue, submissionContext, scheduler, masterService,
-        System.currentTimeMillis(), "YARN", null, mock(ResourceRequest.class), null, null, null, null);
+        System.currentTimeMillis(), "YARN", null, mock(ResourceRequest.class));
 
     testAppStartState(applicationId, user, name, queue, application);
     this.rmContext.getRMApps().putIfAbsent(application.getApplicationId(),
@@ -1068,7 +1068,7 @@ public class TestRMAppTransitions {
             submissionContext.getApplicationTags(),
             BuilderUtils.newResourceRequest(
                 RMAppAttemptImpl.AM_CONTAINER_PRIORITY, ResourceRequest.ANY,
-                submissionContext.getResource(), 1), null, null, null, null);
+                submissionContext.getResource(), 1));
     Assert.assertEquals(RMAppState.NEW, application.getState());
 
     RMAppEvent recoverEvent =

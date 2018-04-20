@@ -244,8 +244,7 @@ public class TestRMAppCertificateManager {
     ApplicationSubmissionContext applicationSubmissionContext = new ApplicationSubmissionContextPBImpl();
     applicationSubmissionContext.setApplicationId(applicationID);
     RMApp app = new RMAppImpl(applicationID, rmContext, conf, name, user, queue, applicationSubmissionContext,
-        scheduler, appMasterService, System.currentTimeMillis(), "YARN", null, Mockito.mock(ResourceRequest.class),
-        null, null, null, null);
+        scheduler, appMasterService, System.currentTimeMillis(), "YARN", null, Mockito.mock(ResourceRequest.class));
     rmContext.getRMApps().put(applicationID, app);
     return app;
   }

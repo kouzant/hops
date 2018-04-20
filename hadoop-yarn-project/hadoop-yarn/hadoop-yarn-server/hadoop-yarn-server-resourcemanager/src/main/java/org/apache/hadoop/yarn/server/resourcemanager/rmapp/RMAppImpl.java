@@ -423,7 +423,7 @@ public class RMAppImpl implements RMApp, Recoverable {
       ApplicationSubmissionContext submissionContext, YarnScheduler scheduler,
       ApplicationMasterService masterService, long submitTime,
       String applicationType, Set<String> applicationTags, 
-      ResourceRequest amReq, ByteBuffer kstore, String kstorePass, ByteBuffer tstore, String tstorePass) throws
+      ResourceRequest amReq) throws
       IOException {
 
     this.systemClock = new SystemClock();
@@ -444,15 +444,6 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.applicationType = applicationType;
     this.applicationTags = applicationTags;
     this.amReq = amReq;
-    
-    /*if (config.getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-
-      // The certificates in the RM_certLoc directory don't have to be accessed by the
-      // "yarnapp" user, so we don't need to hide in the random userfolder directory
-      rmContext.getCertificateLocalizationService().
-          materializeCertificates(user, user, kstore, kstorePass, tstore, tstorePass);
-    }*/
     
     int globalMaxAppAttempts = conf.getInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
         YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
