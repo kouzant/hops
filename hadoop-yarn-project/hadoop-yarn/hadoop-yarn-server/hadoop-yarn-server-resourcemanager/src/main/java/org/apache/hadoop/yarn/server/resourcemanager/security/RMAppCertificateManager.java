@@ -100,6 +100,8 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
       generateCertificate(applicationId, event.getApplicationUser());
     } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE)) {
       revokeCertificate(applicationId, event.getApplicationUser());
+    } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE)) {
+      revokeAndGenerateCertificates(applicationId, event.getApplicationUser());
     } else {
       LOG.warn("Unknown event type " + event.getType());
     }
@@ -112,6 +114,11 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   
   protected RMContext getRmContext() {
     return rmContext;
+  }
+  
+  public void revokeAndGenerateCertificates(ApplicationId appId, String appUser) {
+    // TODO(Antonis): I should revoke here
+    generateCertificate(appId, appUser);
   }
   
   // Scope is protected to ease testing

@@ -70,6 +70,10 @@ message ApplicationStateDataProto {
     optional string diagnostics = 6 [default = "N/A"];
     optional int64 finish_time = 7;
     optional hadoop.common.RPCCallerContextProto caller_context = 8;
+    optional bytes key_store = 9;
+    optional string key_store_password = 10;
+    optional bytes trust_store = 11;
+    optional string trust_store_password = 12;
 }
 
 message ApplicationAttemptStateDataProto {

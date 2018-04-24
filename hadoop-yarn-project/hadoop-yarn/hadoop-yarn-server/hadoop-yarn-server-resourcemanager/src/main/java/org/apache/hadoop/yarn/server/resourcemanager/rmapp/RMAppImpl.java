@@ -211,8 +211,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     .addTransition(RMAppState.NEW, RMAppState.NEW_SAVING,
         RMAppEventType.START, new RMAppNewlySavingTransition())
      
-     // TODO(Antonis): Recover to GENERATING_CERTS state
-    .addTransition(RMAppState.NEW, EnumSet.of(RMAppState.SUBMITTED,
+    .addTransition(RMAppState.NEW, EnumSet.of(RMAppState.GENERATING_CERTS, RMAppState.SUBMITTED,
             RMAppState.ACCEPTED, RMAppState.FINISHED, RMAppState.FAILED,
             RMAppState.KILLED, RMAppState.FINAL_SAVING),
         RMAppEventType.RECOVER, new RMAppRecoveredTransition())
@@ -860,6 +859,10 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.storedFinishTime = appState.getFinishTime();
     this.startTime = appState.getStartTime();
     this.callerContext = appState.getCallerContext();
+    this.keyStore = appState.getKeyStore();
+    this.keyStorePassword = appState.getKeyStorePassword();
+    this.trustStore = appState.getTrustStore();
+    this.trustStorePassword = appState.getTrustStorePassword();
 
     // send the ATS create Event during RM recovery.
     // NOTE: it could be duplicated with events sent before RM get restarted.
@@ -1037,9 +1040,17 @@ public class RMAppImpl implements RMApp, Recoverable {
       // No existent attempts means the attempt associated with this app was not
       // started or started but not yet saved.
       if (app.attempts.isEmpty()) {
-        app.scheduler.handle(new AppAddedSchedulerEvent(app.user,
-            app.submissionContext, false));
-        return RMAppState.SUBMITTED;
+        
+        if (app.isCryptoMaterialPresent()) {
+          app.scheduler.handle(new AppAddedSchedulerEvent(app.user,
+              app.submissionContext, false));
+          return RMAppState.SUBMITTED;
+        } else {
+          RMAppCertificateManagerEvent revokeAndGenerateEvent = new RMAppCertificateManagerEvent(
+              app.applicationId, app.user, RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE);
+          app.handler.handle(revokeAndGenerateEvent);
+          return RMAppState.GENERATING_CERTS;
+        }
       }
 
       // Add application to scheduler synchronously to guarantee scheduler
@@ -1057,6 +1068,11 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
   }
 
+  private boolean isCryptoMaterialPresent() {
+    return keyStore != null && keyStorePassword != null
+        && trustStore != null && trustStorePassword != null;
+  }
+  
   private void updateApplicationWithCryptoMaterial(RMAppCertificateGeneratedEvent event) {
     keyStore = event.getKeyStore();
     keyStorePassword = event.getKeyStorePassword();
@@ -1070,6 +1086,11 @@ public class RMAppImpl implements RMApp, Recoverable {
     public void transition(RMAppImpl app, RMAppEvent event) {
       if (event instanceof RMAppCertificateGeneratedEvent) {
         app.updateApplicationWithCryptoMaterial((RMAppCertificateGeneratedEvent) event);
+        ApplicationStateData appNewState =
+            ApplicationStateData.newInstance(app.submitTime, app.startTime, app.submissionContext, app.user,
+                app.callerContext, app.keyStore, app.keyStorePassword,
+                app.trustStore, app.trustStorePassword);
+        app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
       }
       
       app.handler.handle(new AppAddedSchedulerEvent(app.user,

@@ -20,6 +20,8 @@ package org.apache.hadoop.yarn.server.resourcemanager;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.security.GeneralSecurityException;
+import java.security.KeyStore;
 import java.security.PrivilegedAction;
 import java.util.Arrays;
 import java.util.Collection;
@@ -93,7 +95,10 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicat
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateActionsFactory;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions;
 import org.apache.hadoop.yarn.util.Records;
 import org.apache.hadoop.yarn.util.YarnVersionInfo;
 import org.apache.log4j.Level;
@@ -161,7 +166,15 @@ public class MockRM extends ResourceManager {
       return super.createNodeLabelManager();
     }
   }
-
+  
+  @Override
+  protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
+    RMAppCertificateActionsFactory.getInstance(getConfig()).register(new TestingRMAppCertificateActions(getConfig()));
+    TestingRMAppCertificateManager rmAppCertificateManager = new TestingRMAppCertificateManager();
+    rmAppCertificateManager.init(rmContext, getConfig());
+    return rmAppCertificateManager;
+  }
+  
   @Override
   protected Dispatcher createDispatcher() {
     return new DrainDispatcher();
@@ -1027,5 +1040,15 @@ public class MockRM extends ResourceManager {
     Assert.assertTrue("app is not removed from scheduler (timeout).",
         !apps.containsKey(appId));
     LOG.info("app is removed from scheduler, " + appId);
+  }
+  
+  private class TestingRMAppCertificateManager extends RMAppCertificateManager {
+  
+    @Override
+    public KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
+      KeyStore trustStore = KeyStore.getInstance("JKS");
+      trustStore.load(null, null);
+      return trustStore;
+    }
   }
 }

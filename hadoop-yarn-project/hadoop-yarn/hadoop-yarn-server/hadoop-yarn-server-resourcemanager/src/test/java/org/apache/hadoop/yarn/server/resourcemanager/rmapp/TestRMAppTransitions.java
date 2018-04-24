@@ -89,6 +89,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.DelegationTokenRen
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateActionsFactory;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions;
@@ -450,7 +451,7 @@ public class TestRMAppTransitions {
   protected RMApp testCreateAppSubmittedRecovery(
       ApplicationSubmissionContext submissionContext) throws IOException {
     RMApp application = createNewTestApp(submissionContext);
-    // NEW => SUBMITTED event RMAppEventType.RECOVER
+    // NEW => GENERATING_CERTS event RMAppEventType.RECOVER
     RMState state = new RMState();
     ApplicationStateData appState =
         ApplicationStateData.newInstance(123, 123, null, "user", null);
@@ -460,7 +461,14 @@ public class TestRMAppTransitions {
 
     application.handle(event);
     assertStartTimeSet(application);
+    // No crypto material stored in state store, so recovered state should be GENERATING_CERTS
+    assertAppState(RMAppState.GENERATING_CERTS, application);
+    rmDispatcher.await();
+    
     assertAppState(RMAppState.SUBMITTED, application);
+    Assert.assertNotNull(application.getKeyStore());
+    Assert.assertNotEquals(0, application.getKeyStore());
+    
     return application;
   }
 

@@ -586,7 +586,8 @@ public class ClientRMService extends AbstractService implements
       throw RPCUtil.getRemoteException(ie);
     }
     
-    if (getConfig().getBoolean(CommonConfigurationKeysPublic
+    // TODO(Antonis): I should remove this from here
+    /*if (getConfig().getBoolean(CommonConfigurationKeysPublic
         .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
         .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
   
@@ -603,7 +604,7 @@ public class ClientRMService extends AbstractService implements
             "Exception in submitting application", applicationId);
         throw new YarnException("RPC TLS is enabled but either keystore or truststore is null or no password provided");
       }
-    }
+    }*/
     // Check whether app has already been put into rmContext,
     // If it is, simply return the response
     if (rmContext.getRMApps().get(applicationId) != null) {
