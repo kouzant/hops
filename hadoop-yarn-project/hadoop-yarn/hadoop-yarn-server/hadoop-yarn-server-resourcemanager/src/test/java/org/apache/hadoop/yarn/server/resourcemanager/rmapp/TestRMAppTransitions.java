@@ -24,6 +24,7 @@ import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
@@ -103,6 +104,7 @@ import org.junit.runners.Parameterized;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Matchers;
 import org.mockito.Mock;
+import org.mockito.verification.VerificationMode;
 
 
 @RunWith(value = Parameterized.class)
@@ -449,23 +451,37 @@ public class TestRMAppTransitions {
   }
 
   protected RMApp testCreateAppSubmittedRecovery(
-      ApplicationSubmissionContext submissionContext) throws IOException {
+      ApplicationSubmissionContext submissionContext, boolean cryptoRecovered) throws IOException {
     RMApp application = createNewTestApp(submissionContext);
     // NEW => GENERATING_CERTS event RMAppEventType.RECOVER
     RMState state = new RMState();
     ApplicationStateData appState =
         ApplicationStateData.newInstance(123, 123, null, "user", null);
+    if (cryptoRecovered) {
+      appState.setKeyStore("some_bytes".getBytes());
+      appState.setKeyStorePassword(new char[]{'a', 'b', 'c'});
+      appState.setTrustStore("some_bytes".getBytes());
+      appState.setTrustStorePassword(new char[]{'a', 'b', 'c'});
+    }
     state.getApplicationState().put(application.getApplicationId(), appState);
     RMAppEvent event =
         new RMAppRecoverEvent(application.getApplicationId(), state);
 
     application.handle(event);
     assertStartTimeSet(application);
-    // No crypto material stored in state store, so recovered state should be GENERATING_CERTS
-    assertAppState(RMAppState.GENERATING_CERTS, application);
-    rmDispatcher.await();
+    if (cryptoRecovered) {
+      // Cryptographic material for the application has been recovered, state should be SUBMITTED
+      assertAppState(RMAppState.SUBMITTED, application);
+      verify(rmAppCertificateManager, never())
+          .generateCertificate(any(ApplicationId.class), any(String.class));
+    } else {
+      // No crypto material stored in state store, so recovered state should be GENERATING_CERTS
+      assertAppState(RMAppState.GENERATING_CERTS, application);
+      rmDispatcher.await();
+      verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()));
+      assertAppState(RMAppState.SUBMITTED, application);
+    }
     
-    assertAppState(RMAppState.SUBMITTED, application);
     Assert.assertNotNull(application.getKeyStore());
     Assert.assertNotEquals(0, application.getKeyStore());
     
@@ -602,7 +618,7 @@ public class TestRMAppTransitions {
         ByteBuffer.wrap(dob.getData(), 0, dob.getLength());
     clc.setTokens(securityTokens);
     sub.setAMContainerSpec(clc);
-    testCreateAppSubmittedRecovery(sub);
+    testCreateAppSubmittedRecovery(sub, false);
   }
 
   @Test (timeout = 30000)
@@ -1118,6 +1134,41 @@ public class TestRMAppTransitions {
             + "/"));
   }
 
+  @Test
+  public void testAppGeneratingCertsKill() throws IOException {
+    LOG.info("--- START: testAppGeneratingCertsKill ---");
+  
+    rmDispatcher.unregisterHandlerForEvent(RMAppCertificateManagerEventType.class, true);
+    RMApp app = testCreateAppGeneratingCerts(null);
+    assertAppState(RMAppState.GENERATING_CERTS, app);
+    RMAppEvent event = new RMAppKillByClientEvent(app.getApplicationId(),
+        "Application killed by user.",
+        UserGroupInformation.getCurrentUser(), Server.getRemoteIp());
+    app.handle(event);
+    rmDispatcher.await();
+    assertAppState(RMAppState.FINAL_SAVING, app);
+    sendAppUpdateSavedEvent(app);
+    assertKilled(app);
+    verifyApplicationFinished(RMAppState.KILLED);
+  }
+  
+  @Test
+  public void testGeneratingCertsRecoverWithCrypto() throws IOException {
+    LOG.info("--- testGeneratingCertsRecoverWithCrypto ---");
+    ApplicationSubmissionContext sub =
+        Records.newRecord(ApplicationSubmissionContext.class);
+    ContainerLaunchContext clc =
+        Records.newRecord(ContainerLaunchContext.class);
+    Credentials credentials = new Credentials();
+    DataOutputBuffer dob = new DataOutputBuffer();
+    credentials.writeTokenStorageToStream(dob);
+    ByteBuffer securityTokens =
+        ByteBuffer.wrap(dob.getData(), 0, dob.getLength());
+    clc.setTokens(securityTokens);
+    sub.setAMContainerSpec(clc);
+    testCreateAppSubmittedRecovery(sub, true);
+  }
+  
   private void verifyApplicationFinished(RMAppState state) {
     ArgumentCaptor<RMAppState> finalState =
         ArgumentCaptor.forClass(RMAppState.class);
