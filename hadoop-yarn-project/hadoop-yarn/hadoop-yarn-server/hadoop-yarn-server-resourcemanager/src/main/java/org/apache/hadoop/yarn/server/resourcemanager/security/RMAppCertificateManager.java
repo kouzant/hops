@@ -48,6 +48,7 @@ import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URISyntaxException;
+import java.nio.ByteBuffer;
 import java.nio.file.Files;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
@@ -135,6 +136,10 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
             appId);
         byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
         byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
+        
+        rmContext.getCertificateLocalizationService().materializeCertificates(
+            appUser, appUser, ByteBuffer.wrap(rawProtectedKeyStore), String.valueOf(keyStoresWrapper.keyStorePassword),
+            ByteBuffer.wrap(rawTrustStore), String.valueOf(keyStoresWrapper.trustStorePassword));
         
         handler.handle(new RMAppCertificateGeneratedEvent(
             appId,
@@ -246,6 +251,8 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT) && certificateLocalizationService != null) {
       try {
+        // TODO(Antonis): Send revocation request to Hopsworks
+        
         certificateLocalizationService.removeMaterial(applicationUser);
       } catch (InterruptedException | ExecutionException ex) {
         LOG.warn("Could not remove material for user " + applicationUser + " and application " + appId, ex);

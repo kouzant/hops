@@ -129,10 +129,9 @@ public class AMLauncher implements Runnable {
     
     if (conf.getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      String user = rmContext.getRMApps().get(masterContainerID
-          .getApplicationAttemptId().getApplicationId()).getUser();
-      setupCryptoMaterial(allRequests, user, masterContainerID
-          .getApplicationAttemptId().getApplicationId().toString());
+      RMApp application = rmContext.getRMApps().get(masterContainerID
+          .getApplicationAttemptId().getApplicationId());
+      setupCryptoMaterial(allRequests, application);
     }
     
     StartContainersResponse response =
@@ -148,23 +147,13 @@ public class AMLauncher implements Runnable {
     }
   }
   
-  private void setupCryptoMaterial(StartContainersRequest request,
-      String user, String applicationId) throws FileNotFoundException,
-      YarnException {
-    try {
-      CryptoMaterial material = rmContext
-          .getCertificateLocalizationService().getMaterialLocation(user);
-      request.setKeyStore(material.getKeyStoreMem());
-      request.setKeyStorePassword(material.getKeyStorePass());
-      request.setTrustStore(material.getTrustStoreMem());
-      request.setTrustStorePassword(material.getTrustStorePass());
-    } catch (InterruptedException | ExecutionException e) {
-      throw new YarnException("Execution of CertificateMaterializer " +
-          "interrupted", e);
-    } catch (IOException e) {
-      throw new YarnException("RPC TLS is enabled but keystore or truststore " +
-          "could not be found", e);
-    }
+  @Private
+  @VisibleForTesting
+  protected void setupCryptoMaterial(StartContainersRequest request, RMApp application) {
+    request.setKeyStore(ByteBuffer.wrap(application.getKeyStore()));
+    request.setKeyStorePassword(String.valueOf(application.getKeyStorePassword()));
+    request.setTrustStore(ByteBuffer.wrap(application.getTrustStore()));
+    request.setTrustStorePassword(String.valueOf(application.getTrustStorePassword()));
   }
   
   private void cleanup() throws IOException, YarnException {
