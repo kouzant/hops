@@ -515,9 +515,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   }
   
   protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
-    RMAppCertificateManager rmAppCertificateManager = new RMAppCertificateManager();
-    rmAppCertificateManager.init(this.rmContext, this.conf);
-    return rmAppCertificateManager;
+    return new RMAppCertificateManager(this.rmContext);
   }
 
   protected RMApplicationHistoryWriter createRMApplicationHistoryWriter() {
@@ -796,6 +794,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
 
       rmAppCertificateManager = createRMAppCertificateManager();
       rmDispatcher.register(RMAppCertificateManagerEventType.class, rmAppCertificateManager);
+      addService(rmAppCertificateManager);
       
       clientRM = createClientRMService();
       addService(clientRM);

@@ -157,8 +157,9 @@ public class TestRMAppCertificateManager {
     MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.CERTS_GENERATED);
     rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
     
-    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(true);
-    manager.init(rmContext, conf);
+    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(true, rmContext);
+    manager.init(conf);
+    manager.start();
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
@@ -166,20 +167,23 @@ public class TestRMAppCertificateManager {
     
     dispatcher.await();
     eventHandler.verifyEvent();
+    manager.stop();
   }
   
   // This test makes a REST call to Hopsworks using HopsworksRMAppCertificateActions actor class
   // Normally it should be ignored as it requires Hopsworks instance to be running
   @Test
   public void testSuccessfulCertificateCreationRemote() throws Exception {
-    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(false);
-    manager.init(rmContext, conf);
+    MockRMAppCertificateManager manager = new MockRMAppCertificateManager(false, rmContext);
+    manager.init(conf);
+    manager.start();
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
         RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
     
     dispatcher.await();
+    manager.stop();
   }
   
   @Test
@@ -192,13 +196,15 @@ public class TestRMAppCertificateManager {
     rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
     
     MockFailingRMAppCertificateManager manager = new MockFailingRMAppCertificateManager();
-    manager.init(rmContext, conf);
+    manager.init(conf);
+    manager.start();
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA",
         RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
     dispatcher.await();
     eventHandler.verifyEvent();
+    manager.stop();
   }
   
   @Test
@@ -286,9 +292,7 @@ public class TestRMAppCertificateManager {
   
     @Override
     protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
-      RMAppCertificateManager rmAppCertificateManager = new MockRMAppCertificateManager(false);
-      rmAppCertificateManager.init(super.rmContext, super.getConfig());
-      return rmAppCertificateManager;
+      return new MockRMAppCertificateManager(false, rmContext);
     }
   }
   
@@ -296,8 +300,8 @@ public class TestRMAppCertificateManager {
     private final boolean loadTrustStore;
     private final String systemTMP;
   
-    public MockRMAppCertificateManager(boolean loadTrustStore) throws Exception {
-      super();
+    public MockRMAppCertificateManager(boolean loadTrustStore, RMContext rmContext) throws Exception {
+      super(rmContext);
       this.loadTrustStore = loadTrustStore;
       systemTMP = System.getProperty("java.io.tmpdir");
     }
@@ -439,7 +443,7 @@ public class TestRMAppCertificateManager {
   private class MockFailingRMAppCertificateManager extends RMAppCertificateManager {
   
     public MockFailingRMAppCertificateManager() {
-      super();
+      super(rmContext);
     }
   
     @Override

@@ -94,8 +94,10 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateMa
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions;
+import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.Records;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -124,6 +126,7 @@ public class TestRMAppTransitions {
   private YarnScheduler scheduler;
   private TestSchedulerEventDispatcher schedulerDispatcher;
   private RMAppCertificateManager rmAppCertificateManager;
+  private CertificateLocalizationService certificateLocalizationService;
   private final char[] cryptoPassword = "password".toCharArray();
 
   // ignore all the RM application attempt events
@@ -236,7 +239,13 @@ public class TestRMAppTransitions {
     publisher = mock(SystemMetricsPublisher.class);
     realRMContext.setSystemMetricsPublisher(publisher);
     realRMContext.setRMApplicationHistoryWriter(writer);
-
+  
+    certificateLocalizationService = new CertificateLocalizationService(false,
+        CertificateLocalizationService.ServiceType.RM);
+    certificateLocalizationService.init(conf);
+    certificateLocalizationService.start();
+    ((RMContextImpl) realRMContext).setCertificateLocalizationService(certificateLocalizationService);
+    
     this.rmContext = spy(realRMContext);
 
     ResourceScheduler resourceScheduler = mock(ResourceScheduler.class);
@@ -256,10 +265,12 @@ public class TestRMAppTransitions {
     schedulerDispatcher = new TestSchedulerEventDispatcher();
     rmDispatcher.register(SchedulerEventType.class,
         schedulerDispatcher);
-  
+    
     RMAppCertificateActionsFactory.getInstance(conf).register(new TestingRMAppCertificateActions(conf));
-    rmAppCertificateManager = spy(new RMAppCertificateManager());
-    rmAppCertificateManager.init(rmContext, conf);
+    rmAppCertificateManager = spy(new RMAppCertificateManager(rmContext));
+    rmAppCertificateManager.init(conf);
+    rmAppCertificateManager.start();
+    
     when(rmAppCertificateManager.generateRandomPassword()).thenReturn(cryptoPassword);
     doReturn(loadMockTrustStore()).when(rmAppCertificateManager).loadSystemTrustStore(any(Configuration.class));
     
@@ -268,7 +279,15 @@ public class TestRMAppTransitions {
     rmDispatcher.init(conf);
     rmDispatcher.start();
   }
-
+  
+  @After
+  public void tearDown() throws Exception {
+    // Delete the tmp cert loc dir
+    if (certificateLocalizationService != null) {
+      certificateLocalizationService.stop();
+    }
+  }
+  
   private KeyStore loadMockTrustStore() throws IOException, GeneralSecurityException {
     KeyStore trustStore = KeyStore.getInstance("JKS");
     trustStore.load(null, null);

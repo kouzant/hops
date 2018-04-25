@@ -170,9 +170,7 @@ public class MockRM extends ResourceManager {
   @Override
   protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
     RMAppCertificateActionsFactory.getInstance(getConfig()).register(new TestingRMAppCertificateActions(getConfig()));
-    TestingRMAppCertificateManager rmAppCertificateManager = new TestingRMAppCertificateManager();
-    rmAppCertificateManager.init(rmContext, getConfig());
-    return rmAppCertificateManager;
+    return new TestingRMAppCertificateManager();
   }
   
   @Override
@@ -1043,6 +1041,10 @@ public class MockRM extends ResourceManager {
   }
   
   private class TestingRMAppCertificateManager extends RMAppCertificateManager {
+    
+    private TestingRMAppCertificateManager() {
+      super(rmContext);
+    }
   
     @Override
     public KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {

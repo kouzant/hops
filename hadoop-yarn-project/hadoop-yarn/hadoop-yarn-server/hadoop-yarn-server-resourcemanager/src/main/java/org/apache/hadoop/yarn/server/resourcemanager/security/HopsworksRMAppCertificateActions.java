@@ -114,6 +114,11 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
     }
   }
   
+  @Override
+  public void revoke(String certificateIdentifier) {
+  
+  }
+  
   private X509Certificate parseCertificate(String certificateStr) throws IOException, GeneralSecurityException {
     try (ByteArrayInputStream bis = new ByteArrayInputStream(certificateStr.getBytes())) {
       return (X509Certificate) certificateFactory.generateCertificate(bis);

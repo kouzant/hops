@@ -100,4 +100,9 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions {
     return new JcaX509CertificateConverter().setProvider("BC")
         .getCertificate(certBuilder.build(sigGen));
   }
+  
+  @Override
+  public void revoke(String certificateIdentifier) {
+  
+  }
 }

@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
+import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
@@ -59,15 +60,25 @@ import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.Security;
 import java.security.cert.X509Certificate;
+import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.List;
+import java.util.concurrent.ArrayBlockingQueue;
+import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
 
-public class RMAppCertificateManager implements EventHandler<RMAppCertificateManagerEvent> {
+public class RMAppCertificateManager extends AbstractService
+    implements EventHandler<RMAppCertificateManagerEvent> {
   private final static Log LOG = LogFactory.getLog(RMAppCertificateManager.class);
   private final static String SECURITY_PROVIDER = "BC";
   private final static String KEY_ALGORITHM = "RSA";
   private final static String SIGNATURE_ALGORITHM = "SHA256withRSA";
   private final static int KEY_SIZE = 1024;
+  private final static int REVOCATION_QUEUE_SIZE = 100;
+  
+  private final SecureRandom rng;
+  private final String TMP = System.getProperty("java.io.tmpdir");
+  private final BlockingQueue<CertificateRevocationEvent> revocationEvents;
   
   private RMContext rmContext;
   private Configuration conf;
@@ -75,22 +86,44 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   private CertificateLocalizationService certificateLocalizationService;
   private KeyPairGenerator keyPairGenerator;
   private RMAppCertificateActions rmAppCertificateActions;
-  private final SecureRandom rng;
-  private final String TMP = System.getProperty("java.io.tmpdir");
+  private Thread revocationEventsHandler;
   
-  public RMAppCertificateManager() {
+  public RMAppCertificateManager(RMContext rmContext) {
+    super(RMAppCertificateManager.class.getName());
     Security.addProvider(new BouncyCastleProvider());
+    this.rmContext = rmContext;
     rng = new SecureRandom();
+    revocationEvents = new ArrayBlockingQueue<CertificateRevocationEvent>(REVOCATION_QUEUE_SIZE);
   }
   
-  public void init(RMContext rmContext, Configuration conf) throws Exception {
-    this.rmContext = rmContext;
+  @Override
+  protected void serviceInit(Configuration conf) throws Exception {
+    LOG.debug("Initializing RMAppCertificateManager");
     this.conf = conf;
     this.handler = rmContext.getDispatcher().getEventHandler();
     this.certificateLocalizationService = rmContext.getCertificateLocalizationService();
     rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance(conf).getActor();
     keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
     keyPairGenerator.initialize(KEY_SIZE);
+    super.serviceInit(conf);
+  }
+  
+  @Override
+  protected void serviceStart() throws Exception {
+    LOG.info("Starting RMAppCertificateManager");
+    revocationEventsHandler = new RevocationEventsHandler();
+    revocationEventsHandler.setDaemon(false);
+    revocationEventsHandler.setName("RevocationEventsHandler");
+    revocationEventsHandler.start();
+    super.serviceStart();
+  }
+  
+  @Override
+  protected void serviceStop() throws Exception {
+    LOG.info("Stopping RMAppCertificateManager");
+    if (revocationEventsHandler != null) {
+      revocationEventsHandler.interrupt();
+    }
   }
   
   @Override
@@ -118,7 +151,7 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   }
   
   public void revokeAndGenerateCertificates(ApplicationId appId, String appUser) {
-    // TODO(Antonis): I should revoke here
+    // TODO(Antonis): I should revoke here and it should be blocking
     generateCertificate(appId, appUser);
   }
   
@@ -149,7 +182,7 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
         handler.handle(new RMAppEvent(appId, RMAppEventType.CERTS_GENERATED));
       }
     } catch (Exception ex) {
-      LOG.error("Error while generating certificate for application " + appId);
+      LOG.error("Error while generating certificate for application " + appId, ex);
       handler.handle(new RMAppEvent(appId, RMAppEventType.KILL, "Error while generating application certificate"));
     }
   }
@@ -251,8 +284,7 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT) && certificateLocalizationService != null) {
       try {
-        // TODO(Antonis): Send revocation request to Hopsworks
-        
+        revocationEvents.put(new CertificateRevocationEvent(applicationUser + "__" + appId.toString()));
         certificateLocalizationService.removeMaterial(applicationUser);
       } catch (InterruptedException | ExecutionException ex) {
         LOG.warn("Could not remove material for user " + applicationUser + " and application " + appId, ex);
@@ -321,5 +353,39 @@ public class RMAppCertificateManager implements EventHandler<RMAppCertificateMan
   protected enum TYPE {
     KEYSTORE,
     TRUSTSTORE
+  }
+  
+  private class CertificateRevocationEvent {
+    private final String identifier;
+    
+    private CertificateRevocationEvent(String identifier) {
+      this.identifier = identifier;
+    }
+  }
+  
+  private class RevocationEventsHandler extends Thread {
+    
+    private void drain() {
+      List<CertificateRevocationEvent> events = new ArrayList<>(revocationEvents.size() - revocationEvents
+          .remainingCapacity());
+      revocationEvents.drainTo(events);
+      for (CertificateRevocationEvent event : events) {
+        rmAppCertificateActions.revoke(event.identifier);
+      }
+    }
+    
+    @Override
+    public void run() {
+      while (!Thread.currentThread().isInterrupted()) {
+        try {
+          CertificateRevocationEvent event = revocationEvents.take();
+          rmAppCertificateActions.revoke(event.identifier);
+        } catch (InterruptedException ex) {
+          LOG.info("RevocationEventsHandler interrupted. Exiting...");
+          drain();
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
   }
 }
