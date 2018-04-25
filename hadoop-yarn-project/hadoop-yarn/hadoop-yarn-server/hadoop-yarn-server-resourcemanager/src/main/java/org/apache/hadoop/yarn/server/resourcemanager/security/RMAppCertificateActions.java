@@ -26,5 +26,5 @@ import java.security.cert.X509Certificate;
 
 public interface RMAppCertificateActions {
   X509Certificate sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException, GeneralSecurityException;
-  void revoke(String certificateIdentifier);
+  void revoke(String certificateIdentifier) throws URISyntaxException, IOException;
 }

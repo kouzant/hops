@@ -18,6 +18,8 @@
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
 import org.apache.hadoop.conf.Configuration;
+import org.apache.log4j.LogManager;
+import org.apache.log4j.Logger;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
 import org.bouncycastle.asn1.x500.style.BCStyle;
 import org.bouncycastle.asn1.x509.BasicConstraints;
@@ -44,6 +46,7 @@ import java.security.cert.X509Certificate;
 import java.util.Date;
 
 public class TestingRMAppCertificateActions implements RMAppCertificateActions {
+  private final static Logger LOG = LogManager.getLogger(TestingRMAppCertificateActions.class);
   
   private final static String KEY_ALGORITHM = "RSA";
   private final static String SIGNATURE_ALGORITHM = "SHA256withRSA";
@@ -102,7 +105,7 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions {
   }
   
   @Override
-  public void revoke(String certificateIdentifier) {
-  
+  public void revoke(String certificateIdentifier) throws URISyntaxException, IOException {
+    LOG.info("Revoking certificate " + certificateIdentifier);
   }
 }

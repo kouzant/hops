@@ -46,6 +46,7 @@ import java.io.IOException;
 import java.io.StringReader;
 import java.io.StringWriter;
 import java.net.MalformedURLException;
+import java.net.URI;
 import java.net.URISyntaxException;
 import java.net.URL;
 import java.security.GeneralSecurityException;
@@ -59,7 +60,7 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
   private final URL hopsworksHost;
   private final URL loginEndpoint;
   private final URL signEndpoint;
-  private final String revokeEndpoint;
+  private final URL revokeEndpoint;
   private final CertificateFactory certificateFactory;
   
   public HopsworksRMAppCertificateActions(Configuration conf) throws MalformedURLException, GeneralSecurityException {
@@ -69,7 +70,7 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
     this.hopsworksHost = new URL("http://bbc4.sics.se:34821");
     this.loginEndpoint = new URL(hopsworksHost, "hopsworks-api/api/auth/login");
     this.signEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/sign");
-    this.revokeEndpoint = "";
+    this.revokeEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/revoke");
     this.certificateFactory = CertificateFactory.getInstance("X.509", "BC");
   }
   
@@ -77,31 +78,15 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
   public X509Certificate sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException, GeneralSecurityException {
     CloseableHttpClient httpClient = null;
     try {
-      BasicCookieStore cookieStore = new BasicCookieStore();
-      httpClient = HttpClients.custom()
-          .setDefaultCookieStore(cookieStore)
-          .build();
-  
-      HttpUriRequest login = RequestBuilder.post()
-          .setUri(loginEndpoint.toURI())
-          .addParameter("email", "agent@hops.io")
-          .addParameter("password", "admin")
-          .build();
-      CloseableHttpResponse loginResponse = httpClient.execute(login);
-  
-      checkHTTPResponseCode(loginResponse.getStatusLine().getStatusCode(), "Could not login to Hopsworks");
+      httpClient = createHttpClient();
+      login(httpClient);
   
       String csrStr = stringifyCSR(csr);
       JsonObject json = new JsonObject();
       json.addProperty("csr", csrStr);
-  
-      HttpPost signReq = new HttpPost(signEndpoint.toURI());
-      signReq.setEntity(new StringEntity(json.toString()));
-      signReq.addHeader(HttpHeaders.CONTENT_TYPE, "application/json");
-  
-      CloseableHttpResponse signResponse = httpClient.execute(signReq);
       
-      checkHTTPResponseCode(signResponse.getStatusLine().getStatusCode(), "Hopsworks CA could not sign CSR");
+      CloseableHttpResponse signResponse = post(httpClient, json, signEndpoint.toURI(),
+          "Hopsworks CA could not sign CSR");
       
       String signResponseEntity = EntityUtils.toString(signResponse.getEntity());
       JsonObject jsonResponse = new JsonParser().parse(signResponseEntity).getAsJsonObject();
@@ -115,8 +100,48 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
   }
   
   @Override
-  public void revoke(String certificateIdentifier) {
+  public void revoke(String certificateIdentifier) throws URISyntaxException, IOException {
+    CloseableHttpClient httpClient = null;
+    try {
+      httpClient = createHttpClient();
+      login(httpClient);
+      
+      JsonObject json = new JsonObject();
+      json.addProperty("identifier", certificateIdentifier);
+      
+      post(httpClient, json, revokeEndpoint.toURI(), "Hopsworks CA could not revoke certificate " +
+          certificateIdentifier);
+    } finally {
+      if (httpClient != null) {
+        httpClient.close();
+      }
+    }
+  }
   
+  private CloseableHttpClient createHttpClient() {
+    BasicCookieStore cookieStore = new BasicCookieStore();
+    return HttpClients.custom().setDefaultCookieStore(cookieStore).build();
+  }
+  
+  private void login(CloseableHttpClient httpClient) throws URISyntaxException, IOException {
+    HttpUriRequest login = RequestBuilder.post()
+        .setUri(loginEndpoint.toURI())
+        .addParameter("email", "agent@hops.io")
+        .addParameter("password", "admin")
+        .build();
+    CloseableHttpResponse loginResponse = httpClient.execute(login);
+    
+    checkHTTPResponseCode(loginResponse.getStatusLine().getStatusCode(), "Could not login to Hopsworks");
+  }
+  
+  private CloseableHttpResponse post(CloseableHttpClient httpClient, JsonObject jsonEntity, URI target, String errorMessage)
+      throws IOException {
+    HttpPost request = new HttpPost(target);
+    request.setEntity(new StringEntity(jsonEntity.toString()));
+    request.addHeader(HttpHeaders.CONTENT_TYPE, "application/json");
+    CloseableHttpResponse response = httpClient.execute(request);
+    checkHTTPResponseCode(response.getStatusLine().getStatusCode(), errorMessage);
+    return response;
   }
   
   private X509Certificate parseCertificate(String certificateStr) throws IOException, GeneralSecurityException {

@@ -151,8 +151,12 @@ public class RMAppCertificateManager extends AbstractService
   }
   
   public void revokeAndGenerateCertificates(ApplicationId appId, String appUser) {
-    // TODO(Antonis): I should revoke here and it should be blocking
-    generateCertificate(appId, appUser);
+    // Certificate revocation here is blocking
+    if (revokeInternal(getCertificateIdentifier(appId, appUser))) {
+      generateCertificate(appId, appUser);
+    } else {
+      handler.handle(new RMAppEvent(appId, RMAppEventType.KILL, "Could not revoke previously generated certificate"));
+    }
   }
   
   // Scope is protected to ease testing
@@ -280,16 +284,34 @@ public class RMAppCertificateManager extends AbstractService
   }
   
   private void revokeCertificate(ApplicationId appId, String applicationUser) {
-    LOG.info("Revoking certificate for application: " + appId);
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT) && certificateLocalizationService != null) {
+      LOG.info("Revoking certificate for application: " + appId);
       try {
-        revocationEvents.put(new CertificateRevocationEvent(applicationUser + "__" + appId.toString()));
+        revocationEvents.put(new CertificateRevocationEvent(getCertificateIdentifier(appId, applicationUser)));
         certificateLocalizationService.removeMaterial(applicationUser);
       } catch (InterruptedException | ExecutionException ex) {
         LOG.warn("Could not remove material for user " + applicationUser + " and application " + appId, ex);
       }
     }
+  }
+  
+  private boolean revokeInternal(String certificateIdentifier) {
+    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      try {
+        rmAppCertificateActions.revoke(certificateIdentifier);
+        return true;
+      } catch (URISyntaxException | IOException ex) {
+        LOG.error("Could not revoke certificate " + certificateIdentifier, ex);
+        return false;
+      }
+    }
+    return true;
+  }
+  
+  private String getCertificateIdentifier(ApplicationId appId, String user) {
+    return user + "__" + appId.toString();
   }
   
   protected class KeyStoresWrapper {
@@ -370,7 +392,7 @@ public class RMAppCertificateManager extends AbstractService
           .remainingCapacity());
       revocationEvents.drainTo(events);
       for (CertificateRevocationEvent event : events) {
-        rmAppCertificateActions.revoke(event.identifier);
+        revokeInternal(event.identifier);
       }
     }
     
@@ -379,7 +401,7 @@ public class RMAppCertificateManager extends AbstractService
       while (!Thread.currentThread().isInterrupted()) {
         try {
           CertificateRevocationEvent event = revocationEvents.take();
-          rmAppCertificateActions.revoke(event.identifier);
+          revokeInternal(event.identifier);
         } catch (InterruptedException ex) {
           LOG.info("RevocationEventsHandler interrupted. Exiting...");
           drain();
