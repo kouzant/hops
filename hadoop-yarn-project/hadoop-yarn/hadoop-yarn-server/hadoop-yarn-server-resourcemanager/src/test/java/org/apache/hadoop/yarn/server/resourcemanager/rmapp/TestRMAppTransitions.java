@@ -212,7 +212,7 @@ public class TestRMAppTransitions {
   @Before
   public void setUp() throws Exception {
     conf = new YarnConfiguration();
-    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
+    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, isSecurityEnabled);
     AuthenticationMethod authMethod = AuthenticationMethod.SIMPLE;
     if (isSecurityEnabled) {
       authMethod = AuthenticationMethod.KERBEROS;
@@ -452,16 +452,19 @@ public class TestRMAppTransitions {
     rmDispatcher.await();
     verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()));
     assertAppState(RMAppState.SUBMITTED, application);
-    Assert.assertNotNull(application.getKeyStore());
-    Assert.assertNotEquals(0, application.getKeyStore().length);
-    Assert.assertNotNull(application.getTrustStore());
-    Assert.assertNotEquals(0, application.getTrustStore().length);
-    Assert.assertNotNull(application.getKeyStorePassword());
-    Assert.assertNotEquals(0, application.getKeyStorePassword().length);
-    Assert.assertTrue(Arrays.equals(cryptoPassword, application.getKeyStorePassword()));
-    Assert.assertNotNull(application.getTrustStorePassword());
-    Assert.assertNotEquals(0, application.getTrustStorePassword().length);
-    Assert.assertTrue(Arrays.equals(cryptoPassword, application.getTrustStorePassword()));
+    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      Assert.assertNotNull(application.getKeyStore());
+      Assert.assertNotEquals(0, application.getKeyStore().length);
+      Assert.assertNotNull(application.getTrustStore());
+      Assert.assertNotEquals(0, application.getTrustStore().length);
+      Assert.assertNotNull(application.getKeyStorePassword());
+      Assert.assertNotEquals(0, application.getKeyStorePassword().length);
+      Assert.assertTrue(Arrays.equals(cryptoPassword, application.getKeyStorePassword()));
+      Assert.assertNotNull(application.getTrustStorePassword());
+      Assert.assertNotEquals(0, application.getTrustStorePassword().length);
+      Assert.assertTrue(Arrays.equals(cryptoPassword, application.getTrustStorePassword()));
+    }
     // verify sendATSCreateEvent() is get called during
     // AddApplicationToSchedulerTransition.
     verify(publisher).appCreated(eq(application), anyLong());
@@ -501,8 +504,11 @@ public class TestRMAppTransitions {
       assertAppState(RMAppState.SUBMITTED, application);
     }
     
-    Assert.assertNotNull(application.getKeyStore());
-    Assert.assertNotEquals(0, application.getKeyStore());
+    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      Assert.assertNotNull(application.getKeyStore());
+      Assert.assertNotEquals(0, application.getKeyStore());
+    }
     
     return application;
   }

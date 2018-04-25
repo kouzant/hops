@@ -22,6 +22,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
@@ -283,7 +284,9 @@ public class RMAppCertificateManager extends AbstractService
         new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider(SECURITY_PROVIDER).build(keyPair.getPrivate()));
   }
   
-  private void revokeCertificate(ApplicationId appId, String applicationUser) {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  public void revokeCertificate(ApplicationId appId, String applicationUser) {
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT) && certificateLocalizationService != null) {
       LOG.info("Revoking certificate for application: " + appId);
@@ -388,8 +391,7 @@ public class RMAppCertificateManager extends AbstractService
   private class RevocationEventsHandler extends Thread {
     
     private void drain() {
-      List<CertificateRevocationEvent> events = new ArrayList<>(revocationEvents.size() - revocationEvents
-          .remainingCapacity());
+      List<CertificateRevocationEvent> events = new ArrayList<>(revocationEvents.size());
       revocationEvents.drainTo(events);
       for (CertificateRevocationEvent event : events) {
         revokeInternal(event.identifier);

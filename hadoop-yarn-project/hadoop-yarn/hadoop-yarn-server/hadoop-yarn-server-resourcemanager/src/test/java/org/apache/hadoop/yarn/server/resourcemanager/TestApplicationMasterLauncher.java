@@ -72,6 +72,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.amlauncher.ApplicationMaste
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptState;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
@@ -79,9 +80,12 @@ import org.apache.log4j.Logger;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.mockito.Mockito;
 
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 public class TestApplicationMasterLauncher {
@@ -186,8 +190,7 @@ public class TestApplicationMasterLauncher {
     Logger rootLogger = LogManager.getRootLogger();
     rootLogger.setLevel(Level.DEBUG);
     MyContainerManagerImpl containerManager = new MyContainerManagerImpl();
-    MockRMWithCustomAMLauncher rm = new MockRMWithCustomAMLauncher(
-        containerManager);
+    MockRMWithCustomAMLauncher rm = new MockRMWithCustomAMLauncher(new Configuration(), containerManager, true);
     rm.start();
     MockNM nm1 = rm.registerNode("127.0.0.1:1234", 5120);
 
@@ -234,6 +237,9 @@ public class TestApplicationMasterLauncher {
     Assert.assertTrue(containerManager.cleanedup);
 
     am.waitForState(RMAppAttemptState.FINISHED);
+    
+    verify(rm.rmAppCertificateManager, Mockito.atMost(1))
+        .revokeCertificate(Mockito.eq(app.getApplicationId()), Mockito.eq(app.getUser()));
     rm.stop();
   }
 
