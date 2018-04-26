@@ -52,9 +52,13 @@ import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
+import java.util.EnumSet;
+import java.util.HashSet;
+import java.util.Set;
 
 public class HopsworksRMAppCertificateActions implements RMAppCertificateActions {
   private static final Log LOG = LogFactory.getLog(HopsworksRMAppCertificateActions.class);
+  private static final Set<Integer> ACCEPTABLE_HTTP_RESPONSES = new HashSet<>(2);
   
   private final Configuration conf;
   private final URL hopsworksHost;
@@ -69,9 +73,11 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
     // TODO(Antonis) Read them from configuration
     this.hopsworksHost = new URL("http://bbc4.sics.se:34821");
     this.loginEndpoint = new URL(hopsworksHost, "hopsworks-api/api/auth/login");
-    this.signEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/sign");
+    this.signEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/sign/app");
     this.revokeEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/revoke");
     this.certificateFactory = CertificateFactory.getInstance("X.509", "BC");
+    ACCEPTABLE_HTTP_RESPONSES.add(HttpStatus.SC_OK);
+    ACCEPTABLE_HTTP_RESPONSES.add(HttpStatus.SC_NO_CONTENT);
   }
   
   @Override
@@ -100,7 +106,7 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
   }
   
   @Override
-  public void revoke(String certificateIdentifier) throws URISyntaxException, IOException {
+  public int revoke(String certificateIdentifier) throws URISyntaxException, IOException {
     CloseableHttpClient httpClient = null;
     try {
       httpClient = createHttpClient();
@@ -109,8 +115,9 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
       JsonObject json = new JsonObject();
       json.addProperty("identifier", certificateIdentifier);
       
-      post(httpClient, json, revokeEndpoint.toURI(), "Hopsworks CA could not revoke certificate " +
-          certificateIdentifier);
+      CloseableHttpResponse response = post(httpClient, json, revokeEndpoint.toURI(),
+          "Hopsworks CA could not revoke certificate " + certificateIdentifier);
+      return response.getStatusLine().getStatusCode();
     } finally {
       if (httpClient != null) {
         httpClient.close();
@@ -151,7 +158,7 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
   }
   
   private void checkHTTPResponseCode(int responseCode, String msg) throws IOException {
-    if (responseCode != HttpStatus.SC_OK) {
+    if (!ACCEPTABLE_HTTP_RESPONSES.contains(responseCode)) {
       throw new IOException("HTTP error, response code " + responseCode + " Message: " + msg);
     }
   }

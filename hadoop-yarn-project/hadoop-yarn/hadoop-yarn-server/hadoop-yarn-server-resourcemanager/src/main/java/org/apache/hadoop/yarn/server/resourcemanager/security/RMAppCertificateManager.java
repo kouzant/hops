@@ -67,6 +67,7 @@ import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
 
 public class RMAppCertificateManager extends AbstractService
     implements EventHandler<RMAppCertificateManagerEvent> {
@@ -288,14 +289,30 @@ public class RMAppCertificateManager extends AbstractService
   @VisibleForTesting
   public void revokeCertificate(ApplicationId appId, String applicationUser) {
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT) && certificateLocalizationService != null) {
+          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       LOG.info("Revoking certificate for application: " + appId);
       try {
-        revocationEvents.put(new CertificateRevocationEvent(getCertificateIdentifier(appId, applicationUser)));
-        certificateLocalizationService.removeMaterial(applicationUser);
+        putToQueue(appId, applicationUser);
+        if (certificateLocalizationService != null) {
+          certificateLocalizationService.removeMaterial(applicationUser);
+        }
       } catch (InterruptedException | ExecutionException ex) {
         LOG.warn("Could not remove material for user " + applicationUser + " and application " + appId, ex);
       }
+    }
+  }
+  
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected void putToQueue(ApplicationId appId, String applicationUser) throws InterruptedException {
+    revocationEvents.put(new CertificateRevocationEvent(getCertificateIdentifier(appId, applicationUser)));
+  }
+  
+  // Used only for testing
+  @VisibleForTesting
+  protected void waitForQueueToDrain() throws InterruptedException {
+    while (revocationEvents.peek() != null) {
+      TimeUnit.MILLISECONDS.sleep(10);
     }
   }
   

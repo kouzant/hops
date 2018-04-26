@@ -24,6 +24,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.yarn.MockApps;
@@ -45,6 +46,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppCertificateGeneratedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
+import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.junit.After;
 import org.junit.AfterClass;
@@ -58,6 +60,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
@@ -66,16 +69,19 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
+import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
 import java.security.KeyStore;
+import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -96,6 +102,7 @@ public class TestRMAppCertificateManager {
   
   @BeforeClass
   public static void beforeClass() throws Exception {
+    Security.addProvider(new BouncyCastleProvider());
     BASE_DIR_FILE.mkdirs();
   }
   
@@ -174,6 +181,8 @@ public class TestRMAppCertificateManager {
   // Normally it should be ignored as it requires Hopsworks instance to be running
   @Test
   public void testSuccessfulCertificateCreationRemote() throws Exception {
+    RMAppCertificateActions mockRemoteActions = Mockito.spy(new HopsworksRMAppCertificateActions(conf));
+    RMAppCertificateActionsFactory.getInstance(conf).register(mockRemoteActions);
     MockRMAppCertificateManager manager = new MockRMAppCertificateManager(false, rmContext);
     manager.init(conf);
     manager.start();
@@ -183,6 +192,40 @@ public class TestRMAppCertificateManager {
         RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
     
     dispatcher.await();
+    manager.stop();
+  }
+  
+  // This test makes a REST call to Hopsworks using HopsworksRMAppCertificateActions actor class
+  // Normally it should be ignored as it requires Hopsworks instance to be running
+  @Test
+  public void testCertificateRevocationRemote() throws Exception {
+    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
+    RMAppCertificateActions mockRemoteActions = Mockito.spy(new HopsworksRMAppCertificateActions(conf));
+    RMAppCertificateActionsFactory.getInstance(conf).register(mockRemoteActions);
+    MockRMAppCertificateManager manager = Mockito.spy(new MockRMAppCertificateManager(false, rmContext));
+    manager.init(conf);
+    manager.start();
+    String username = "Alice";
+    ApplicationId appId = ApplicationId.newInstance(System.currentTimeMillis(), 1);
+    manager.handle(new RMAppCertificateManagerEvent(
+        appId, username, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
+  
+    dispatcher.await();
+    Mockito.verify(mockRemoteActions, Mockito.atMost(1)).sign(Mockito.any(PKCS10CertificationRequest.class));
+    
+    manager.handle(new RMAppCertificateManagerEvent(
+        appId, username, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+    
+    dispatcher.await();
+    Mockito.verify(manager, Mockito.atMost(1))
+        .revokeCertificate(appId, username);
+  
+    TimeUnit.SECONDS.sleep(3);
+    
+    String certificateIdentifier = username + "__" + appId.toString();
+    Mockito.verify(mockRemoteActions, Mockito.atMost(1))
+        .revoke(Mockito.eq(certificateIdentifier));
+    
     manager.stop();
   }
   
@@ -333,6 +376,7 @@ public class TestRMAppCertificateManager {
         signedCertificate.checkValidity();
         
         RMAppCertificateActions actor = getRmAppCertificateActions();
+        
         if (actor instanceof TestingRMAppCertificateActions) {
           X509Certificate caCert = ((TestingRMAppCertificateActions) actor).getCaCert();
           signedCertificate.verify(caCert.getPublicKey(), "BC");
@@ -385,6 +429,17 @@ public class TestRMAppCertificateManager {
         }
       }
       assertFalse(exceptionThrown);
+    }
+    
+    @Override
+    public void revokeCertificate(ApplicationId appId, String applicationUser) {
+      try {
+        putToQueue(appId, applicationUser);
+        waitForQueueToDrain();
+      } catch (InterruptedException ex) {
+        LOG.error(ex, ex);
+        fail("Exception should not be thrown here");
+      }
     }
     
     private void verifyContentOfAppTrustStore(byte[] appTrustStore, char[] password, String appUser,

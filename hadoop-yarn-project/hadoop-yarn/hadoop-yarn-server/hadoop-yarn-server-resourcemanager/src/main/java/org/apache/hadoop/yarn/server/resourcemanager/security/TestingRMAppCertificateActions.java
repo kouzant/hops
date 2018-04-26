@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
+import org.apache.commons.httpclient.HttpStatus;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -105,7 +106,8 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions {
   }
   
   @Override
-  public void revoke(String certificateIdentifier) throws URISyntaxException, IOException {
+  public int revoke(String certificateIdentifier) throws URISyntaxException, IOException {
     LOG.info("Revoking certificate " + certificateIdentifier);
+    return HttpStatus.SC_OK;
   }
 }
