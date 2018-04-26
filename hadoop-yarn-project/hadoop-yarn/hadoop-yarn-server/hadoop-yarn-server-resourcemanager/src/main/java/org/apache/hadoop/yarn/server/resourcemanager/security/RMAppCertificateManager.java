@@ -148,10 +148,13 @@ public class RMAppCertificateManager extends AbstractService
     return rmAppCertificateActions;
   }
   
+  @VisibleForTesting
   protected RMContext getRmContext() {
     return rmContext;
   }
   
+  @InterfaceAudience.Private
+  @VisibleForTesting
   public void revokeAndGenerateCertificates(ApplicationId appId, String appUser) {
     // Certificate revocation here is blocking
     if (revokeInternal(getCertificateIdentifier(appId, appUser))) {
@@ -162,6 +165,8 @@ public class RMAppCertificateManager extends AbstractService
   }
   
   // Scope is protected to ease testing
+  @InterfaceAudience.Private
+  @VisibleForTesting
   @SuppressWarnings("unchecked")
   public void generateCertificate(ApplicationId appId, String appUser) {
     try {
@@ -193,12 +198,15 @@ public class RMAppCertificateManager extends AbstractService
     }
   }
   
+  @InterfaceAudience.Private
+  @VisibleForTesting
   protected X509Certificate sendCSRAndGetSigned(PKCS10CertificationRequest csr)
       throws URISyntaxException, IOException, GeneralSecurityException {
     return rmAppCertificateActions.sign(csr);
   }
-  
-  // Scope is protected to ease testing
+
+  @InterfaceAudience.Private
+  @VisibleForTesting
   protected PKCS10CertificationRequest generateCSR(ApplicationId appId, String applicationUser, KeyPair keyPair)
       throws OperatorCreationException {
     LOG.info("Generating certificate for application: " + appId);
@@ -208,7 +216,8 @@ public class RMAppCertificateManager extends AbstractService
     return createCSR(subject, keyPair);
   }
   
-  // Scope is
+  @InterfaceAudience.Private
+  @VisibleForTesting
   public KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
     String sslConfName = conf.get(SSLFactory.SSL_SERVER_CONF_KEY, "ssl-server.xml");
     Configuration sslConf = new Configuration();
@@ -232,6 +241,8 @@ public class RMAppCertificateManager extends AbstractService
     return trustStore;
   }
   
+  @InterfaceAudience.Private
+  @VisibleForTesting
   protected KeyStoresWrapper createApplicationStores(X509Certificate certificate, PrivateKey privateKey,
       String appUser, ApplicationId appId)
       throws GeneralSecurityException, IOException {
@@ -259,6 +270,8 @@ public class RMAppCertificateManager extends AbstractService
     return new KeyStoresWrapper(keyStore, password, appTrustStore, password, appUser, appId);
   }
   
+  @InterfaceAudience.Private
+  @VisibleForTesting
   protected KeyPair generateKeyPair() {
     return keyPairGenerator.genKeyPair();
   }
