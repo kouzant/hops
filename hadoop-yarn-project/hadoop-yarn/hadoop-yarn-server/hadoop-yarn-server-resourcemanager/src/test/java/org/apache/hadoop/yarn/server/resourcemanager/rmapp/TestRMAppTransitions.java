@@ -440,8 +440,8 @@ public class TestRMAppTransitions {
         new RMAppEvent(application.getApplicationId(),
             RMAppEventType.APP_NEW_SAVED);
     application.handle(event);
-    assertStartTimeSet(application);
     assertAppState(RMAppState.GENERATING_CERTS, application);
+    assertStartTimeSet(application);
     return application;
   }
   
