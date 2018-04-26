@@ -24,10 +24,16 @@ import org.apache.commons.logging.LogFactory;
 import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class HopsUtil {
   
   private static final Log LOG = LogFactory.getLog(HopsUtil.class);
+  
+  // Assuming that subject attributes do not contain comma
+  private static final Pattern CN_PATTERN = Pattern.compile(".*CN=([^,]+).*");
+  private static final Pattern O_PATTERN = Pattern.compile(".*O=([^,]+).*");
   
   /**
    * Read password for cryptographic material from a file. The file could be
@@ -46,5 +52,33 @@ public class HopsUtil {
     }
     
     return FileUtils.readFileToString(passwdFile);
+  }
+  
+  /**
+   * Extracts the CommonName (CN) from an X.509 subject
+   *
+   * @param subject X.509 subject
+   * @return CommonName or null if it cannot be parsed
+   */
+  public static String extractCNFromSubject(String subject) {
+    Matcher matcher = CN_PATTERN.matcher(subject);
+    if (matcher.matches()) {
+      return matcher.group(1);
+    }
+    return null;
+  }
+  
+  /**
+   * Extracts the Organization (O) from an X.509 subject
+   *
+   * @param subject X.509 subject
+   * @return Organization or null if it cannot be parsed
+   */
+  public static String extractOFromSubject(String subject) {
+    Matcher matcher = O_PATTERN.matcher(subject);
+    if (matcher.matches()) {
+      return matcher.group(1);
+    }
+    return null;
   }
 }

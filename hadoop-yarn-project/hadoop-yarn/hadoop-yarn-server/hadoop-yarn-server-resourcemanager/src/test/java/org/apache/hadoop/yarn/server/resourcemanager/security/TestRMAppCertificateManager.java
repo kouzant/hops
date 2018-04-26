@@ -17,6 +17,7 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
+import io.hops.security.HopsUtil;
 import io.hops.util.DBUtility;
 import io.hops.util.RMStorageFactory;
 import io.hops.util.YarnAPIStorageFactory;
@@ -59,7 +60,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
@@ -69,7 +69,6 @@ import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
 import java.io.Writer;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
@@ -82,14 +81,9 @@ import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.concurrent.TimeUnit;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 public class TestRMAppCertificateManager {
   private static final Log LOG = LogFactory.getLog(TestRMAppCertificateManager.class);
-  // Assuming that subject attributes do not contain comma
-  private static final Pattern CN_PATTERN = Pattern.compile(".*CN=([^,]+).*");
-  private static final Pattern O_PATTERN = Pattern.compile(".*O=([^,]+).*");
   private static final String BASE_DIR = System.getProperty("test.build.dir", Paths.get("target","test-dir",
       TestRMAppCertificateManager.class.getSimpleName()).toString());
   private static final File BASE_DIR_FILE = new File(BASE_DIR);
@@ -368,8 +362,8 @@ public class TestRMAppCertificateManager {
         // Generate CSR
         PKCS10CertificationRequest csr = generateCSR(applicationId, appUser, keyPair);
         
-        assertEquals(appUser, extractCNFromSubject(csr.getSubject().toString()));
-        assertEquals(applicationId.toString(), extractOFromSubject(csr.getSubject().toString()));
+        assertEquals(appUser, HopsUtil.extractCNFromSubject(csr.getSubject().toString()));
+        assertEquals(applicationId.toString(), HopsUtil.extractOFromSubject(csr.getSubject().toString()));
         
         // Sign CSR
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
@@ -410,8 +404,9 @@ public class TestRMAppCertificateManager {
           X509Certificate caCert = ((TestingRMAppCertificateActions) actor).getCaCert();
           extractedCert.verify(caCert.getPublicKey(), "BC");
         }
-        assertEquals(appUser, extractCNFromSubject(extractedCert.getSubjectX500Principal().getName()));
-        assertEquals(applicationId.toString(), extractOFromSubject(extractedCert.getSubjectX500Principal().getName()));
+        assertEquals(appUser, HopsUtil.extractCNFromSubject(extractedCert.getSubjectX500Principal().getName()));
+        assertEquals(applicationId.toString(), HopsUtil.extractOFromSubject(
+            extractedCert.getSubjectX500Principal().getName()));
   
         RMAppCertificateGeneratedEvent startEvent = new RMAppCertificateGeneratedEvent(applicationId,
             rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword);
@@ -477,22 +472,6 @@ public class TestRMAppCertificateManager {
         assertFalse(certificateMissing);
       }
     }
-  }
-  
-  private String extractCNFromSubject(String subject) {
-    Matcher matcher = CN_PATTERN.matcher(subject);
-    if (matcher.matches()) {
-      return matcher.group(1);
-    }
-    return null;
-  }
-  
-  private String extractOFromSubject(String subject) {
-    Matcher matcher = O_PATTERN.matcher(subject);
-    if (matcher.matches()) {
-      return matcher.group(1);
-    }
-    return null;
   }
   
   private class MockFailingRMAppCertificateManager extends RMAppCertificateManager {
