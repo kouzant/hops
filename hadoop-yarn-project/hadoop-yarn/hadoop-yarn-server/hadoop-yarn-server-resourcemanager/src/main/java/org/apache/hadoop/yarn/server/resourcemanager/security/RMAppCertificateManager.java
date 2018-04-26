@@ -104,7 +104,7 @@ public class RMAppCertificateManager extends AbstractService
     this.conf = conf;
     this.handler = rmContext.getDispatcher().getEventHandler();
     this.certificateLocalizationService = rmContext.getCertificateLocalizationService();
-    rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance(conf).getActor();
+    rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance().getActor(conf);
     keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
     keyPairGenerator.initialize(KEY_SIZE);
     super.serviceInit(conf);

@@ -266,7 +266,9 @@ public class TestRMAppTransitions {
     rmDispatcher.register(SchedulerEventType.class,
         schedulerDispatcher);
     
-    RMAppCertificateActionsFactory.getInstance(conf).register(new TestingRMAppCertificateActions(conf));
+    RMAppCertificateActionsFactory.getInstance().clear();
+    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
     rmAppCertificateManager = spy(new RMAppCertificateManager(rmContext));
     rmAppCertificateManager.init(conf);
     rmAppCertificateManager.start();
@@ -286,6 +288,7 @@ public class TestRMAppTransitions {
     if (certificateLocalizationService != null) {
       certificateLocalizationService.stop();
     }
+    RMAppCertificateActionsFactory.getInstance().clear();
   }
   
   private KeyStore loadMockTrustStore() throws IOException, GeneralSecurityException {

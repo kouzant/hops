@@ -34,6 +34,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
@@ -103,7 +104,7 @@ public class TestRMAppCertificateManager {
   @Before
   public void beforeTest() throws Exception {
     conf = new Configuration();
-    RMAppCertificateActionsFactory.getInstance(conf).clean();
+    RMAppCertificateActionsFactory.getInstance().clear();
     RMStorageFactory.setConfiguration(conf);
     YarnAPIStorageFactory.setConfiguration(conf);
     DBUtility.InitializeDB();
@@ -130,13 +131,15 @@ public class TestRMAppCertificateManager {
     if (sslServerFile != null && sslServerFile.exists()) {
       sslServerFile.delete();
     }
+    RMAppCertificateActionsFactory.getInstance().clear();
   }
   
   @Test
   public void testSuccessfulCertificateCreationTesting() throws Exception {
-    RMAppCertificateActions testActor = new TestingRMAppCertificateActions(conf);
-    RMAppCertificateActionsFactory.getInstance(conf).register(testActor);
+    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
     
+    RMAppCertificateActions testActor = RMAppCertificateActionsFactory.getInstance().getActor(conf);
     String trustStore = Paths.get(BASE_DIR, "trustStore.jks").toString();
     X509Certificate caCert = ((TestingRMAppCertificateActions) testActor).getCaCert();
     String principal = caCert.getIssuerX500Principal().getName();
@@ -175,8 +178,10 @@ public class TestRMAppCertificateManager {
   // Normally it should be ignored as it requires Hopsworks instance to be running
   @Test
   public void testSuccessfulCertificateCreationRemote() throws Exception {
-    RMAppCertificateActions mockRemoteActions = Mockito.spy(new HopsworksRMAppCertificateActions(conf));
-    RMAppCertificateActionsFactory.getInstance(conf).register(mockRemoteActions);
+    HopsworksRMAppCertificateActions mockRemoteActions = Mockito.spy(new HopsworksRMAppCertificateActions());
+    mockRemoteActions.setConf(conf);
+    mockRemoteActions.init();
+    RMAppCertificateActionsFactory.getInstance().register(mockRemoteActions);
     MockRMAppCertificateManager manager = new MockRMAppCertificateManager(false, rmContext);
     manager.init(conf);
     manager.start();
@@ -194,8 +199,11 @@ public class TestRMAppCertificateManager {
   @Test
   public void testCertificateRevocationRemote() throws Exception {
     conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
-    RMAppCertificateActions mockRemoteActions = Mockito.spy(new HopsworksRMAppCertificateActions(conf));
-    RMAppCertificateActionsFactory.getInstance(conf).register(mockRemoteActions);
+    HopsworksRMAppCertificateActions mockRemoteActions = Mockito.spy(new HopsworksRMAppCertificateActions());
+    mockRemoteActions.setConf(conf);
+    mockRemoteActions.init();
+    RMAppCertificateActionsFactory.getInstance().register(mockRemoteActions);
+    
     MockRMAppCertificateManager manager = Mockito.spy(new MockRMAppCertificateManager(false, rmContext));
     manager.init(conf);
     manager.start();
@@ -225,9 +233,8 @@ public class TestRMAppCertificateManager {
   
   @Test
   public void testFailingCertificateCreationLocal() throws Exception {
-    RMAppCertificateActions testActor = new TestingRMAppCertificateActions(conf);
-    RMAppCertificateActionsFactory.getInstance(conf).register(testActor);
-    
+    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
     
     MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.KILL);
     rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
@@ -246,8 +253,8 @@ public class TestRMAppCertificateManager {
   
   @Test
   public void testApplicationSubmission() throws Exception {
-    RMAppCertificateActions testActor = new TestingRMAppCertificateActions(conf);
-    RMAppCertificateActionsFactory.getInstance(conf).register(testActor);
+    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
     
     MockRM rm  = new MyMockRM(conf);
     rm.start();

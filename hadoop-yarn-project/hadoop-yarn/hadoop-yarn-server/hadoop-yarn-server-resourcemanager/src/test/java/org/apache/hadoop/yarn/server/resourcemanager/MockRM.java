@@ -169,7 +169,9 @@ public class MockRM extends ResourceManager {
   
   @Override
   protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
-    RMAppCertificateActionsFactory.getInstance(getConfig()).register(new TestingRMAppCertificateActions(getConfig()));
+    getConfig().set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
+    RMAppCertificateActionsFactory.getInstance().clear();
     return new TestingRMAppCertificateManager();
   }
   

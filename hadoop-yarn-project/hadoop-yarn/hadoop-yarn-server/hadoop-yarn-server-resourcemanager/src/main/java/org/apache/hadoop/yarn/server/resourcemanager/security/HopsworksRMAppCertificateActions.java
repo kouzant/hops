@@ -22,11 +22,10 @@ import com.google.gson.JsonParser;
 import org.apache.commons.httpclient.HttpStatus;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.http.HttpEntity;
 import org.apache.http.HttpHeaders;
 import org.apache.http.client.methods.CloseableHttpResponse;
-import org.apache.http.client.methods.HttpGet;
 import org.apache.http.client.methods.HttpPost;
 import org.apache.http.client.methods.HttpUriRequest;
 import org.apache.http.client.methods.RequestBuilder;
@@ -40,10 +39,8 @@ import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.util.io.pem.PemObjectGenerator;
 import org.bouncycastle.util.io.pem.PemWriter;
 
-import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
-import java.io.StringReader;
 import java.io.StringWriter;
 import java.net.MalformedURLException;
 import java.net.URI;
@@ -52,32 +49,43 @@ import java.net.URL;
 import java.security.GeneralSecurityException;
 import java.security.cert.CertificateFactory;
 import java.security.cert.X509Certificate;
-import java.util.EnumSet;
 import java.util.HashSet;
 import java.util.Set;
 
-public class HopsworksRMAppCertificateActions implements RMAppCertificateActions {
+public class HopsworksRMAppCertificateActions implements RMAppCertificateActions, Configurable {
   private static final Log LOG = LogFactory.getLog(HopsworksRMAppCertificateActions.class);
   private static final Set<Integer> ACCEPTABLE_HTTP_RESPONSES = new HashSet<>(2);
   
-  private final Configuration conf;
-  private final URL hopsworksHost;
-  private final URL loginEndpoint;
-  private final URL signEndpoint;
-  private final URL revokeEndpoint;
-  private final CertificateFactory certificateFactory;
+  private Configuration conf;
+  private URL hopsworksHost;
+  private  URL loginEndpoint;
+  private  URL signEndpoint;
+  private  URL revokeEndpoint;
+  private  CertificateFactory certificateFactory;
   
-  public HopsworksRMAppCertificateActions(Configuration conf) throws MalformedURLException, GeneralSecurityException {
-    this.conf = conf;
-    
-    // TODO(Antonis) Read them from configuration
-    this.hopsworksHost = new URL("http://bbc4.sics.se:34821");
-    this.loginEndpoint = new URL(hopsworksHost, "hopsworks-api/api/auth/login");
-    this.signEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/sign/app");
-    this.revokeEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/revoke");
-    this.certificateFactory = CertificateFactory.getInstance("X.509", "BC");
+  public HopsworksRMAppCertificateActions() throws MalformedURLException, GeneralSecurityException {
     ACCEPTABLE_HTTP_RESPONSES.add(HttpStatus.SC_OK);
     ACCEPTABLE_HTTP_RESPONSES.add(HttpStatus.SC_NO_CONTENT);
+  }
+  
+  @Override
+  public void setConf(Configuration conf) {
+    this.conf = conf;
+  }
+  
+  @Override
+  public Configuration getConf() {
+    return conf;
+  }
+  
+  @Override
+  public void init() throws MalformedURLException, GeneralSecurityException {
+    // TODO(Antonis) Read them from configuration
+    hopsworksHost = new URL("http://bbc4.sics.se:34821");
+    loginEndpoint = new URL(hopsworksHost, "hopsworks-api/api/auth/login");
+    signEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/sign/app");
+    revokeEndpoint = new URL(this.hopsworksHost, "hopsworks-ca/ca/agentservice/revoke");
+    certificateFactory = CertificateFactory.getInstance("X.509", "BC");
   }
   
   @Override

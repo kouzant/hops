@@ -20,11 +20,13 @@ package org.apache.hadoop.yarn.server.resourcemanager.security;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 
 import java.io.IOException;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
 import java.security.cert.X509Certificate;
 
 public interface RMAppCertificateActions {
+  void init() throws MalformedURLException, GeneralSecurityException;
   X509Certificate sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException, GeneralSecurityException;
   int revoke(String certificateIdentifier) throws URISyntaxException, IOException;
 }

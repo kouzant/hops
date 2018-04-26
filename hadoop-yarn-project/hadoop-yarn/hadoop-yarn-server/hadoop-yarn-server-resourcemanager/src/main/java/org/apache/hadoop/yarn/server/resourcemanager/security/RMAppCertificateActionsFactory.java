@@ -17,49 +17,49 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
+import com.google.common.annotations.VisibleForTesting;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.util.ReflectionUtils;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 
 public final class RMAppCertificateActionsFactory {
   
-  private final Configuration conf;
+  private static volatile RMAppCertificateActionsFactory _INSTANCE;
+  private RMAppCertificateActions actor = null;
   
-  private static RMAppCertificateActionsFactory _INSTANCE = null;
-  
-  private RMAppCertificateActions actor;
-  
-  private RMAppCertificateActionsFactory(Configuration conf) {
-    this.conf = conf;
+  private RMAppCertificateActionsFactory() {
   }
   
-  public static RMAppCertificateActionsFactory getInstance(Configuration conf) {
+  public static RMAppCertificateActionsFactory getInstance() {
     if (_INSTANCE == null) {
       synchronized (RMAppCertificateActionsFactory.class) {
         if (_INSTANCE == null) {
-          _INSTANCE = new RMAppCertificateActionsFactory(conf);
+          _INSTANCE = new RMAppCertificateActionsFactory();
         }
       }
     }
-    
     return _INSTANCE;
   }
   
-  public RMAppCertificateActions getActor() throws Exception {
-    if (actor == null) {
-      synchronized (RMAppCertificateActionsFactory.class) {
-        if (actor == null) {
-          actor = new HopsworksRMAppCertificateActions(conf);
-        }
-      }
+  public synchronized RMAppCertificateActions getActor(Configuration conf) throws Exception {
+    if (actor != null) {
+      return actor;
     }
+    String actorClass = conf.get(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_DEFAULT);
+    Class<?> clazz = conf.getClassByName(actorClass);
+    actor = (RMAppCertificateActions) ReflectionUtils.newInstance(clazz, conf);
+    actor.init();
     return actor;
   }
   
-  // This is for testing
-  public void register(RMAppCertificateActions actor) {
-    this.actor = actor;
+  @VisibleForTesting
+  public void clear() {
+    actor = null;
   }
   
-  public void clean() {
-    this.actor = null;
+  @VisibleForTesting
+  public void register(RMAppCertificateActions actor) {
+    this.actor = actor;
   }
 }

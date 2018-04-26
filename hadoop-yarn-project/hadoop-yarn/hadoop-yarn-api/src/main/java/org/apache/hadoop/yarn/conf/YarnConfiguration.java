@@ -2633,4 +2633,11 @@ public class YarnConfiguration extends Configuration {
   public static String USER_FOLDER_ALGO = YARN_PREFIX + "userfolder.algo";
   public static String DEFAULT_USER_FOLDER_ALGO = "SHA-256";
   
+  /**
+   * Actor class for signing and revoking application certificates
+   * Loaded by RMAppCertificateManager
+   */
+  public static final String HOPS_RM_CERTIFICATE_ACTOR_KEY = "hops.rm.certificate.actor.class";
+  public static final String HOPS_RM_CERTIFICATE_ACTOR_DEFAULT = "org.apache.hadoop.yarn.server.resourcemanager" +
+      ".security.HopsworksRMAppCertificateActions";
 }

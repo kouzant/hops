@@ -18,6 +18,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
 import org.apache.commons.httpclient.HttpStatus;
+import org.apache.hadoop.conf.Configurable;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.log4j.LogManager;
 import org.apache.log4j.Logger;
@@ -32,12 +33,14 @@ import org.bouncycastle.cert.jcajce.JcaX509ExtensionUtils;
 import org.bouncycastle.cert.jcajce.JcaX509v3CertificateBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.operator.ContentSigner;
+import org.bouncycastle.operator.OperatorCreationException;
 import org.bouncycastle.operator.jcajce.JcaContentSignerBuilder;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.bouncycastle.pkcs.jcajce.JcaPKCS10CertificationRequest;
 
 import java.io.IOException;
 import java.math.BigInteger;
+import java.net.MalformedURLException;
 import java.net.URISyntaxException;
 import java.security.GeneralSecurityException;
 import java.security.KeyPair;
@@ -46,19 +49,27 @@ import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.util.Date;
 
-public class TestingRMAppCertificateActions implements RMAppCertificateActions {
+public class TestingRMAppCertificateActions implements RMAppCertificateActions, Configurable {
   private final static Logger LOG = LogManager.getLogger(TestingRMAppCertificateActions.class);
   
   private final static String KEY_ALGORITHM = "RSA";
   private final static String SIGNATURE_ALGORITHM = "SHA256withRSA";
   private final static int KEY_SIZE = 1024;
   
-  private final KeyPair caKeyPair;
-  private final X509Certificate caCert;
-  private final ContentSigner sigGen;
-  private final Configuration conf;
+  private KeyPair caKeyPair;
+  private X509Certificate caCert;
+  private ContentSigner sigGen;
+  private Configuration conf;
   
-  public TestingRMAppCertificateActions(Configuration conf) throws Exception {
+  public TestingRMAppCertificateActions() {
+  }
+  
+  public X509Certificate getCaCert() {
+    return caCert;
+  }
+  
+  @Override
+  public void init() throws MalformedURLException, GeneralSecurityException {
     Security.addProvider(new BouncyCastleProvider());
     KeyPairGenerator kpg = KeyPairGenerator.getInstance(KEY_ALGORITHM, "BC");
     kpg.initialize(KEY_SIZE);
@@ -67,21 +78,30 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions {
     X500NameBuilder subjectBuilder = new X500NameBuilder(BCStyle.INSTANCE);
     subjectBuilder.addRDN(BCStyle.CN, "RootCA");
   
-    sigGen = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider("BC").build(caKeyPair
-        .getPrivate());
-    X509v3CertificateBuilder certGen = new JcaX509v3CertificateBuilder(subjectBuilder.build(),
-        BigInteger.ONE, new Date(), new Date(System.currentTimeMillis() + 600000),
-        subjectBuilder.build(), caKeyPair.getPublic());
-    caCert = new JcaX509CertificateConverter().setProvider("BC").getCertificate(certGen.build(sigGen));
-    
-    caCert.checkValidity();
-    caCert.verify(caKeyPair.getPublic());
-    caCert.verify(caCert.getPublicKey());
+    try {
+      sigGen = new JcaContentSignerBuilder(SIGNATURE_ALGORITHM).setProvider("BC").build(caKeyPair
+          .getPrivate());
+      X509v3CertificateBuilder certGen = new JcaX509v3CertificateBuilder(subjectBuilder.build(),
+          BigInteger.ONE, new Date(), new Date(System.currentTimeMillis() + 600000),
+          subjectBuilder.build(), caKeyPair.getPublic());
+      caCert = new JcaX509CertificateConverter().setProvider("BC").getCertificate(certGen.build(sigGen));
+  
+      caCert.checkValidity();
+      caCert.verify(caKeyPair.getPublic());
+      caCert.verify(caCert.getPublicKey());
+    } catch (OperatorCreationException ex) {
+      throw new GeneralSecurityException(ex);
+    }
+  }
+  
+  @Override
+  public void setConf(Configuration conf) {
     this.conf = conf;
   }
   
-  public X509Certificate getCaCert() {
-    return caCert;
+  @Override
+  public Configuration getConf() {
+    return conf;
   }
   
   @Override
