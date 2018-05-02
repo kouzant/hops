@@ -32,7 +32,7 @@ import java.util.concurrent.ExecutionException;
  */
 public class NormalUserCertLocServiceHopsSSLCheck extends AbstractHopsSSLCheck {
   public NormalUserCertLocServiceHopsSSLCheck() {
-    super(90);
+    super(105);
   }
   
   @Override

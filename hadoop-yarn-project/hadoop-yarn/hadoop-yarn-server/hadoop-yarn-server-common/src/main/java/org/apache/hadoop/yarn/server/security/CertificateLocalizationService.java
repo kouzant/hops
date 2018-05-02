@@ -120,7 +120,8 @@ public class CertificateLocalizationService extends AbstractService
     RM("RM"),
     NM("NM"),
     HS2("HS2"),
-    HM("HM");
+    HM("HM"),
+    LLAP("LLAP");
 
     private final String service;
 

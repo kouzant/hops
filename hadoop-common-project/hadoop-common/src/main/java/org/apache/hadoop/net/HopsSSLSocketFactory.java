@@ -87,19 +87,19 @@ public class HopsSSLSocketFactory extends SocketFactory implements Configurable 
   /**
    * Configuration checks will run according to their priority
    * ENV_VARIABLE_CHECK - Priority: 110 - Checks if the crypto material exist in the specified environment variable
+   * NORMAL_USER_CERTIFICATE_LOCALIZATION - Priority: 105 - Checks if the crypto material has been localized by
+   *    the CertificateLocalizationService of ResourceManager or NodeManager
    * LOCAL_RESOURCE - Priority: 100 - Checks if the crypto material exist in the container's CWD
    * NORMAL_USER_MATERIALIZE_DIR - Priority: 95 - Checks if the crypto material exist in Hopsworks materialize
    *    directory. Certificates are materialized there by Hopsworks
-   * NORMAL_USER_CERTIFICATE_LOCALIZATION - Priority: 90 - Checks if the crypto material has been localized by
-   *    the CertificateLocalizationService of ResourceManager or NodeManager
    * SUPER_USER - Priority: -1 - Checks if the user is a super user and picks the machine certificates.
    *    NOTE: It should have the lowest priority
    */
   static {
     HOPS_SSL_CHECKS.add(ENV_VARIABLE_CHECK);
+    HOPS_SSL_CHECKS.add(NORMAL_USER_CERTIFICATE_LOCALIZATION);
     HOPS_SSL_CHECKS.add(LOCAL_RESOURCE);
     HOPS_SSL_CHECKS.add(NORMAL_USER_MATERIALIZE_DIR);
-    HOPS_SSL_CHECKS.add(NORMAL_USER_CERTIFICATE_LOCALIZATION);
     HOPS_SSL_CHECKS.add(SUPER_USER);
   }
   
