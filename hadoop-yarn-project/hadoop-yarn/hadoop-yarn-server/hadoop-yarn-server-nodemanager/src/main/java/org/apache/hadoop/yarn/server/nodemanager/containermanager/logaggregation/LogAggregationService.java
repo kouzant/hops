@@ -334,7 +334,7 @@ public class LogAggregationService extends AbstractService implements
               conf.set(HopsSSLSocketFactory.CryptoKeys.KEY_STORE_FILEPATH_KEY
                       .getValue(),
                   context.getCertificateLocalizationService()
-                      .getMaterialLocation(user).getKeyStoreLocation());
+                      .getMaterialLocation(user, appId.toString()).getKeyStoreLocation());
             }
             
             FileSystem remoteFS = getFileSystem(conf);

@@ -182,7 +182,8 @@ public class RMAppCertificateManager extends AbstractService
         byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
         
         rmContext.getCertificateLocalizationService().materializeCertificates(
-            appUser, appUser, ByteBuffer.wrap(rawProtectedKeyStore), String.valueOf(keyStoresWrapper.keyStorePassword),
+            appUser, appId.toString(), appUser, ByteBuffer.wrap(rawProtectedKeyStore),
+            String.valueOf(keyStoresWrapper.keyStorePassword),
             ByteBuffer.wrap(rawTrustStore), String.valueOf(keyStoresWrapper.trustStorePassword));
         
         handler.handle(new RMAppCertificateGeneratedEvent(
@@ -307,7 +308,7 @@ public class RMAppCertificateManager extends AbstractService
       try {
         putToQueue(appId, applicationUser);
         if (certificateLocalizationService != null) {
-          certificateLocalizationService.removeMaterial(applicationUser);
+          certificateLocalizationService.removeMaterial(applicationUser, appId.toString());
         }
       } catch (InterruptedException | ExecutionException ex) {
         LOG.warn("Could not remove material for user " + applicationUser + " and application " + appId, ex);

@@ -884,7 +884,7 @@ public class ContainerManagerImpl extends CompositeService implements
     // AMLauncher
     if (keyStorePass != null && !keyStorePass.isEmpty()
         && trustStorePass != null && !trustStorePass.isEmpty()) {
-      context.getCertificateLocalizationService().materializeCertificates(user, userFolder,
+      context.getCertificateLocalizationService().materializeCertificates(user, appId.toString(), userFolder,
           keyStore, keyStorePass, trustStore, trustStorePass);
     }
   }
@@ -983,7 +983,7 @@ public class ContainerManagerImpl extends CompositeService implements
         }
       }
     }
-  
+    
     // Inject crypto material when RPC TLS is enabled as LocalResources
     injectCryptoMaterialAsLocalResources(user, containerId, launchContext);
     
@@ -1081,8 +1081,9 @@ public class ContainerManagerImpl extends CompositeService implements
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       try {
+        String applicationId = containerId.getApplicationAttemptId().getApplicationId().toString();
         CryptoMaterial cryptoMaterial = context
-            .getCertificateLocalizationService().getMaterialLocation(applicationUser);
+            .getCertificateLocalizationService().getMaterialLocation(applicationUser, applicationId);
         String keyStoreLocation = cryptoMaterial.getKeyStoreLocation();
         String trustStoreLocation = cryptoMaterial.getTrustStoreLocation();
         String passwdLocation = cryptoMaterial.getPasswdLocation();

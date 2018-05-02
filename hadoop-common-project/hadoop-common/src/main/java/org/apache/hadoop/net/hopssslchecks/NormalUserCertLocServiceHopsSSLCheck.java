@@ -37,20 +37,20 @@ public class NormalUserCertLocServiceHopsSSLCheck extends AbstractHopsSSLCheck {
   }
   
   @Override
-  public HopsSSLCryptoMaterial check(String username, Set<String> proxySuperUsers, Configuration configuration,
+  public HopsSSLCryptoMaterial check(UserGroupInformation ugi, Set<String> proxySuperUsers, Configuration configuration,
       CertificateLocalization certificateLocalization)
       throws IOException {
+    String username = ugi.getUserName();
     if (username.matches(HopsSSLSocketFactory.USERNAME_PATTERN)
         || !proxySuperUsers.contains(username)) {
   
       if (certificateLocalization != null) {
         try {
-          UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
           String appId = ugi.getApplicationId();
           if (appId == null) {
-            throw new RuntimeException(">>>>>> APPLICATION_ID IS NULL AAAAAAAA");
+            throw new IOException("UserGroupInformation does NOT contain the Application ID");
           }
-          CryptoMaterial material = certificateLocalization.getMaterialLocation(username);
+          CryptoMaterial material = certificateLocalization.getMaterialLocation(username, appId);
           
           return new HopsSSLCryptoMaterial(
               material.getKeyStoreLocation(),

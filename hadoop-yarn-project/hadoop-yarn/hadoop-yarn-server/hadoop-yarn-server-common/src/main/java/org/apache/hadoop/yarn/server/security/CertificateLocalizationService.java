@@ -357,8 +357,15 @@ public class CertificateLocalizationService extends AbstractService
   public void materializeCertificates(String username, String userFolder,
       ByteBuffer keyStore, String keyStorePass,
       ByteBuffer trustStore, String trustStorePass) throws IOException {
+    materializeCertificates(username, null, userFolder, keyStore, keyStorePass, trustStore, trustStorePass);
+  }
+  
+  @Override
+  public void materializeCertificates(String username, String applicationId, String userFolder,
+      ByteBuffer keyStore, String keyStorePass,
+      ByteBuffer trustStore, String trustStorePass) throws IOException {
 
-    StorageKey key = new StorageKey(username);
+    StorageKey key = new StorageKey(username, applicationId);
     CryptoMaterial material = materialLocation.get(key);
     if (null != material) {
       material.incrementRequestedApplications();
@@ -377,7 +384,13 @@ public class CertificateLocalizationService extends AbstractService
   @Override
   public void removeMaterial(String username)
       throws InterruptedException, ExecutionException {
-    StorageKey key = new StorageKey(username);
+    removeMaterial(username, null);
+  }
+  
+  @Override
+  public void removeMaterial(String username, String applicationId)
+      throws InterruptedException, ExecutionException {
+    StorageKey key = new StorageKey(username, applicationId);
     CryptoMaterial material = null;
   
     Future<CryptoMaterial> future = futures.remove(key);
@@ -396,7 +409,7 @@ public class CertificateLocalizationService extends AbstractService
     
     if (material.isSafeToRemove()) {
       execPool.execute(new Remover(key, material));
-      LOG.debug("Removing crypto material for user " + key.getUsername());
+      LOG.debug("Removing crypto material for user " + key.username);
     } else {
       LOG.debug("There are " + material.getRequestedApplications()
           + " applications using the crypto material. " +
@@ -407,7 +420,13 @@ public class CertificateLocalizationService extends AbstractService
   @Override
   public CryptoMaterial getMaterialLocation(String username)
       throws FileNotFoundException, InterruptedException, ExecutionException {
-    StorageKey key = new StorageKey(username);
+    return getMaterialLocation(username, null);
+  }
+  
+  @Override
+  public CryptoMaterial getMaterialLocation(String username, String applicationId)
+      throws FileNotFoundException, InterruptedException, ExecutionException {
+    StorageKey key = new StorageKey(username, applicationId);
   
     CryptoMaterial material = null;
     Future<CryptoMaterial> future = futures.remove(key);
@@ -495,7 +514,7 @@ public class CertificateLocalizationService extends AbstractService
     
     ReturnState<String, Integer> internalState = new ReturnState<>();
     for (Map.Entry<StorageKey, CryptoMaterial> entry : state.entrySet()) {
-      internalState.put(entry.getKey().getUsername(), entry.getValue().getRequestedApplications());
+      internalState.put(entry.getKey().username, entry.getValue().getRequestedApplications());
     }
     returnState.put(JMX_MATERIALIZED_KEY, JSON.toString(internalState));
     
@@ -513,8 +532,26 @@ public class CertificateLocalizationService extends AbstractService
    * @throws ExecutionException
    */
   @Override
-  public boolean forceRemoveMaterial(String username) throws InterruptedException, ExecutionException {
-    StorageKey key = new StorageKey(username);
+  public boolean forceRemoveMaterial(String username)
+      throws InterruptedException, ExecutionException {
+    return forceRemoveMaterial(username, null);
+  }
+  
+  /**
+   * This method SHOULD be used *wisely*!!!
+   *
+   * This method is invoked by a JMX client to force remove crypto material associated with that username.
+   * Under the operations tab.
+   * @param username User of the crypto material
+   * @param applicationId Application ID associated with this crypto material
+   * @return True if the material exists in the store. False otherwise
+   * @throws InterruptedException
+   * @throws ExecutionException
+   */
+  @Override
+  public boolean forceRemoveMaterial(String username, String applicationId)
+      throws InterruptedException, ExecutionException {
+    StorageKey key = new StorageKey(username, applicationId);
     CryptoMaterial cryptoMaterial = null;
     Future<CryptoMaterial> future = futures.remove(key);
     if (future != null) {
@@ -538,13 +575,11 @@ public class CertificateLocalizationService extends AbstractService
   
   private class StorageKey {
     private final String username;
+    private final String applicationId;
     
-    public StorageKey(String username) {
+    public StorageKey(String username, String applicationId) {
       this.username = username;
-    }
-    
-    public String getUsername() {
-      return username;
+      this.applicationId = applicationId;
     }
     
     @Override
@@ -557,13 +592,21 @@ public class CertificateLocalizationService extends AbstractService
         return false;
       }
       
-      return username.equals(((StorageKey) other).getUsername());
+      if (applicationId != null) {
+        return username.equals(((StorageKey) other).username)
+            && applicationId.equals(((StorageKey) other).applicationId);
+      }
+      
+      return username.equals(((StorageKey) other).username);
     }
     
     @Override
     public int hashCode() {
       int result = 17;
       result = 31 * result + username.hashCode();
+      if (applicationId != null) {
+        result = 31 * result + applicationId.hashCode();
+      }
       return result;
     }
   }
@@ -589,18 +632,24 @@ public class CertificateLocalizationService extends AbstractService
     @Override
     public CryptoMaterial call() throws IOException {
 
-      Path appDirPath = Paths.get(materializeDir.toString(), userFolder);
+      Path appDirPath;
+      if (key.applicationId != null) {
+        appDirPath = Paths.get(materializeDir.toString(), userFolder, key.applicationId);
+      } else {
+        appDirPath = Paths.get(materializeDir.toString(), userFolder);
+      }
+      
       File appDir = appDirPath.toFile();
       if (!appDir.exists()) {
-        appDir.mkdir();
+        appDir.mkdirs();
       }
 
       Path kStorePath = Paths.get(appDir.getAbsolutePath(),
-          key.getUsername() + HopsSSLSocketFactory.KEYSTORE_SUFFIX);
+          key.username + HopsSSLSocketFactory.KEYSTORE_SUFFIX);
       Path tStorePath = Paths.get(appDir.getAbsolutePath(),
-          key.getUsername() + HopsSSLSocketFactory.TRUSTSTORE_SUFFIX);
+          key.username + HopsSSLSocketFactory.TRUSTSTORE_SUFFIX);
       Path passwdPath = Paths.get(appDir.getAbsolutePath(),
-          key.getUsername() + HopsSSLSocketFactory.PASSWD_FILE_SUFFIX);
+          key.username + HopsSSLSocketFactory.PASSWD_FILE_SUFFIX);
 
       FileChannel kstoreChannel = new FileOutputStream(kStorePath.toFile(), false)
           .getChannel();
@@ -640,7 +689,7 @@ public class CertificateLocalizationService extends AbstractService
       if (isHAEnabled && eventProcessor != null) {
         MaterializeCryptoKeysRequest request = Records.newRecord
             (MaterializeCryptoKeysRequest.class);
-        request.setUsername(key.getUsername());
+        request.setUsername(key.username);
         request.setUserFolder(userFolder);
         request.setKeystore(kstore);
         request.setKeystorePassword(kstorePass);
