@@ -869,7 +869,7 @@ public class ContainerManagerImpl extends CompositeService implements
       ByteBuffer trustStore, String trustStorePass) throws IOException {
     
     if (context.getApplications().containsKey(appId)) {
-      LOG.error("Application reference exists, certificates should have " +
+      LOG.debug("Application reference exists, certificates should have " +
           "already been materialized");
       return;
     }

@@ -1464,6 +1464,9 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (numberOfFailure >= app.maxAppAttempts) {
           app.isNumAttemptsBeyondThreshold = true;
         }
+        app.handler.handle(new RMAppCertificateManagerEvent(app.applicationId, app.user,
+            RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+        
         app.rememberTargetTransitionsAndStoreState(event,
           new AttemptFailedFinalStateSavedTransition(), RMAppState.FAILED,
           RMAppState.FAILED);
