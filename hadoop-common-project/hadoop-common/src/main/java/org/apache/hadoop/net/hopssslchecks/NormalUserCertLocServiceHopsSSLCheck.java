@@ -19,6 +19,7 @@ package org.apache.hadoop.net.hopssslchecks;
 
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.net.HopsSSLSocketFactory;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.ssl.CertificateLocalization;
 import org.apache.hadoop.security.ssl.CryptoMaterial;
 
@@ -44,6 +45,11 @@ public class NormalUserCertLocServiceHopsSSLCheck extends AbstractHopsSSLCheck {
   
       if (certificateLocalization != null) {
         try {
+          UserGroupInformation ugi = UserGroupInformation.getCurrentUser();
+          String appId = ugi.getApplicationId();
+          if (appId == null) {
+            throw new RuntimeException(">>>>>> APPLICATION_ID IS NULL AAAAAAAA");
+          }
           CryptoMaterial material = certificateLocalization.getMaterialLocation(username);
           
           return new HopsSSLCryptoMaterial(

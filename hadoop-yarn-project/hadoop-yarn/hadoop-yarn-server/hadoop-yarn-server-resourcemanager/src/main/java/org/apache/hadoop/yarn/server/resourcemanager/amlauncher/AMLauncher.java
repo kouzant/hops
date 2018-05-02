@@ -214,6 +214,7 @@ public class AMLauncher implements Runnable {
             containerId.getApplicationAttemptId(), node, user);
     realUser.addToken(ConverterUtils.convertFromYarn(token,
         containerManagerConnectAddress));
+    realUser.addApplicationId(containerId.getApplicationAttemptId().getApplicationId().toString());
     // END OF Hops
     
     return NMProxy.createNMProxy(conf, ContainerManagementProtocol.class,

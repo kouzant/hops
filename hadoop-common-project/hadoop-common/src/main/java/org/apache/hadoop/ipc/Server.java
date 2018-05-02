@@ -2279,6 +2279,10 @@ public abstract class Server {
           throw new FatalRpcServerException(RpcErrorCodeProto.FATAL_UNAUTHORIZED,
               "Problematic CN in client certificate: " + subjectDN);
         }
+        
+        // Hops X.509 certificates use O field for ApplicationID
+        String org = HopsUtil.extractOFromSubject(subjectDN);
+        protocolUser.addApplicationId(org);
 
         // If the CN of the certificate is equals to Hops superuser,
         // let it go through

@@ -418,6 +418,7 @@ public class LogAggregationService extends AbstractService implements
     // Get user's FileSystem credentials
     final UserGroupInformation userUgi =
         UserGroupInformation.createRemoteUser(user);
+    userUgi.addApplicationId(appId.toString());
     if (credentials != null) {
       userUgi.addCredentials(credentials);
     }
