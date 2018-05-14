@@ -455,7 +455,10 @@ public class TestRMAppTransitions {
     RMApp application = testCreateAppGeneratingCerts(submissionContext);
     // GENERATING_CERTS => SUBMITTED event RMAppEventType.CERTS_GENERATED will be sent by RMAppCertificateManager
     rmDispatcher.await();
-    verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()));
+    // Crypto material version has been incremented as soon as RMApp received CERTS_GENERATED event
+    // Verify generateCertificates has been invoked with current version - 1
+    verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+        eq(application.getCryptoMaterialVersion()));
     assertAppState(RMAppState.SUBMITTED, application);
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
@@ -489,6 +492,7 @@ public class TestRMAppTransitions {
       appState.setKeyStorePassword(new char[]{'a', 'b', 'c'});
       appState.setTrustStore("some_bytes".getBytes());
       appState.setTrustStorePassword(new char[]{'a', 'b', 'c'});
+      appState.setCryptoMaterialVersion(0);
     }
     state.getApplicationState().put(application.getApplicationId(), appState);
     RMAppEvent event =
@@ -500,7 +504,7 @@ public class TestRMAppTransitions {
       // Cryptographic material for the application has been recovered, state should be SUBMITTED
       assertAppState(RMAppState.SUBMITTED, application);
       verify(rmAppCertificateManager, never())
-          .generateCertificate(any(ApplicationId.class), any(String.class));
+          .generateCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
     } else {
       // No crypto material stored in state store, so recovered state should be GENERATING_CERTS
       // Application State here should be GENERATING_CERTS
@@ -508,7 +512,10 @@ public class TestRMAppTransitions {
       // we might run into timing issues and the test will fail for no real reason
       // assertAppState(RMAppState.GENERATING_CERTS, application);
       rmDispatcher.await();
-      verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()));
+      // While waiting for the event dispatcher to drain, RMApp has received CERTS_GENERATED event
+      // and updated the crypto material version
+      verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+          eq(application.getCryptoMaterialVersion()));
       assertAppState(RMAppState.SUBMITTED, application);
     }
     

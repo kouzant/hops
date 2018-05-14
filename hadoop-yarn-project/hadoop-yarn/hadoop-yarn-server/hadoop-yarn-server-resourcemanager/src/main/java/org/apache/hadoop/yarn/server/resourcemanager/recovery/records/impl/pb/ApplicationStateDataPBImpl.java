@@ -22,7 +22,6 @@ import org.apache.hadoop.ipc.CallerContext;
 import org.apache.hadoop.ipc.protobuf.RpcHeaderProtos;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
-import org.apache.hadoop.yarn.api.records.impl.pb.ProtoUtils;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerRecoveryProtos.ApplicationStateDataProto;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerRecoveryProtos.ApplicationStateDataProtoOrBuilder;
 import org.apache.hadoop.yarn.proto.YarnServerResourceManagerRecoveryProtos.RMAppStateProto;
@@ -31,8 +30,6 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 
 import com.google.protobuf.ByteString;
 import com.google.protobuf.TextFormat;
-
-import java.nio.ByteBuffer;
 
 public class ApplicationStateDataPBImpl extends ApplicationStateData {
   ApplicationStateDataProto proto = 
@@ -343,6 +340,18 @@ public class ApplicationStateDataPBImpl extends ApplicationStateData {
       return;
     }
     builder.setTrustStorePassword(String.valueOf(trustStorePassword));
+  }
+  
+  @Override
+  public Integer getCryptoMaterialVersion() {
+    ApplicationStateDataProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getCryptoMaterialVersion();
+  }
+  
+  @Override
+  public void setCryptoMaterialVersion(Integer cryptoMaterialVersion) {
+    maybeInitBuilder();
+    builder.setCryptoMaterialVersion(cryptoMaterialVersion);
   }
   
   private static String RM_APP_PREFIX = "RMAPP_";

@@ -109,7 +109,7 @@ public class TestRMAppCertificateManager {
   @Before
   public void beforeTest() throws Exception {
     conf = new Configuration();
-    conf.set(YarnConfiguration.HOPS_HOPSWORKS_HOST_KEY, "https://bbc4.sics.se:38591");
+    conf.set(YarnConfiguration.HOPS_HOPSWORKS_HOST_KEY, "https://bbc3.sics.se:33473");
     RMAppCertificateActionsFactory.getInstance().clear();
     RMStorageFactory.setConfiguration(conf);
     YarnAPIStorageFactory.setConfiguration(conf);
@@ -181,7 +181,7 @@ public class TestRMAppCertificateManager {
       manager.start();
       manager.handle(new RMAppCertificateManagerEvent(
           ApplicationId.newInstance(System.currentTimeMillis(), 1),
-          "userA",
+          "userA", 1,
           RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
   
       dispatcher.await();
@@ -208,7 +208,7 @@ public class TestRMAppCertificateManager {
     manager.start();
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
-        "userA",
+        "userA", 1,
         RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
     
     dispatcher.await();
@@ -231,23 +231,24 @@ public class TestRMAppCertificateManager {
     manager.init(conf);
     manager.start();
     String username = "Alice";
+    Integer cryptoMaterialVersion = 1;
     ApplicationId appId = ApplicationId.newInstance(System.currentTimeMillis(), 1);
     manager.handle(new RMAppCertificateManagerEvent(
-        appId, username, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
+        appId, username, cryptoMaterialVersion, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
   
     dispatcher.await();
     Mockito.verify(mockRemoteActions, Mockito.atMost(1)).sign(Mockito.any(PKCS10CertificationRequest.class));
     
     manager.handle(new RMAppCertificateManagerEvent(
-        appId, username, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+        appId, username, cryptoMaterialVersion, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
     
     dispatcher.await();
     Mockito.verify(manager, Mockito.atMost(1))
-        .revokeCertificate(appId, username);
+        .revokeCertificate(appId, username, cryptoMaterialVersion);
   
     TimeUnit.SECONDS.sleep(3);
     
-    String certificateIdentifier = username + "__" + appId.toString();
+    String certificateIdentifier = username + "__" + appId.toString() + "__" + cryptoMaterialVersion;
     Mockito.verify(mockRemoteActions, Mockito.atMost(1))
         .revoke(Mockito.eq(certificateIdentifier));
     
@@ -267,7 +268,7 @@ public class TestRMAppCertificateManager {
     manager.start();
     manager.handle(new RMAppCertificateManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
-        "userA",
+        "userA", 1,
         RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
     dispatcher.await();
     eventHandler.verifyEvent();
@@ -384,16 +385,17 @@ public class TestRMAppCertificateManager {
     }
   
     @Override
-    public void generateCertificate(ApplicationId applicationId, String appUser) {
+    public void generateCertificate(ApplicationId applicationId, String appUser, Integer cryptoMaterialVersion) {
       boolean exceptionThrown = false;
       ByteArrayInputStream bio = null;
       try {
         KeyPair keyPair = generateKeyPair();
         // Generate CSR
-        PKCS10CertificationRequest csr = generateCSR(applicationId, appUser, keyPair);
+        PKCS10CertificationRequest csr = generateCSR(applicationId, appUser, keyPair, cryptoMaterialVersion);
         
         assertEquals(appUser, HopsUtil.extractCNFromSubject(csr.getSubject().toString()));
         assertEquals(applicationId.toString(), HopsUtil.extractOFromSubject(csr.getSubject().toString()));
+        assertEquals(String.valueOf(cryptoMaterialVersion), HopsUtil.extractOUFromSubject(csr.getSubject().toString()));
         
         // Sign CSR
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
@@ -437,6 +439,8 @@ public class TestRMAppCertificateManager {
         assertEquals(appUser, HopsUtil.extractCNFromSubject(extractedCert.getSubjectX500Principal().getName()));
         assertEquals(applicationId.toString(), HopsUtil.extractOFromSubject(
             extractedCert.getSubjectX500Principal().getName()));
+        assertEquals(String.valueOf(cryptoMaterialVersion),
+            HopsUtil.extractOUFromSubject(extractedCert.getSubjectX500Principal().getName()));
   
         RMAppCertificateGeneratedEvent startEvent = new RMAppCertificateGeneratedEvent(applicationId,
             rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword);
@@ -457,9 +461,9 @@ public class TestRMAppCertificateManager {
     }
     
     @Override
-    public void revokeCertificate(ApplicationId appId, String applicationUser) {
+    public void revokeCertificate(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
       try {
-        putToQueue(appId, applicationUser);
+        putToQueue(appId, applicationUser, cryptoMaterialVersion);
         waitForQueueToDrain();
       } catch (InterruptedException ex) {
         LOG.error(ex, ex);
@@ -511,7 +515,7 @@ public class TestRMAppCertificateManager {
     }
   
     @Override
-    public void generateCertificate(ApplicationId appId, String appUser) {
+    public void generateCertificate(ApplicationId appId, String appUser, Integer cryptoMaterialVersion) {
       getRmContext().getDispatcher().getEventHandler().handle(new RMAppEvent(appId, RMAppEventType.KILL));
     }
   }
@@ -530,9 +534,7 @@ public class TestRMAppCertificateManager {
     return baseDir;
   }
   
-  private void createTrustStore(String filename,
-      String password, String alias,
-      Certificate cert)
+  private void createTrustStore(String filename, String password, String alias, Certificate cert)
       throws GeneralSecurityException, IOException {
     KeyStore ks = KeyStore.getInstance("JKS");
     ks.load(null, null);

@@ -115,7 +115,6 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 
 @SuppressWarnings({ "rawtypes", "unchecked" })
 public class RMAppImpl implements RMApp, Recoverable {
@@ -182,6 +181,8 @@ public class RMAppImpl implements RMApp, Recoverable {
   private char[] keyStorePassword = null;
   private byte[] trustStore = null;
   private char[] trustStorePassword = null;
+  // Crypto material version is incremented only on certificate rotation
+  private Integer cryptoMaterialVersion = 0;
   
   // These states stored are only valid when app is at killing or final_saving.
   private RMAppState stateBeforeKilling;
@@ -863,6 +864,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.keyStorePassword = appState.getKeyStorePassword();
     this.trustStore = appState.getTrustStore();
     this.trustStorePassword = appState.getTrustStorePassword();
+    this.cryptoMaterialVersion = appState.getCryptoMaterialVersion();
 
     // send the ATS create Event during RM recovery.
     // NOTE: it could be duplicated with events sent before RM get restarted.
@@ -1047,7 +1049,8 @@ public class RMAppImpl implements RMApp, Recoverable {
           return RMAppState.SUBMITTED;
         } else {
           RMAppCertificateManagerEvent revokeAndGenerateEvent = new RMAppCertificateManagerEvent(
-              app.applicationId, app.user, RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE);
+              app.applicationId, app.user, app.cryptoMaterialVersion,
+              RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE);
           app.handler.handle(revokeAndGenerateEvent);
           return RMAppState.GENERATING_CERTS;
         }
@@ -1089,7 +1092,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         ApplicationStateData appNewState =
             ApplicationStateData.newInstance(app.submitTime, app.startTime, app.submissionContext, app.user,
                 app.callerContext, app.keyStore, app.keyStorePassword,
-                app.trustStore, app.trustStorePassword);
+                app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion);
         app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
       }
       
@@ -1184,7 +1187,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     public void transition(RMAppImpl app, RMAppEvent event) {
       LOG.info("Generating certificates for application " + app.applicationId);
       RMAppCertificateManagerEvent genCertsEvent = new RMAppCertificateManagerEvent(app.applicationId,
-          app.user, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE);
+          app.user, app.cryptoMaterialVersion, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE);
       app.handler.handle(genCertsEvent);
     }
   }
@@ -1464,7 +1467,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (numberOfFailure >= app.maxAppAttempts) {
           app.isNumAttemptsBeyondThreshold = true;
         }
-        app.handler.handle(new RMAppCertificateManagerEvent(app.applicationId, app.user,
+        app.handler.handle(new RMAppCertificateManagerEvent(app.applicationId, app.user, app.cryptoMaterialVersion,
             RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
         
         app.rememberTargetTransitionsAndStoreState(event,
@@ -1898,5 +1901,10 @@ public class RMAppImpl implements RMApp, Recoverable {
   @Override
   public char[] getTrustStorePassword() {
     return trustStorePassword;
+  }
+  
+  @Override
+  public Integer getCryptoMaterialVersion() {
+    return cryptoMaterialVersion;
   }
 }

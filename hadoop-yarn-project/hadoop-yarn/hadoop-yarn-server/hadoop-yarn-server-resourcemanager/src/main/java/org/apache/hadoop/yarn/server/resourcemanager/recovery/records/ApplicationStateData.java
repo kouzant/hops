@@ -61,12 +61,14 @@ public abstract class ApplicationStateData {
 
   public static ApplicationStateData newInstance(long submitTime, long startTime,
       ApplicationSubmissionContext context, String user, CallerContext callerContext,
-      byte[] keyStore, char[] keyStorePassword, byte[] trustStore, char[] trustStorePassword) {
+      byte[] keyStore, char[] keyStorePassword, byte[] trustStore, char[] trustStorePassword,
+      Integer cryptoMaterialVersion) {
     ApplicationStateData appState = newInstance(submitTime, startTime, context, user, callerContext);
     appState.setKeyStore(keyStore);
     appState.setKeyStorePassword(keyStorePassword);
     appState.setTrustStore(trustStore);
     appState.setTrustStorePassword(trustStorePassword);
+    appState.setCryptoMaterialVersion(cryptoMaterialVersion);
     return appState;
   }
   
@@ -185,4 +187,8 @@ public abstract class ApplicationStateData {
   public abstract char[] getTrustStorePassword();
   
   public abstract void setTrustStorePassword(char[] trustStorePassword);
+  
+  public abstract Integer getCryptoMaterialVersion();
+  
+  public abstract void setCryptoMaterialVersion(Integer cryptoMaterialVersion);
 }

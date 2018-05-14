@@ -66,7 +66,6 @@ import java.util.Enumeration;
 import java.util.List;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
 public class RMAppCertificateManager extends AbstractService
@@ -133,11 +132,11 @@ public class RMAppCertificateManager extends AbstractService
     ApplicationId applicationId = event.getApplicationId();
     LOG.info("Processing event type: " + event.getType() + " for application: " + applicationId);
     if (event.getType().equals(RMAppCertificateManagerEventType.GENERATE_CERTIFICATE)) {
-      generateCertificate(applicationId, event.getApplicationUser());
+      generateCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE)) {
-      revokeCertificate(applicationId, event.getApplicationUser());
+      revokeCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE)) {
-      revokeAndGenerateCertificates(applicationId, event.getApplicationUser());
+      revokeAndGenerateCertificates(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else {
       LOG.warn("Unknown event type " + event.getType());
     }
@@ -155,10 +154,10 @@ public class RMAppCertificateManager extends AbstractService
   
   @InterfaceAudience.Private
   @VisibleForTesting
-  public void revokeAndGenerateCertificates(ApplicationId appId, String appUser) {
+  public void revokeAndGenerateCertificates(ApplicationId appId, String appUser, Integer cryptoMaterialVersion) {
     // Certificate revocation here is blocking
-    if (revokeInternal(getCertificateIdentifier(appId, appUser))) {
-      generateCertificate(appId, appUser);
+    if (revokeInternal(getCertificateIdentifier(appId, appUser, cryptoMaterialVersion))) {
+      generateCertificate(appId, appUser, cryptoMaterialVersion);
     } else {
       handler.handle(new RMAppEvent(appId, RMAppEventType.KILL, "Could not revoke previously generated certificate"));
     }
@@ -168,12 +167,12 @@ public class RMAppCertificateManager extends AbstractService
   @InterfaceAudience.Private
   @VisibleForTesting
   @SuppressWarnings("unchecked")
-  public void generateCertificate(ApplicationId appId, String appUser) {
+  public void generateCertificate(ApplicationId appId, String appUser, Integer cryptoMaterialVersion) {
     try {
       if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
         KeyPair keyPair = generateKeyPair();
-        PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair);
+        PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair, cryptoMaterialVersion);
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
         
         KeyStoresWrapper keyStoresWrapper = createApplicationStores(signedCertificate, keyPair.getPrivate(), appUser,
@@ -181,6 +180,7 @@ public class RMAppCertificateManager extends AbstractService
         byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
         byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
         
+        // TODO(Antonis) What should I do with updated certificate version
         rmContext.getCertificateLocalizationService().materializeCertificates(
             appUser, appId.toString(), appUser, ByteBuffer.wrap(rawProtectedKeyStore),
             String.valueOf(keyStoresWrapper.keyStorePassword),
@@ -208,11 +208,12 @@ public class RMAppCertificateManager extends AbstractService
 
   @InterfaceAudience.Private
   @VisibleForTesting
-  protected PKCS10CertificationRequest generateCSR(ApplicationId appId, String applicationUser, KeyPair keyPair)
+  protected PKCS10CertificationRequest generateCSR(ApplicationId appId, String applicationUser, KeyPair keyPair,
+      Integer cryptoMaterialVersion)
       throws OperatorCreationException {
     LOG.info("Generating certificate for application: " + appId);
     // Create X500 subject CN=USER, O=APPLICATION_ID
-    X500Name subject = createX500Subject(appId, applicationUser);
+    X500Name subject = createX500Subject(appId, applicationUser, cryptoMaterialVersion);
     // Create Certificate Signing Request
     return createCSR(subject, keyPair);
   }
@@ -280,13 +281,14 @@ public class RMAppCertificateManager extends AbstractService
         .toCharArray();
   }
   
-  private X500Name createX500Subject(ApplicationId appId, String applicationUser) {
+  private X500Name createX500Subject(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
     if (appId == null || applicationUser == null) {
       throw new IllegalArgumentException("ApplicationID and application user cannot be null");
     }
     X500NameBuilder x500NameBuilder = new X500NameBuilder(BCStyle.INSTANCE);
     x500NameBuilder.addRDN(BCStyle.CN, applicationUser);
     x500NameBuilder.addRDN(BCStyle.O, appId.toString());
+    x500NameBuilder.addRDN(BCStyle.OU, cryptoMaterialVersion.toString());
     return x500NameBuilder.build();
   }
   
@@ -299,12 +301,12 @@ public class RMAppCertificateManager extends AbstractService
   
   @InterfaceAudience.Private
   @VisibleForTesting
-  public void revokeCertificate(ApplicationId appId, String applicationUser) {
+  public void revokeCertificate(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
           CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       LOG.info("Revoking certificate for application: " + appId);
       try {
-        putToQueue(appId, applicationUser);
+        putToQueue(appId, applicationUser, cryptoMaterialVersion);
         if (certificateLocalizationService != null) {
           certificateLocalizationService.removeMaterial(applicationUser, appId.toString());
         }
@@ -316,8 +318,9 @@ public class RMAppCertificateManager extends AbstractService
   
   @InterfaceAudience.Private
   @VisibleForTesting
-  protected void putToQueue(ApplicationId appId, String applicationUser) throws InterruptedException {
-    revocationEvents.put(new CertificateRevocationEvent(getCertificateIdentifier(appId, applicationUser)));
+  protected void putToQueue(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion)
+      throws InterruptedException {
+    revocationEvents.put(new CertificateRevocationEvent(getCertificateIdentifier(appId, applicationUser, cryptoMaterialVersion)));
   }
   
   // Used only for testing
@@ -342,8 +345,8 @@ public class RMAppCertificateManager extends AbstractService
     return true;
   }
   
-  private String getCertificateIdentifier(ApplicationId appId, String user) {
-    return user + "__" + appId.toString();
+  private String getCertificateIdentifier(ApplicationId appId, String user, Integer cryptoMaterialVersion) {
+    return user + "__" + appId.toString() + "__" + cryptoMaterialVersion;
   }
   
   protected class KeyStoresWrapper {

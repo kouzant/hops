@@ -65,6 +65,7 @@ public class MockRMApp implements RMApp {
   char[] keyStorePassword;
   byte[] trustStore;
   char[] trustStorePassword;
+  Integer cryptoMaterialVersion = 0;
 
   public MockRMApp(int newid, long time, RMAppState newState) {
     finish = time;
@@ -324,5 +325,10 @@ public class MockRMApp implements RMApp {
   @Override
   public char[] getTrustStorePassword() {
     return trustStorePassword;
+  }
+  
+  @Override
+  public Integer getCryptoMaterialVersion() {
+    return cryptoMaterialVersion;
   }
 }
