@@ -265,4 +265,8 @@ public interface RMApp extends EventHandler<RMAppEvent> {
   byte[] getTrustStore();
   
   char[] getTrustStorePassword();
+  
+  Integer getCryptoMaterialVersion();
+  
+  long getCertificateExpiration();
 }

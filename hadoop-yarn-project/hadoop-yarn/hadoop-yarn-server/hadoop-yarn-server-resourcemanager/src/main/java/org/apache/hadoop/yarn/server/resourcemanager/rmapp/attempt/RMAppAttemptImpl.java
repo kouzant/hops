@@ -1704,9 +1704,11 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
       } else {
         // Tell RMAppCertificateManager to revoke the certificate and remove it from local cache
         ApplicationId applicationId = appAttempt.applicationAttemptId.getApplicationId();
-        String user = appAttempt.rmContext.getRMApps().get(applicationId).getUser();
+        RMApp application = appAttempt.rmContext.getRMApps().get(applicationId);
+        String user = application.getUser();
+        Integer cryptoMaterialVersion = application.getCryptoMaterialVersion();
         appAttempt.eventHandler.handle(new RMAppCertificateManagerEvent(
-            applicationId, user, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+            applicationId, user, cryptoMaterialVersion, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
       }
     }
   }

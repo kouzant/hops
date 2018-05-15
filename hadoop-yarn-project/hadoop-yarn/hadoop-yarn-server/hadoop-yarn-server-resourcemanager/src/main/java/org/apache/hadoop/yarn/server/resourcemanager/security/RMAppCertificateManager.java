@@ -18,6 +18,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.logging.Log;
@@ -61,12 +62,19 @@ import java.security.PrivateKey;
 import java.security.SecureRandom;
 import java.security.Security;
 import java.security.cert.X509Certificate;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class RMAppCertificateManager extends AbstractService
@@ -89,6 +97,14 @@ public class RMAppCertificateManager extends AbstractService
   private KeyPairGenerator keyPairGenerator;
   private RMAppCertificateActions rmAppCertificateActions;
   private Thread revocationEventsHandler;
+  private boolean isRPCTLSEnabled = false;
+  
+  private final int RENEWER_THREAD_POOL = 5;
+  private final ScheduledExecutorService scheduler;
+  private final Map<ApplicationId, ScheduledFuture> renewalTasks;
+  // For certificate renewal
+  private long amountOfTimeToSubtractFromExpiration = 2;
+  private TemporalUnit unitOfTime = ChronoUnit.DAYS;
   
   public RMAppCertificateManager(RMContext rmContext) {
     super(RMAppCertificateManager.class.getName());
@@ -96,6 +112,12 @@ public class RMAppCertificateManager extends AbstractService
     this.rmContext = rmContext;
     rng = new SecureRandom();
     revocationEvents = new ArrayBlockingQueue<CertificateRevocationEvent>(REVOCATION_QUEUE_SIZE);
+    renewalTasks = new ConcurrentHashMap<>();
+    scheduler = Executors.newScheduledThreadPool(RENEWER_THREAD_POOL,
+        new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("X509 app certificate renewal thread #%d")
+            .build());
   }
   
   @Override
@@ -107,6 +129,8 @@ public class RMAppCertificateManager extends AbstractService
     rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance().getActor(conf);
     keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
     keyPairGenerator.initialize(KEY_SIZE);
+    isRPCTLSEnabled = conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT);
     super.serviceInit(conf);
   }
   
@@ -126,6 +150,9 @@ public class RMAppCertificateManager extends AbstractService
     if (revocationEventsHandler != null) {
       revocationEventsHandler.interrupt();
     }
+    if (scheduler != null) {
+      scheduler.shutdownNow();
+    }
   }
   
   @Override
@@ -133,11 +160,11 @@ public class RMAppCertificateManager extends AbstractService
     ApplicationId applicationId = event.getApplicationId();
     LOG.info("Processing event type: " + event.getType() + " for application: " + applicationId);
     if (event.getType().equals(RMAppCertificateManagerEventType.GENERATE_CERTIFICATE)) {
-      generateCertificate(applicationId, event.getApplicationUser());
+      generateCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE)) {
-      revokeCertificate(applicationId, event.getApplicationUser());
+      revokeCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE)) {
-      revokeAndGenerateCertificates(applicationId, event.getApplicationUser());
+      revokeAndGenerateCertificates(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else {
       LOG.warn("Unknown event type " + event.getType());
     }
@@ -153,14 +180,122 @@ public class RMAppCertificateManager extends AbstractService
     return rmContext;
   }
   
+  @VisibleForTesting
+  public void setTimeToSubtractFromExpiration(long amountOfTimeToSubtractFromExpiration, TemporalUnit unitOfTime) {
+    this.amountOfTimeToSubtractFromExpiration = amountOfTimeToSubtractFromExpiration;
+    this.unitOfTime = unitOfTime;
+  }
+  
+  @VisibleForTesting
+  public Map<ApplicationId, ScheduledFuture> getRenewalTasks() {
+    return renewalTasks;
+  }
+  
+  public void registerWithCertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion,
+      Long expiration) {
+    if (!isRPCTLSEnabled()) {
+      return;
+    }
+    if (!renewalTasks.containsKey(appId)) {
+      Instant now = Instant.now();
+      Instant expirationInstant = Instant.ofEpochMilli(expiration);
+      Instant delay = expirationInstant.minus(now.toEpochMilli(), ChronoUnit.MILLIS)
+          .minus(amountOfTimeToSubtractFromExpiration, unitOfTime);
+      ScheduledFuture renewTask = scheduler.schedule(
+          createCertificateRenewerTask(appId, appUser, currentCryptoVersion), delay.toEpochMilli(), TimeUnit.MILLISECONDS);
+      renewalTasks.put(appId, renewTask);
+    }
+  }
+  
+  @VisibleForTesting
+  @InterfaceAudience.Private
+  protected Runnable createCertificateRenewerTask(ApplicationId appId, String appuser, Integer currentCryptoVersion) {
+    return new CertificateRenewer(appId, appuser, currentCryptoVersion);
+  }
+  
+  public void deregisterFromCertificateRenewer(ApplicationId appId) {
+    if (!isRPCTLSEnabled()) {
+      return;
+    }
+    ScheduledFuture task = renewalTasks.remove(appId);
+    if (task != null) {
+      task.cancel(true);
+    }
+  }
+  
+  @VisibleForTesting
+  protected ScheduledExecutorService getScheduler() {
+    return scheduler;
+  }
+  
   @InterfaceAudience.Private
   @VisibleForTesting
-  public void revokeAndGenerateCertificates(ApplicationId appId, String appUser) {
+  public void revokeAndGenerateCertificates(ApplicationId appId, String appUser, Integer cryptoMaterialVersion) {
     // Certificate revocation here is blocking
-    if (revokeInternal(getCertificateIdentifier(appId, appUser))) {
-      generateCertificate(appId, appUser);
+    if (revokeInternal(getCertificateIdentifier(appId, appUser, cryptoMaterialVersion))) {
+      generateCertificate(appId, appUser, cryptoMaterialVersion);
     } else {
       handler.handle(new RMAppEvent(appId, RMAppEventType.KILL, "Could not revoke previously generated certificate"));
+    }
+  }
+  
+  @VisibleForTesting
+  @InterfaceAudience.Private
+  public boolean isRPCTLSEnabled() {
+    return isRPCTLSEnabled;
+  }
+  
+  @VisibleForTesting
+  @InterfaceAudience.Private
+  public class CertificateRenewer implements Runnable {
+    protected final ApplicationId appId;
+    protected final String appUser;
+    protected Integer currentCryptoVersion;
+    protected int numberOfFailures;
+    
+    public CertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
+      this.appId = appId;
+      this.appUser = appUser;
+      this.currentCryptoVersion = currentCryptoVersion;
+      numberOfFailures = 0;
+    }
+    
+    @Override
+    public void run() {
+      try {
+        LOG.debug("Renewing certificate for application " + appId);
+        KeyPair keyPair = generateKeyPair();
+        PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair, ++currentCryptoVersion);
+        X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
+        long expiration = signedCertificate.getNotAfter().getTime();
+        
+        KeyStoresWrapper keyStoresWrapper = createApplicationStores(signedCertificate, keyPair.getPrivate(), appUser,
+            appId);
+        byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
+        byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
+        
+        rmContext.getCertificateLocalizationService().updateCryptoMaterial(appUser, appId.toString(),
+            ByteBuffer.wrap(rawProtectedKeyStore), String.valueOf(keyStoresWrapper.keyStorePassword),
+            ByteBuffer.wrap(rawTrustStore), String.valueOf(keyStoresWrapper.trustStorePassword));
+  
+        renewalTasks.remove(appId);
+        
+        handler.handle(new RMAppCertificateGeneratedEvent(appId, rawProtectedKeyStore,
+            keyStoresWrapper.keyStorePassword, rawTrustStore, keyStoresWrapper.trustStorePassword, expiration,
+            RMAppEventType.CERTS_RENEWED));
+        LOG.debug("Renewed certificate for application " + appId);
+      } catch (Exception ex) {
+        LOG.error(ex, ex);
+        renewalTasks.remove(appId);
+        if (++numberOfFailures <= 2) {
+          LOG.warn("Failed to renew certificate for application " + appId + ". Retries remaining "
+              + (2 - numberOfFailures + 1));
+          ScheduledFuture task = scheduler.schedule(this, 5, TimeUnit.SECONDS);
+          renewalTasks.put(appId, task);
+        } else {
+          LOG.error("Failed to renew certificate for application " + appId + ". Failed more than 2 times, giving up");
+        }
+      }
     }
   }
   
@@ -168,13 +303,13 @@ public class RMAppCertificateManager extends AbstractService
   @InterfaceAudience.Private
   @VisibleForTesting
   @SuppressWarnings("unchecked")
-  public void generateCertificate(ApplicationId appId, String appUser) {
+  public void generateCertificate(ApplicationId appId, String appUser, Integer cryptoMaterialVersion) {
     try {
-      if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      if (isRPCTLSEnabled()) {
         KeyPair keyPair = generateKeyPair();
-        PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair);
+        PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair, cryptoMaterialVersion);
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
+        long expirationEpoch = signedCertificate.getNotAfter().getTime();
         
         KeyStoresWrapper keyStoresWrapper = createApplicationStores(signedCertificate, keyPair.getPrivate(), appUser,
             appId);
@@ -189,7 +324,7 @@ public class RMAppCertificateManager extends AbstractService
         handler.handle(new RMAppCertificateGeneratedEvent(
             appId,
             rawProtectedKeyStore, keyStoresWrapper.keyStorePassword,
-            rawTrustStore, keyStoresWrapper.trustStorePassword));
+            rawTrustStore, keyStoresWrapper.trustStorePassword, expirationEpoch, RMAppEventType.CERTS_GENERATED));
       } else {
         handler.handle(new RMAppEvent(appId, RMAppEventType.CERTS_GENERATED));
       }
@@ -208,11 +343,12 @@ public class RMAppCertificateManager extends AbstractService
 
   @InterfaceAudience.Private
   @VisibleForTesting
-  protected PKCS10CertificationRequest generateCSR(ApplicationId appId, String applicationUser, KeyPair keyPair)
+  protected PKCS10CertificationRequest generateCSR(ApplicationId appId, String applicationUser, KeyPair keyPair,
+      Integer cryptoMaterialVersion)
       throws OperatorCreationException {
     LOG.info("Generating certificate for application: " + appId);
     // Create X500 subject CN=USER, O=APPLICATION_ID
-    X500Name subject = createX500Subject(appId, applicationUser);
+    X500Name subject = createX500Subject(appId, applicationUser, cryptoMaterialVersion);
     // Create Certificate Signing Request
     return createCSR(subject, keyPair);
   }
@@ -280,13 +416,14 @@ public class RMAppCertificateManager extends AbstractService
         .toCharArray();
   }
   
-  private X500Name createX500Subject(ApplicationId appId, String applicationUser) {
+  private X500Name createX500Subject(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
     if (appId == null || applicationUser == null) {
       throw new IllegalArgumentException("ApplicationID and application user cannot be null");
     }
     X500NameBuilder x500NameBuilder = new X500NameBuilder(BCStyle.INSTANCE);
     x500NameBuilder.addRDN(BCStyle.CN, applicationUser);
     x500NameBuilder.addRDN(BCStyle.O, appId.toString());
+    x500NameBuilder.addRDN(BCStyle.OU, cryptoMaterialVersion.toString());
     return x500NameBuilder.build();
   }
   
@@ -299,12 +436,13 @@ public class RMAppCertificateManager extends AbstractService
   
   @InterfaceAudience.Private
   @VisibleForTesting
-  public void revokeCertificate(ApplicationId appId, String applicationUser) {
-    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      LOG.info("Revoking certificate for application: " + appId);
+  public void revokeCertificate(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
+    if (isRPCTLSEnabled()) {
+      LOG.info("Revoking certificate for application: " + appId + " with version " + cryptoMaterialVersion);
       try {
-        putToQueue(appId, applicationUser);
+        // Deregister application from certificate renewal, if it exists
+        deregisterFromCertificateRenewer(appId);
+        putToQueue(appId, applicationUser, cryptoMaterialVersion);
         if (certificateLocalizationService != null) {
           certificateLocalizationService.removeMaterial(applicationUser, appId.toString());
         }
@@ -314,10 +452,18 @@ public class RMAppCertificateManager extends AbstractService
     }
   }
   
+  public void revokeCertificateSynchronously(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
+    if (isRPCTLSEnabled()) {
+      LOG.info("Revoking certificate for application: " + appId + " with version " + cryptoMaterialVersion);
+      revokeInternal(getCertificateIdentifier(appId, applicationUser, cryptoMaterialVersion));
+    }
+  }
+  
   @InterfaceAudience.Private
   @VisibleForTesting
-  protected void putToQueue(ApplicationId appId, String applicationUser) throws InterruptedException {
-    revocationEvents.put(new CertificateRevocationEvent(getCertificateIdentifier(appId, applicationUser)));
+  protected void putToQueue(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion)
+      throws InterruptedException {
+    revocationEvents.put(new CertificateRevocationEvent(getCertificateIdentifier(appId, applicationUser, cryptoMaterialVersion)));
   }
   
   // Used only for testing
@@ -329,8 +475,7 @@ public class RMAppCertificateManager extends AbstractService
   }
   
   private boolean revokeInternal(String certificateIdentifier) {
-    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+    if (isRPCTLSEnabled()) {
       try {
         rmAppCertificateActions.revoke(certificateIdentifier);
         return true;
@@ -342,8 +487,8 @@ public class RMAppCertificateManager extends AbstractService
     return true;
   }
   
-  private String getCertificateIdentifier(ApplicationId appId, String user) {
-    return user + "__" + appId.toString();
+  private String getCertificateIdentifier(ApplicationId appId, String user, Integer cryptoMaterialVersion) {
+    return user + "__" + appId.toString() + "__" + cryptoMaterialVersion;
   }
   
   protected class KeyStoresWrapper {

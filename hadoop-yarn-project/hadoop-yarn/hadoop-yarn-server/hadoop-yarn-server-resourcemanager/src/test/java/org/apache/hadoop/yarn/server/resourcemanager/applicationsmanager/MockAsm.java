@@ -237,6 +237,16 @@ public abstract class MockAsm extends MockApps {
     public char[] getTrustStorePassword() {
       throw new UnsupportedOperationException("Not supported yet.");
     }
+    
+    @Override
+    public Integer getCryptoMaterialVersion() {
+      throw new UnsupportedOperationException("Not supported yet.");
+    }
+    
+    @Override
+    public long getCertificateExpiration() {
+      throw new UnsupportedOperationException("Not supported yet.");
+    }
   }
 
   public static RMApp newApplication(int i) {

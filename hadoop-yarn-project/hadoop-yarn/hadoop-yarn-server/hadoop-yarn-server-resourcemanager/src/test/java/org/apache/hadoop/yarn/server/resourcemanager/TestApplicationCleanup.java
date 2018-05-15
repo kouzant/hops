@@ -496,6 +496,7 @@ public class TestApplicationCleanup {
         new MockNM("127.0.0.1:1234", 15120, rm1.getResourceTrackerService());
     nm1.registerNode();
 
+    rm1.getRMContext().getStateStore().loadState();
     // create app and launch the AM
     RMApp app0 = rm1.submitApp(200);
     MockAM am0 = launchAM(app0, rm1, nm1);

@@ -115,7 +115,6 @@ import org.apache.hadoop.yarn.util.resource.Resources;
 import org.apache.hadoop.yarn.webapp.util.WebAppUtils;
 
 import com.google.common.annotations.VisibleForTesting;
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 
 @SuppressWarnings({ "rawtypes", "unchecked" })
 public class RMAppImpl implements RMApp, Recoverable {
@@ -182,6 +181,9 @@ public class RMAppImpl implements RMApp, Recoverable {
   private char[] keyStorePassword = null;
   private byte[] trustStore = null;
   private char[] trustStorePassword = null;
+  private long certificateExpiration = -1;
+  // Crypto material version is incremented only on certificate rotation
+  private Integer cryptoMaterialVersion = 0;
   
   // These states stored are only valid when app is at killing or final_saving.
   private RMAppState stateBeforeKilling;
@@ -266,6 +268,8 @@ public class RMAppImpl implements RMApp, Recoverable {
         RMAppEventType.KILL,
         new FinalSavingTransition(
           new AppKilledTransition(), RMAppState.KILLED))
+    .addTransition(RMAppState.SUBMITTED, RMAppState.SUBMITTED,
+        RMAppEventType.CERTS_RENEWED, new RMAppCertificatesRenewedTransition())
 
      // Transitions from ACCEPTED state
     .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED,
@@ -293,6 +297,8 @@ public class RMAppImpl implements RMApp, Recoverable {
     .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED, 
         RMAppEventType.APP_RUNNING_ON_NODE,
         new AppRunningOnNodeTransition())
+    .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED,
+        RMAppEventType.CERTS_RENEWED, new RMAppCertificatesRenewedTransition())
 
      // Transitions from RUNNING state
     .addTransition(RMAppState.RUNNING, RMAppState.RUNNING,
@@ -316,6 +322,8 @@ public class RMAppImpl implements RMApp, Recoverable {
         new AttemptFailedTransition(RMAppState.ACCEPTED))
     .addTransition(RMAppState.RUNNING, RMAppState.KILLING,
         RMAppEventType.KILL, new KillAttemptTransition())
+    .addTransition(RMAppState.RUNNING, RMAppState.RUNNING,
+        RMAppEventType.CERTS_RENEWED, new RMAppCertificatesRenewedTransition())
 
      // Transitions from FINAL_SAVING state
     .addTransition(RMAppState.FINAL_SAVING,
@@ -863,6 +871,8 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.keyStorePassword = appState.getKeyStorePassword();
     this.trustStore = appState.getTrustStore();
     this.trustStorePassword = appState.getTrustStorePassword();
+    this.cryptoMaterialVersion = appState.getCryptoMaterialVersion();
+    this.certificateExpiration = appState.getCertificateExpiration();
 
     // send the ATS create Event during RM recovery.
     // NOTE: it could be duplicated with events sent before RM get restarted.
@@ -1036,23 +1046,42 @@ public class RMAppImpl implements RMApp, Recoverable {
           LOG.error(msg, e);
         }
       }
-
+  
+      Integer cryptoMaterialVersionToRevoke = app.cryptoMaterialVersion + 1;
       // No existent attempts means the attempt associated with this app was not
       // started or started but not yet saved.
       if (app.attempts.isEmpty()) {
         
         if (app.isCryptoMaterialPresent()) {
+          // ResourceManager may have crashed after it has renewed the certificate but before updating
+          // RMApp state, so revoke the current version plus 1 to be sure no missed certificate is valid
+          app.rmContext.getRMAppCertificateManager()
+              .revokeCertificateSynchronously(app.applicationId, app.user, cryptoMaterialVersionToRevoke);
+          app.rmContext.getRMAppCertificateManager()
+              .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
+                  app.certificateExpiration);
           app.scheduler.handle(new AppAddedSchedulerEvent(app.user,
               app.submissionContext, false));
           return RMAppState.SUBMITTED;
         } else {
           RMAppCertificateManagerEvent revokeAndGenerateEvent = new RMAppCertificateManagerEvent(
-              app.applicationId, app.user, RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE);
+              app.applicationId, app.user, app.cryptoMaterialVersion,
+              RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE);
           app.handler.handle(revokeAndGenerateEvent);
+          // RMApp should not register with the certificate renewer here as it will register
+          // when it receives CERTS_GENERATED event in GENERATING_CERTS state
           return RMAppState.GENERATING_CERTS;
         }
       }
-
+  
+      // ResourceManager may have crashed after it has renewed the certificate but before updating
+      // RMApp state, so revoke the current version plus 1 to be sure no missed certificate is valid
+      app.rmContext.getRMAppCertificateManager()
+          .revokeCertificateSynchronously(app.applicationId, app.user, cryptoMaterialVersionToRevoke);
+      app.rmContext.getRMAppCertificateManager()
+          .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
+              app.certificateExpiration);
+      
       // Add application to scheduler synchronously to guarantee scheduler
       // knows applications before AM or NM re-registers.
       app.scheduler.handle(new AppAddedSchedulerEvent(app.user,
@@ -1078,6 +1107,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     keyStorePassword = event.getKeyStorePassword();
     trustStore = event.getTrustStore();
     trustStorePassword = event.getTrustStorePassword();
+    certificateExpiration = event.getExpirationEpoch();
   }
   
   private static final class AddApplicationToSchedulerTransition extends
@@ -1089,14 +1119,36 @@ public class RMAppImpl implements RMApp, Recoverable {
         ApplicationStateData appNewState =
             ApplicationStateData.newInstance(app.submitTime, app.startTime, app.submissionContext, app.user,
                 app.callerContext, app.keyStore, app.keyStorePassword,
-                app.trustStore, app.trustStorePassword);
+                app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration);
         app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
+        app.rmContext.getRMAppCertificateManager()
+            .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
+                app.certificateExpiration);
       }
       
       app.handler.handle(new AppAddedSchedulerEvent(app.user,
           app.submissionContext, false));
       // send the ATS create Event
       app.sendATSCreateEvent();
+    }
+  }
+  
+  private static final class RMAppCertificatesRenewedTransition extends RMAppTransition {
+    @Override
+    public void transition(RMAppImpl app, RMAppEvent event) {
+      LOG.info("Received new certificate");
+      app.updateApplicationWithCryptoMaterial((RMAppCertificateGeneratedEvent) event);
+      app.cryptoMaterialVersion++;
+      ApplicationStateData appNewState =
+          ApplicationStateData.newInstance(app.submitTime, app.startTime, app.submissionContext, app.user,
+              app.callerContext, app.keyStore, app.keyStorePassword,
+              app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration);
+      app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
+      
+      // TODO(Antonis) Notify RMNodes about new material
+      
+      app.rmContext.getRMAppCertificateManager()
+          .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion, app.certificateExpiration);
     }
   }
 
@@ -1184,11 +1236,11 @@ public class RMAppImpl implements RMApp, Recoverable {
     public void transition(RMAppImpl app, RMAppEvent event) {
       LOG.info("Generating certificates for application " + app.applicationId);
       RMAppCertificateManagerEvent genCertsEvent = new RMAppCertificateManagerEvent(app.applicationId,
-          app.user, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE);
+          app.user, app.cryptoMaterialVersion, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE);
       app.handler.handle(genCertsEvent);
     }
   }
-
+  
   private void rememberTargetTransitions(RMAppEvent event,
       Object transitionToDo, RMAppState targetFinalState) {
     transitionTodo = transitionToDo;
@@ -1464,7 +1516,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (numberOfFailure >= app.maxAppAttempts) {
           app.isNumAttemptsBeyondThreshold = true;
         }
-        app.handler.handle(new RMAppCertificateManagerEvent(app.applicationId, app.user,
+        app.handler.handle(new RMAppCertificateManagerEvent(app.applicationId, app.user, app.cryptoMaterialVersion,
             RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
         
         app.rememberTargetTransitionsAndStoreState(event,
@@ -1898,5 +1950,15 @@ public class RMAppImpl implements RMApp, Recoverable {
   @Override
   public char[] getTrustStorePassword() {
     return trustStorePassword;
+  }
+  
+  @Override
+  public long getCertificateExpiration() {
+    return certificateExpiration;
+  }
+  
+  @Override
+  public Integer getCryptoMaterialVersion() {
+    return cryptoMaterialVersion;
   }
 }
