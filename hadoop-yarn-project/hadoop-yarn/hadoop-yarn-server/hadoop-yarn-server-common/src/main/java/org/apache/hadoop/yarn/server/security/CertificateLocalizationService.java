@@ -69,6 +69,7 @@ public class CertificateLocalizationService extends AbstractService
   private Path materializeDir;
   private String superKeystoreLocation;
   private String superKeystorePass;
+  private String superKeyPassword;
   private String superTrustStoreLocation;
   private String superTruststorePass;
 
@@ -164,6 +165,9 @@ public class CertificateLocalizationService extends AbstractService
     superKeystorePass = sslConf.get(
         FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
             FileBasedKeyStoresFactory.SSL_KEYSTORE_PASSWORD_TPL_KEY));
+    superKeyPassword = sslConf.get(
+        FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
+            FileBasedKeyStoresFactory.SSL_KEYSTORE_KEYPASSWORD_TPL_KEY));
     superTrustStoreLocation = sslConf.get(
         FileBasedKeyStoresFactory.resolvePropertyName(SSLFactory.Mode.SERVER,
             FileBasedKeyStoresFactory.SSL_TRUSTSTORE_LOCATION_TPL_KEY));
@@ -184,6 +188,13 @@ public class CertificateLocalizationService extends AbstractService
   @Override
   public String getSuperKeystorePass() {
     return superKeystorePass;
+  }
+  
+  // This method is accessible only from RM or NM. In any other case
+  // CertificateLocalizationService is null
+  @Override
+  public String getSuperKeyPassword() {
+    return superKeyPassword;
   }
   
   // This method is accessible only from RM or NM. In any other case
