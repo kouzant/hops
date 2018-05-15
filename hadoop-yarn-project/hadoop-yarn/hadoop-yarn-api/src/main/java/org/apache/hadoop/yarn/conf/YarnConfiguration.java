@@ -2646,4 +2646,6 @@ public class YarnConfiguration extends Configuration {
   public static String DEFAULT_HOPS_HOPSWORKS_SIGN_ENDPOINT = "hopsworks-ca/ca/agentservice/sign/app";
   public static final String HOPS_HOPSWORKS_REVOKE_ENDPOINT_KEY = HOPSWORKS_PREFIX + ".revoke.endpoint";
   public static String DEFAULT_HOPS_HOPSWORKS_REVOKE_ENDPOINT = "hopsworks-ca/ca/agentservice/revoke";
+  public static final String RM_APP_CERTIFICATE_RENEWER_DELAY = RM_PREFIX + "certificate.renewer.delay";
+  public static String DEFAULT_RM_APP_CERTIFICATE_RENEWER_DELAY = "2d";
 }

@@ -64,6 +64,7 @@ message NodeHeartbeatRequestProto {
   optional MasterKeyProto last_known_nm_token_master_key = 3;
   optional NodeLabelsProto nodeLabels = 4;
   repeated LogAggregationReportProto log_aggregation_reports_for_apps = 5;
+  repeated ApplicationIdProto updatedApplicationsWithNewCryptoMaterial = 6;
 }
 
 message LogAggregationReportProto {
@@ -88,11 +89,24 @@ message NodeHeartbeatResponseProto {
   repeated SignalContainerRequestProto containers_to_signal = 13;
   optional ResourceProto resource = 14;
   optional bool nextheartbeat = 15;
+  repeated UpdatedCryptoForAppsProto updated_crypto_for_apps = 16;
 }
 
 message SystemCredentialsForAppsProto {
   optional ApplicationIdProto appId = 1;
   optional bytes credentialsForApp = 2;
+}
+
+message UpdatedCryptoForAppsProto {
+  optional ApplicationIdProto app_id = 1;
+  optional UpdatedCryptoForAppProto updated_crypto_for_app = 2;
+}
+
+message UpdatedCryptoForAppProto {
+  required bytes key_store = 1;
+  required string key_store_password = 2;
+  required bytes trust_store = 3;
+  required string trust_store_password = 4;
 }
 
 message NMContainerStatusProto {

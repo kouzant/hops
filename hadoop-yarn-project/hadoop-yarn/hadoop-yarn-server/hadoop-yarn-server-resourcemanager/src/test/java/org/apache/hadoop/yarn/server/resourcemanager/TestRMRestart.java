@@ -46,6 +46,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.IOUtils;
@@ -200,6 +201,8 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
   @Test
   public void testRMRestartWithCryptoMaterial() throws Exception {
     conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
+    // This should not kick off certificate rotation
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "1ms");
     
     // Start RM
     MockRM rm1 = createMockRM(conf);
@@ -215,8 +218,6 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     RMState rmState = rm1.getRMContext().getStateStore().loadState();
     Map<ApplicationId, ApplicationStateData> rmAppState = rmState.getApplicationState();
     assertCryptoMaterialStateNotEmpty(rmAppState.get(app0.getApplicationId()));
-    
-    // Stop RM
     
     // Start second RM
     MockRM rm2 = createMockRM(conf);
@@ -245,6 +246,8 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
         YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
     conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
+    // Do not kick off renewer for the duration of the test
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "1ms");
     
     
     // PHASE 1: create state in an RM
@@ -287,7 +290,10 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     Assert.assertEquals(appState.getApplicationSubmissionContext()
         .getApplicationId(), app1.getApplicationSubmissionContext()
         .getApplicationId());
-    assertCryptoMaterialStateNotEmpty(appState);
+    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      assertCryptoMaterialStateNotEmpty(appState);
+    }
 
     //kick the scheduling to allocate AM container
     nm1.nodeHeartbeat(true);
@@ -411,8 +417,11 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     Assert.assertEquals(1, loadedApp2.getAppAttempts().size());
     
     // Verify crypto material for recovered apps
-    assertAppCryptoMaterialNotEmpty(loadedApp1);
-    assertAppCryptoMaterialNotEmpty(loadedApp2);
+    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      assertAppCryptoMaterialNotEmpty(loadedApp1);
+      assertAppCryptoMaterialNotEmpty(loadedApp2);
+    }
     
     // verify old AM is not accepted
     // change running AM to talk to new RM

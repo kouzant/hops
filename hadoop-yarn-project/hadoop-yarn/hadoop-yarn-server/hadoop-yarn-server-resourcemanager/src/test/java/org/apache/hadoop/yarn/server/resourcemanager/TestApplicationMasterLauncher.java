@@ -239,7 +239,7 @@ public class TestApplicationMasterLauncher {
     am.waitForState(RMAppAttemptState.FINISHED);
     
     verify(rm.rmAppCertificateManager, Mockito.atMost(1))
-        .revokeCertificate(Mockito.eq(app.getApplicationId()), Mockito.eq(app.getUser()));
+        .revokeCertificate(Mockito.eq(app.getApplicationId()), Mockito.eq(app.getUser()), Mockito.eq(app.getCryptoMaterialVersion()));
     rm.stop();
   }
 

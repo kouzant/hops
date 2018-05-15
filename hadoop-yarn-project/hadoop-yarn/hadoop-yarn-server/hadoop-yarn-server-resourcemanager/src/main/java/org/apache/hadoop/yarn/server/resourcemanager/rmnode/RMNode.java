@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.rmnode;
 
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.net.Node;
@@ -31,6 +32,7 @@ import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 
 /**
  * Node managers information on available resources 
@@ -172,4 +174,6 @@ public interface RMNode {
   long getUntrackedTimeStamp();
 
   void setUntrackedTimeStamp(long timeStamp);
+  
+  Map<ApplicationId, UpdatedCryptoForApp> getAppCryptoMaterialToUpdate();
 }

@@ -18,6 +18,7 @@
 package org.apache.hadoop.security.ssl;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 
@@ -25,7 +26,6 @@ import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.X509ExtendedKeyManager;
-import javax.net.ssl.X509KeyManager;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -35,8 +35,7 @@ import java.security.KeyStore;
 import java.security.Principal;
 import java.security.PrivateKey;
 import java.security.cert.X509Certificate;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -47,13 +46,13 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
   private final File location;
   private final String keystorePassword;
   private final String keyPassword;
+  private final File passwordFileLocation;
   private final long reloadInterval;
   private final TimeUnit reloadTimeUnit;
-  private final ExecutorService exec;
   
   private AtomicReference<X509ExtendedKeyManager> keyManagerLocalRef;
   private long lastLoadedTimestamp;
-  private Reloader reloader = null;
+  private ScheduledFuture reloader = null;
   // For testing
   private final AtomicBoolean fileExists = new AtomicBoolean(true);
   
@@ -66,16 +65,40 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
    * @param keyPassword password of the key
    * @param reloadInterval interval to check if the keystore has altered (ms)
    */
-  public ReloadingX509KeyManager(String type, String location, String keystorePassword, String keyPassword,
-      long reloadInterval, TimeUnit reloadTimeUnit) throws GeneralSecurityException, IOException {
+  public ReloadingX509KeyManager(String type, String location, String keystorePassword, String keyPassword, long
+      reloadInterval, TimeUnit reloadTimeUnit) throws GeneralSecurityException, IOException{
+    this(type, location, keystorePassword, null, keyPassword, reloadInterval, reloadTimeUnit);
+  }
+  
+  /**
+   * Creates a reloadable keystore manager with supplied ExecutorService and the absolute path
+   * to the password file to reload the password
+   *
+   * @param type type of the keystore, jks
+   * @param location path to keystore in the local file system
+   * @param keystorePassword password of the keystore
+   * @param passwordFileLocation path to the file containing the password
+   * @param keyPassword password of the key
+   * @param reloadInterval interval to check if the keystore has been altered
+   * @param reloadTimeUnit time unit for the interval
+   * @throws GeneralSecurityException
+   * @throws IOException
+   */
+  public ReloadingX509KeyManager(String type, String location, String keystorePassword,
+      String passwordFileLocation, String keyPassword, long reloadInterval, TimeUnit reloadTimeUnit)
+      throws GeneralSecurityException, IOException {
     this.type = type;
     this.location = new File(location);
     this.keystorePassword = keystorePassword;
     this.keyPassword = keyPassword;
+    if (passwordFileLocation != null) {
+      this.passwordFileLocation = new File(passwordFileLocation);
+    } else {
+      this.passwordFileLocation = null;
+    }
     this.reloadInterval = reloadInterval;
     this.reloadTimeUnit = reloadTimeUnit;
     keyManagerLocalRef = new AtomicReference<>(loadKeyManager());
-    exec = Executors.newSingleThreadExecutor();
   }
   
   /**
@@ -83,8 +106,8 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
    */
   public void init() {
     if (reloader == null) {
-      reloader = new Reloader();
-      exec.submit(reloader);
+      reloader = KeyManagersReloaderThreadPool.getInstance().scheduleTask(new Reloader(), reloadInterval,
+          reloadTimeUnit);
     }
   }
   
@@ -92,7 +115,9 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
    * Stops the reloading thread
    */
   public void stop() {
-    exec.shutdownNow();
+    if (reloader != null) {
+      reloader.cancel(true);
+    }
   }
   
   @VisibleForTesting
@@ -196,14 +221,23 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
   
   private X509ExtendedKeyManager loadKeyManager() throws GeneralSecurityException, IOException {
     KeyStore keyStore = KeyStore.getInstance(type);
+    String keyStorePass;
+    String keyPass;
+    if (passwordFileLocation != null) {
+      keyStorePass = FileUtils.readFileToString(passwordFileLocation);
+      keyPass = keyStorePass;
+    } else {
+      keyStorePass = keystorePassword;
+      keyPass = keyPassword;
+    }
     try (FileInputStream in = new FileInputStream(location)) {
-      keyStore.load(in, keystorePassword.toCharArray());
+      keyStore.load(in, keyStorePass.toCharArray());
       lastLoadedTimestamp = location.lastModified();
       LOG.debug("Loaded keystore file: " + location);
     }
     
     KeyManagerFactory kmf = KeyManagerFactory.getInstance(SSLFactory.SSLCERTIFICATE);
-    kmf.init(keyStore, keyPassword.toCharArray());
+    kmf.init(keyStore, keyPass.toCharArray());
     X509ExtendedKeyManager keyManager = null;
     KeyManager[] keyManagers = kmf.getKeyManagers();
     for (KeyManager km : keyManagers) {
@@ -219,19 +253,11 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
   private class Reloader implements Runnable {
     @Override
     public void run() {
-      while (!Thread.currentThread().isInterrupted()) {
+      if (needsReload()) {
         try {
-          reloadTimeUnit.sleep(reloadInterval);
-        } catch (InterruptedException ex) {
-          Thread.currentThread().interrupt();
-        }
-        
-        if (needsReload()) {
-          try {
-            keyManagerLocalRef.set(loadKeyManager());
-          } catch (GeneralSecurityException | IOException ex) {
-            LOG.error("Could not reload Key Manager. Using the previously loaded key store", ex);
-          }
+          keyManagerLocalRef.set(loadKeyManager());
+        } catch (GeneralSecurityException | IOException ex) {
+          LOG.error("Could not reload Key Manager. Using the previously loaded key store", ex);
         }
       }
     }
