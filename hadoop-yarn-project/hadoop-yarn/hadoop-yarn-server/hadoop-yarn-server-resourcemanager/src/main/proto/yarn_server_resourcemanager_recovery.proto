@@ -74,6 +74,8 @@ message ApplicationStateDataProto {
     optional string key_store_password = 10;
     optional bytes trust_store = 11;
     optional string trust_store_password = 12;
+    optional int32 crypto_material_version = 13;
+    optional int64 certificate_expiration = 14;
 }
 
 message ApplicationAttemptStateDataProto {

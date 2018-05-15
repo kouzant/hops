@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.security.ssl;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience;
@@ -35,6 +36,8 @@ import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -55,13 +58,13 @@ public final class ReloadingX509TrustManager
   private String type;
   private File file;
   private String password;
+  private final File passwordFileLocation;
   private long lastLoaded;
   private long reloadInterval;
   private AtomicReference<X509TrustManager> trustManagerRef;
 
-  private volatile boolean running;
-  private Thread reloader;
-
+  private ScheduledFuture reloader = null;
+  
   /**
    * Creates a reloadable trustmanager. The trustmanager reloads itself
    * if the underlying trustore file has changed.
@@ -76,12 +79,37 @@ public final class ReloadingX509TrustManager
    * @throws GeneralSecurityException thrown if the truststore could not be
    * initialized due to a security error.
    */
-  public ReloadingX509TrustManager(String type, String location,
-                                   String password, long reloadInterval)
+  public ReloadingX509TrustManager(String type, String location, String password, long reloadInterval)
+    throws IOException, GeneralSecurityException {
+    this(type, location, password, null, reloadInterval);
+  }
+  
+  /**
+   * Creates a reloadable trustmanager. The trustmanager reloads itself
+   * if the underlying trustore file has changed.
+   *
+   * @param type type of truststore file, typically 'jks'.
+   * @param location local path to the truststore file.
+   * @param password password of the truststore file.
+   * @param passwordFileLocation path to the file containing the password
+   * @param reloadInterval interval to check if the truststore file has
+   * changed, in milliseconds.
+   * @throws IOException thrown if the truststore could not be initialized due
+   * to an IO error.
+   * @throws GeneralSecurityException thrown if the truststore could not be
+   * initialized due to a security error.
+   */
+  public ReloadingX509TrustManager(String type, String location, String password, String passwordFileLocation,
+      long reloadInterval)
     throws IOException, GeneralSecurityException {
     this.type = type;
     file = new File(location);
     this.password = password;
+    if (passwordFileLocation != null) {
+      this.passwordFileLocation = new File(passwordFileLocation);
+    } else {
+      this.passwordFileLocation = null;
+    }
     trustManagerRef = new AtomicReference<X509TrustManager>();
     trustManagerRef.set(loadTrustManager());
     this.reloadInterval = reloadInterval;
@@ -91,18 +119,18 @@ public final class ReloadingX509TrustManager
    * Starts the reloader thread.
    */
   public void init() {
-    reloader = new Thread(this, "Truststore reloader thread");
-    reloader.setDaemon(true);
-    running =  true;
-    reloader.start();
+    if (reloader == null) {
+      reloader = KeyManagersReloaderThreadPool.getInstance().scheduleTask(this, reloadInterval, TimeUnit.MILLISECONDS);
+    }
   }
 
   /**
    * Stops the reloader thread.
    */
   public void destroy() {
-    running = false;
-    reloader.interrupt();
+    if (reloader != null) {
+      reloader.cancel(true);
+    }
   }
 
   /**
@@ -161,13 +189,18 @@ public final class ReloadingX509TrustManager
     return reload;
   }
 
-  X509TrustManager loadTrustManager()
-  throws IOException, GeneralSecurityException {
+  X509TrustManager loadTrustManager() throws IOException, GeneralSecurityException {
     X509TrustManager trustManager = null;
     KeyStore ks = KeyStore.getInstance(type);
+    String tstorePassword;
+    if (passwordFileLocation != null) {
+      tstorePassword = FileUtils.readFileToString(passwordFileLocation);
+    } else {
+      tstorePassword = password;
+    }
     FileInputStream in = new FileInputStream(file);
     try {
-      ks.load(in, password.toCharArray());
+      ks.load(in, tstorePassword.toCharArray());
       lastLoaded = file.lastModified();
       LOG.debug("Loaded truststore '" + file + "'");
     } finally {
@@ -189,18 +222,11 @@ public final class ReloadingX509TrustManager
 
   @Override
   public void run() {
-    while (running) {
+    if (needsReload()) {
       try {
-        Thread.sleep(reloadInterval);
-      } catch (InterruptedException e) {
-        //NOP
-      }
-      if (running && needsReload()) {
-        try {
-          trustManagerRef.set(loadTrustManager());
-        } catch (Exception ex) {
-          LOG.warn(RELOAD_ERROR_MESSAGE + ex.toString(), ex);
-        }
+        trustManagerRef.set(loadTrustManager());
+      } catch (Exception ex) {
+        LOG.warn(RELOAD_ERROR_MESSAGE + ex.toString(), ex);
       }
     }
   }
