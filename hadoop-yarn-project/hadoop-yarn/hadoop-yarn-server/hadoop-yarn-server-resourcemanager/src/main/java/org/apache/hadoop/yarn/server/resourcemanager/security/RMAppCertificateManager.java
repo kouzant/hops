@@ -174,6 +174,7 @@ public class RMAppCertificateManager extends AbstractService
         KeyPair keyPair = generateKeyPair();
         PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair, cryptoMaterialVersion);
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
+        long expirationEpoch = signedCertificate.getNotAfter().getTime();
         
         KeyStoresWrapper keyStoresWrapper = createApplicationStores(signedCertificate, keyPair.getPrivate(), appUser,
             appId);
@@ -189,7 +190,7 @@ public class RMAppCertificateManager extends AbstractService
         handler.handle(new RMAppCertificateGeneratedEvent(
             appId,
             rawProtectedKeyStore, keyStoresWrapper.keyStorePassword,
-            rawTrustStore, keyStoresWrapper.trustStorePassword));
+            rawTrustStore, keyStoresWrapper.trustStorePassword, expirationEpoch));
       } else {
         handler.handle(new RMAppEvent(appId, RMAppEventType.CERTS_GENERATED));
       }

@@ -26,7 +26,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
-import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.KeyStoreTestUtil;
 import org.apache.hadoop.security.ssl.SSLFactory;
@@ -64,6 +63,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import java.io.ByteArrayInputStream;
@@ -81,6 +81,7 @@ import java.security.KeyStore;
 import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
@@ -400,6 +401,9 @@ public class TestRMAppCertificateManager {
         // Sign CSR
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
         signedCertificate.checkValidity();
+        long expiration = signedCertificate.getNotAfter().getTime();
+        long epochNow = Instant.now().toEpochMilli();
+        assertTrue(expiration >= epochNow);
         
         RMAppCertificateActions actor = getRmAppCertificateActions();
         
@@ -443,7 +447,7 @@ public class TestRMAppCertificateManager {
             HopsUtil.extractOUFromSubject(extractedCert.getSubjectX500Principal().getName()));
   
         RMAppCertificateGeneratedEvent startEvent = new RMAppCertificateGeneratedEvent(applicationId,
-            rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword);
+            rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword, expiration);
         getRmContext().getDispatcher().getEventHandler().handle(startEvent);
       } catch (Exception ex) {
         LOG.error(ex, ex);

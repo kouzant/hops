@@ -354,6 +354,18 @@ public class ApplicationStateDataPBImpl extends ApplicationStateData {
     builder.setCryptoMaterialVersion(cryptoMaterialVersion);
   }
   
+  @Override
+  public long getCertificateExpiration() {
+    ApplicationStateDataProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getCertificateExpiration();
+  }
+  
+  @Override
+  public void setCertificateExpiration(long certificateExpiration) {
+    maybeInitBuilder();
+    builder.setCertificateExpiration(certificateExpiration);
+  }
+  
   private static String RM_APP_PREFIX = "RMAPP_";
   public static RMAppStateProto convertToProtoFormat(RMAppState e) {
     return RMAppStateProto.valueOf(RM_APP_PREFIX + e.name());

@@ -24,14 +24,16 @@ public class RMAppCertificateGeneratedEvent extends RMAppEvent {
   private final char[] keyStorePassword;
   private final byte[] trustStore;
   private final char[] trustStorePassword;
+  private final long expirationEpoch;
   
   public RMAppCertificateGeneratedEvent(ApplicationId appId, byte[] keyStore, char[] keyStorePassword,
-      byte[] trustStore, char[] trustStorePassword) {
+      byte[] trustStore, char[] trustStorePassword, long expirationEpoch) {
     super(appId, RMAppEventType.CERTS_GENERATED);
     this.keyStore = keyStore;
     this.keyStorePassword = keyStorePassword;
     this.trustStore = trustStore;
     this.trustStorePassword = trustStorePassword;
+    this.expirationEpoch = expirationEpoch;
   }
   
   public byte[] getKeyStore() {
@@ -48,5 +50,9 @@ public class RMAppCertificateGeneratedEvent extends RMAppEvent {
   
   public char[] getTrustStorePassword() {
     return trustStorePassword;
+  }
+  
+  public long getExpirationEpoch() {
+    return expirationEpoch;
   }
 }

@@ -472,6 +472,7 @@ public class TestRMAppTransitions {
       Assert.assertNotNull(application.getTrustStorePassword());
       Assert.assertNotEquals(0, application.getTrustStorePassword().length);
       Assert.assertTrue(Arrays.equals(cryptoPassword, application.getTrustStorePassword()));
+      Assert.assertNotEquals(-1, application.getCertificateExpiration());
     }
     // verify sendATSCreateEvent() is get called during
     // AddApplicationToSchedulerTransition.
@@ -493,6 +494,7 @@ public class TestRMAppTransitions {
       appState.setTrustStore("some_bytes".getBytes());
       appState.setTrustStorePassword(new char[]{'a', 'b', 'c'});
       appState.setCryptoMaterialVersion(0);
+      appState.setCertificateExpiration(System.currentTimeMillis());
     }
     state.getApplicationState().put(application.getApplicationId(), appState);
     RMAppEvent event =
@@ -523,6 +525,7 @@ public class TestRMAppTransitions {
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       Assert.assertNotNull(application.getKeyStore());
       Assert.assertNotEquals(0, application.getKeyStore());
+      Assert.assertNotEquals(-1, application.getCertificateExpiration());
     }
     
     return application;

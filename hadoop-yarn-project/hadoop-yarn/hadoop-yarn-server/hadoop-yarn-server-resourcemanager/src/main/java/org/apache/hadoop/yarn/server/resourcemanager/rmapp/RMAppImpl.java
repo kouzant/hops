@@ -181,6 +181,7 @@ public class RMAppImpl implements RMApp, Recoverable {
   private char[] keyStorePassword = null;
   private byte[] trustStore = null;
   private char[] trustStorePassword = null;
+  private long certificateExpiration = -1;
   // Crypto material version is incremented only on certificate rotation
   private Integer cryptoMaterialVersion = 0;
   
@@ -865,6 +866,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.trustStore = appState.getTrustStore();
     this.trustStorePassword = appState.getTrustStorePassword();
     this.cryptoMaterialVersion = appState.getCryptoMaterialVersion();
+    this.certificateExpiration = appState.getCertificateExpiration();
 
     // send the ATS create Event during RM recovery.
     // NOTE: it could be duplicated with events sent before RM get restarted.
@@ -1081,6 +1083,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     keyStorePassword = event.getKeyStorePassword();
     trustStore = event.getTrustStore();
     trustStorePassword = event.getTrustStorePassword();
+    certificateExpiration = event.getExpirationEpoch();
   }
   
   private static final class AddApplicationToSchedulerTransition extends
@@ -1092,7 +1095,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         ApplicationStateData appNewState =
             ApplicationStateData.newInstance(app.submitTime, app.startTime, app.submissionContext, app.user,
                 app.callerContext, app.keyStore, app.keyStorePassword,
-                app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion);
+                app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration);
         app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
       }
       
@@ -1901,6 +1904,11 @@ public class RMAppImpl implements RMApp, Recoverable {
   @Override
   public char[] getTrustStorePassword() {
     return trustStorePassword;
+  }
+  
+  @Override
+  public long getCertificateExpiration() {
+    return certificateExpiration;
   }
   
   @Override
