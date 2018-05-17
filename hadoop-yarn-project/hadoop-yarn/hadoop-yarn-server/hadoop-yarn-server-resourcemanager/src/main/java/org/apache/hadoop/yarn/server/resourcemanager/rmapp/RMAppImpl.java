@@ -1048,16 +1048,25 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (app.isCryptoMaterialPresent()) {
           app.scheduler.handle(new AppAddedSchedulerEvent(app.user,
               app.submissionContext, false));
+          app.rmContext.getRMAppCertificateManager()
+              .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
+                  app.certificateExpiration);
           return RMAppState.SUBMITTED;
         } else {
           RMAppCertificateManagerEvent revokeAndGenerateEvent = new RMAppCertificateManagerEvent(
               app.applicationId, app.user, app.cryptoMaterialVersion,
               RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE);
           app.handler.handle(revokeAndGenerateEvent);
+          // RMApp should not register with the certificate renewer here as it will register
+          // when it receives CERTS_GENERATED event in GENERATING_CERTS state
           return RMAppState.GENERATING_CERTS;
         }
       }
 
+      app.rmContext.getRMAppCertificateManager()
+          .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
+              app.certificateExpiration);
+      
       // Add application to scheduler synchronously to guarantee scheduler
       // knows applications before AM or NM re-registers.
       app.scheduler.handle(new AppAddedSchedulerEvent(app.user,
@@ -1097,6 +1106,9 @@ public class RMAppImpl implements RMApp, Recoverable {
                 app.callerContext, app.keyStore, app.keyStorePassword,
                 app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration);
         app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
+        app.rmContext.getRMAppCertificateManager()
+            .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
+                app.certificateExpiration);
       }
       
       app.handler.handle(new AppAddedSchedulerEvent(app.user,
