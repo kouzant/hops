@@ -475,6 +475,11 @@ public class TestRMAppCertificateManager {
       }
     }
     
+    @Override
+    public boolean isRPCTLSEnabled() {
+      return true;
+    }
+    
     private void verifyContentOfAppTrustStore(byte[] appTrustStore, char[] password, String appUser,
         ApplicationId appId)
         throws GeneralSecurityException, IOException {
