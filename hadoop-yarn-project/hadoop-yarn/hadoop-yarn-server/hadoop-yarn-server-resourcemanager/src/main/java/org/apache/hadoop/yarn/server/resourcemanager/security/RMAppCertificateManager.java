@@ -243,8 +243,9 @@ public class RMAppCertificateManager extends AbstractService
         byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
         byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
         
-        // TODO(Antonis) How to treat new certificates in the CertificateLocalizationService
-        
+        rmContext.getCertificateLocalizationService().updateCryptoMaterial(appUser, appId.toString(),
+            ByteBuffer.wrap(rawProtectedKeyStore), String.valueOf(keyStoresWrapper.keyStorePassword),
+            ByteBuffer.wrap(rawTrustStore), String.valueOf(keyStoresWrapper.trustStorePassword));
         // TODO(Antonis) Send an event to RMApp to update the crypto material and the version
         
         // TODO(Antonis) Re-register with the renewer
@@ -272,7 +273,6 @@ public class RMAppCertificateManager extends AbstractService
         byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
         byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
         
-        // TODO(Antonis) What should I do with updated certificate version
         rmContext.getCertificateLocalizationService().materializeCertificates(
             appUser, appId.toString(), appUser, ByteBuffer.wrap(rawProtectedKeyStore),
             String.valueOf(keyStoresWrapper.keyStorePassword),
