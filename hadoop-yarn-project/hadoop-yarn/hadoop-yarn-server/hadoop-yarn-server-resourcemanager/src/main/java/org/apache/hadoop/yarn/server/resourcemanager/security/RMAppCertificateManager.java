@@ -263,7 +263,7 @@ public class RMAppCertificateManager extends AbstractService
     @Override
     public void run() {
       try {
-        LOG.info("Renewing certificate for application " + appId);
+        LOG.debug("Renewing certificate for application " + appId);
         KeyPair keyPair = generateKeyPair();
         PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair, ++currentCryptoVersion);
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
@@ -283,7 +283,7 @@ public class RMAppCertificateManager extends AbstractService
         handler.handle(new RMAppCertificateGeneratedEvent(appId, rawProtectedKeyStore,
             keyStoresWrapper.keyStorePassword, rawTrustStore, keyStoresWrapper.trustStorePassword, expiration,
             RMAppEventType.CERTS_RENEWED));
-        LOG.info("Renewed certificate for application " + appId);
+        LOG.debug("Renewed certificate for application " + appId);
       } catch (Exception ex) {
         LOG.error(ex, ex);
         renewalTasks.remove(appId);

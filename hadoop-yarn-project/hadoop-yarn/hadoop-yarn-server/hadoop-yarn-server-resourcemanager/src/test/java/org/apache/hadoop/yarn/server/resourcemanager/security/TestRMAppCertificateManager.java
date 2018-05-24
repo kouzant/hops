@@ -44,6 +44,10 @@ import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.DBRMStateStore;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.MemoryRMStateStore;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
+import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationStateData;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
@@ -359,11 +363,13 @@ public class TestRMAppCertificateManager {
   public void testApplicationSubmission() throws Exception {
     conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
         "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
+    conf.setBoolean(YarnConfiguration.RECOVERY_ENABLED, true);
+    conf.set(YarnConfiguration.RM_STORE, DBRMStateStore.class.getName());
     
     MockRM rm  = new MyMockRM(conf);
     rm.start();
   
-    rm.getRMContext().getRMAppCertificateManager().setTimeToSubtractFromExpiration(10, ChronoUnit.SECONDS);
+    rm.getRMContext().getRMAppCertificateManager().setTimeToSubtractFromExpiration(45, ChronoUnit.SECONDS);
     MockNM nm = new MockNM("127.0.0.1:8032", 15 * 1024, rm.getResourceTrackerService());
     nm.registerNode();
     
@@ -384,9 +390,47 @@ public class TestRMAppCertificateManager {
     assertNotNull(trustStore);
     assertNotEquals(0, trustStore.length);
     char[] trustStorePassword = application.getTrustStorePassword();
+    Integer cryptoMaterialVersion = application.getCryptoMaterialVersion();
     assertNotNull(trustStorePassword);
     assertNotEquals(0, trustStorePassword.length);
+    
+    // NOTE: The part below is very sensitive to timing issues
+    
+    // Expiration time for testing TestingRMAppCertificateActions is now + 50 seconds
+    TimeUnit.SECONDS.sleep(5);
+    // Certificate renewal should have happened by now
+    byte[] newKeyStore = application.getKeyStore();
+    assertFalse(Arrays.equals(keyStore, newKeyStore));
+    assertNotEquals(0, newKeyStore.length);
+    byte[] newTrustStore = application.getTrustStore();
+    assertFalse(Arrays.equals(trustStore, newTrustStore));
+    assertNotEquals(0, newTrustStore.length);
+    char[] newKeyStorePass = application.getKeyStorePassword();
+    assertFalse(Arrays.equals(keyStorePassword, newKeyStorePass));
+    assertNotEquals(0, newKeyStorePass.length);
+    char[] newTrustStorePass = application.getTrustStorePassword();
+    assertFalse(Arrays.equals(trustStorePassword, newTrustStorePass));
+    assertNotEquals(0, newTrustStorePass.length);
+    Integer currentCryptoMaterialVersion = application.getCryptoMaterialVersion();
+    assertEquals(++cryptoMaterialVersion, currentCryptoMaterialVersion);
+    
+    ApplicationStateData appState = rm.getRMContext().getStateStore().loadState().getApplicationState()
+        .get(application.getApplicationId());
+    assertTrue(Arrays.equals(newKeyStore, appState.getKeyStore()));
+    assertTrue(Arrays.equals(newTrustStore, appState.getTrustStore()));
+    assertTrue(Arrays.equals(newKeyStorePass, appState.getKeyStorePassword()));
+    assertTrue(Arrays.equals(newTrustStorePass, appState.getTrustStorePassword()));
+    assertEquals(currentCryptoMaterialVersion, appState.getCryptoMaterialVersion());
     rm.stop();
+    
+    MyMockRM rm2 = new MyMockRM(conf);
+    rm2.start();
+    nm.setResourceTrackerService(rm2.getResourceTrackerService());
+    nm.nodeHeartbeat(true);
+    RMApp recoveredApp = rm2.getRMContext().getRMApps().get(application.getApplicationId());
+    assertNotNull(recoveredApp);
+    assertTrue(Arrays.equals(newKeyStore, recoveredApp.getKeyStore()));
+    rm2.stop();
   }
   
   private RMApp createNewTestApplication(int appId) throws IOException {
