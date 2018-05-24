@@ -1123,6 +1123,25 @@ public class RMAppImpl implements RMApp, Recoverable {
       app.sendATSCreateEvent();
     }
   }
+  
+  private static final class RMAppCertificatesRenewedTransition extends RMAppTransition {
+    @Override
+    public void transition(RMAppImpl app, RMAppEvent event) {
+      LOG.info("Received new certificate");
+      app.updateApplicationWithCryptoMaterial((RMAppCertificateGeneratedEvent) event);
+      app.cryptoMaterialVersion++;
+      ApplicationStateData appNewState =
+          ApplicationStateData.newInstance(app.submitTime, app.startTime, app.submissionContext, app.user,
+              app.callerContext, app.keyStore, app.keyStorePassword,
+              app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration);
+      app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
+      
+      // TODO(Antonis) Notify RMNodes about new material
+      
+      app.rmContext.getRMAppCertificateManager()
+          .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion, app.certificateExpiration);
+    }
+  }
 
   private static final class StartAppAttemptTransition extends RMAppTransition {
     @Override
@@ -1210,17 +1229,6 @@ public class RMAppImpl implements RMApp, Recoverable {
       RMAppCertificateManagerEvent genCertsEvent = new RMAppCertificateManagerEvent(app.applicationId,
           app.user, app.cryptoMaterialVersion, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE);
       app.handler.handle(genCertsEvent);
-    }
-  }
-
-  private static final class RMAppCertificatesRenewedTransition extends RMAppTransition {
-    @Override
-    public void transition(RMAppImpl app, RMAppEvent event) {
-      LOG.info("Received new certificate");
-      // TODO(Antonis) Update crypto material
-      // TODO(Antonis) Update current version of material
-      // TODO(Antonis) Notify RMNodes about new material
-      // TODO(Antonis) Re-register with RMAppCertificate renewer
     }
   }
   
