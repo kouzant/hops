@@ -64,6 +64,7 @@ import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
+import java.time.temporal.TemporalUnit;
 import java.util.ArrayList;
 import java.util.Enumeration;
 import java.util.List;
@@ -101,6 +102,9 @@ public class RMAppCertificateManager extends AbstractService
   private final int RENEWER_THREAD_POOL = 5;
   private final ScheduledExecutorService scheduler;
   private final Map<ApplicationId, ScheduledFuture> renewalTasks;
+  // For certificate renewal
+  private long amountOfTimeToSubtractFromExpiration = 2;
+  private TemporalUnit unitOfTime = ChronoUnit.DAYS;
   
   public RMAppCertificateManager(RMContext rmContext) {
     super(RMAppCertificateManager.class.getName());
@@ -176,6 +180,17 @@ public class RMAppCertificateManager extends AbstractService
     return rmContext;
   }
   
+  @VisibleForTesting
+  public void setTimeToSubtractFromExpiration(long amountOfTimeToSubtractFromExpiration, TemporalUnit unitOfTime) {
+    this.amountOfTimeToSubtractFromExpiration = amountOfTimeToSubtractFromExpiration;
+    this.unitOfTime = unitOfTime;
+  }
+  
+  @VisibleForTesting
+  public Map<ApplicationId, ScheduledFuture> getRenewalTasks() {
+    return renewalTasks;
+  }
+  
   public void registerWithCertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion,
       long expiration) {
     if (!isRPCTLSEnabled()) {
@@ -185,11 +200,17 @@ public class RMAppCertificateManager extends AbstractService
       Instant now = Instant.now();
       Instant expirationInstant = Instant.ofEpochMilli(expiration);
       Instant delay = expirationInstant.minus(now.toEpochMilli(), ChronoUnit.MILLIS)
-          .minus(2, ChronoUnit.DAYS);
+          .minus(amountOfTimeToSubtractFromExpiration, unitOfTime);
       ScheduledFuture renewTask = scheduler.schedule(
-          new CertificateRenewer(appId, appUser, currentCryptoVersion), delay.toEpochMilli(), TimeUnit.MILLISECONDS);
+          createCertificateRenewerTask(appId, appUser, currentCryptoVersion), delay.toEpochMilli(), TimeUnit.MILLISECONDS);
       renewalTasks.put(appId, renewTask);
     }
+  }
+  
+  @VisibleForTesting
+  @InterfaceAudience.Private
+  protected Runnable createCertificateRenewerTask(ApplicationId appId, String appuser, Integer currentCryptoVersion) {
+    return new CertificateRenewer(appId, appuser, currentCryptoVersion);
   }
   
   public void unregisterFromCertificateRenewer(ApplicationId appId) {
@@ -200,6 +221,11 @@ public class RMAppCertificateManager extends AbstractService
     if (task != null) {
       task.cancel(true);
     }
+  }
+  
+  @VisibleForTesting
+  protected ScheduledExecutorService getScheduler() {
+    return scheduler;
   }
   
   @InterfaceAudience.Private
@@ -219,20 +245,25 @@ public class RMAppCertificateManager extends AbstractService
     return isRPCTLSEnabled;
   }
   
-  private class CertificateRenewer implements Runnable {
-    private final ApplicationId appId;
-    private final String appUser;
-    private Integer currentCryptoVersion;
+  @VisibleForTesting
+  @InterfaceAudience.Private
+  public class CertificateRenewer implements Runnable {
+    protected final ApplicationId appId;
+    protected final String appUser;
+    protected Integer currentCryptoVersion;
+    protected int numberOfFailures;
     
-    private CertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
+    public CertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
       this.appId = appId;
       this.appUser = appUser;
       this.currentCryptoVersion = currentCryptoVersion;
+      numberOfFailures = 0;
     }
     
     @Override
     public void run() {
       try {
+        LOG.info("Renewing certificate for application " + appId);
         KeyPair keyPair = generateKeyPair();
         PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair, ++currentCryptoVersion);
         X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
@@ -246,12 +277,24 @@ public class RMAppCertificateManager extends AbstractService
         rmContext.getCertificateLocalizationService().updateCryptoMaterial(appUser, appId.toString(),
             ByteBuffer.wrap(rawProtectedKeyStore), String.valueOf(keyStoresWrapper.keyStorePassword),
             ByteBuffer.wrap(rawTrustStore), String.valueOf(keyStoresWrapper.trustStorePassword));
-        // TODO(Antonis) Send an event to RMApp to update the crypto material and the version
-        
-        // TODO(Antonis) Re-register with the renewer
+  
         renewalTasks.remove(appId);
+        
+        handler.handle(new RMAppCertificateGeneratedEvent(appId, rawProtectedKeyStore,
+            keyStoresWrapper.keyStorePassword, rawTrustStore, keyStoresWrapper.trustStorePassword, expiration,
+            RMAppEventType.CERTS_RENEWED));
+        LOG.info("Renewed certificate for application " + appId);
       } catch (Exception ex) {
-        // TODO(Antonis) What to do with exceptions?? Send KILL?
+        LOG.error(ex, ex);
+        renewalTasks.remove(appId);
+        if (++numberOfFailures <= 2) {
+          LOG.warn("Failed to renew certificate for application " + appId + ". Retries remaining "
+              + (2 - numberOfFailures + 1));
+          ScheduledFuture task = scheduler.schedule(this, 5, TimeUnit.SECONDS);
+          renewalTasks.put(appId, task);
+        } else {
+          LOG.error("Failed to renew certificate for application " + appId + ". Failed more than 2 times, giving up");
+        }
       }
     }
   }
@@ -281,7 +324,7 @@ public class RMAppCertificateManager extends AbstractService
         handler.handle(new RMAppCertificateGeneratedEvent(
             appId,
             rawProtectedKeyStore, keyStoresWrapper.keyStorePassword,
-            rawTrustStore, keyStoresWrapper.trustStorePassword, expirationEpoch));
+            rawTrustStore, keyStoresWrapper.trustStorePassword, expirationEpoch, RMAppEventType.CERTS_GENERATED));
       } else {
         handler.handle(new RMAppEvent(appId, RMAppEventType.CERTS_GENERATED));
       }

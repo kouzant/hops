@@ -38,6 +38,7 @@ import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPB
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
+import org.apache.hadoop.yarn.server.resourcemanager.Application;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
@@ -82,9 +83,12 @@ import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class TestRMAppCertificateManager {
@@ -195,6 +199,81 @@ public class TestRMAppCertificateManager {
     }
   }
   
+  @Test
+  public void testCertificateRenewal() throws Exception {
+    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
+    MockRMAppCertificateManager certificateManager = new MockRMAppCertificateManager(false, rmContext);
+    certificateManager.init(conf);
+    certificateManager.start();
+    certificateManager.setTimeToSubtractFromExpiration(5, ChronoUnit.SECONDS);
+    Instant now = Instant.now();
+    Instant expiration = now.plus(10, ChronoUnit.SECONDS);
+    ApplicationId appId = ApplicationId.newInstance(now.toEpochMilli(), 1);
+    certificateManager.setOldCertificateExpiration(expiration.toEpochMilli());
+    
+    certificateManager.registerWithCertificateRenewer(appId, "Dolores", 1, expiration.toEpochMilli());
+    Map<ApplicationId, ScheduledFuture> tasks = certificateManager.getRenewalTasks();
+    ScheduledFuture renewalTask = tasks.get(appId);
+    assertFalse(renewalTask.isCancelled());
+    assertFalse(renewalTask.isDone());
+    
+    // Wait until the scheduled task is executed
+    TimeUnit.SECONDS.sleep(10);
+    assertTrue(renewalTask.isDone());
+    assertFalse(certificateManager.getRenewalException());
+    assertTrue(tasks.isEmpty());
+    certificateManager.stop();
+  }
+  
+  @Test(timeout = 12000)
+  public void testFailedCertificateRenewal() throws Exception {
+    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
+    MockFailingRMAppCertificateManager certificateManager = new MockFailingRMAppCertificateManager(Integer.MAX_VALUE);
+    certificateManager.init(conf);
+    certificateManager.start();
+    certificateManager.setTimeToSubtractFromExpiration(5, ChronoUnit.SECONDS);
+  
+    Instant now = Instant.now();
+    Instant expiration = now.plus(10, ChronoUnit.SECONDS);
+    ApplicationId appId = ApplicationId.newInstance(now.toEpochMilli(), 1);
+    certificateManager.registerWithCertificateRenewer(appId, "Dolores", 1, expiration.toEpochMilli());
+    Map<ApplicationId, ScheduledFuture> tasks = certificateManager.getRenewalTasks();
+    // There should be a scheduled task
+    ScheduledFuture task = tasks.get(appId);
+    assertFalse(task.isCancelled());
+    assertFalse(task.isDone());
+    assertFalse(certificateManager.hasRenewalFailed());
+    assertEquals(0, certificateManager.getNumberOfRenewalFailures());
+    
+    TimeUnit.SECONDS.sleep(10);
+    assertTrue(tasks.isEmpty());
+    assertEquals(2, certificateManager.getNumberOfRenewalFailures());
+    assertTrue(certificateManager.hasRenewalFailed());
+    certificateManager.stop();
+  }
+  
+  @Test(timeout = 12000)
+  public void testRetryCertificateRenewal() throws Exception {
+    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
+    MockFailingRMAppCertificateManager certificateManager = new MockFailingRMAppCertificateManager(2);
+    certificateManager.init(conf);
+    certificateManager.start();
+    certificateManager.setTimeToSubtractFromExpiration(5, ChronoUnit.SECONDS);
+  
+    Instant now = Instant.now();
+    Instant expiration = now.plus(10, ChronoUnit.SECONDS);
+    ApplicationId appId = ApplicationId.newInstance(now.toEpochMilli(), 1);
+    certificateManager.registerWithCertificateRenewer(appId, "Dolores", 1, expiration.toEpochMilli());
+    TimeUnit.SECONDS.sleep(10);
+    assertEquals(2, certificateManager.getNumberOfRenewalFailures());
+    assertFalse(certificateManager.hasRenewalFailed());
+    assertTrue(certificateManager.getRenewalTasks().isEmpty());
+    certificateManager.stop();
+  }
+  
   // This test makes a REST call to Hopsworks using HopsworksRMAppCertificateActions actor class
   // Normally it should be ignored as it requires Hopsworks instance to be running
   @Test
@@ -264,7 +343,7 @@ public class TestRMAppCertificateManager {
     MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.KILL);
     rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
     
-    MockFailingRMAppCertificateManager manager = new MockFailingRMAppCertificateManager();
+    MockFailingRMAppCertificateManager manager = new MockFailingRMAppCertificateManager(Integer.MAX_VALUE);
     manager.init(conf);
     manager.start();
     manager.handle(new RMAppCertificateManagerEvent(
@@ -284,6 +363,7 @@ public class TestRMAppCertificateManager {
     MockRM rm  = new MyMockRM(conf);
     rm.start();
   
+    rm.getRMContext().getRMAppCertificateManager().setTimeToSubtractFromExpiration(10, ChronoUnit.SECONDS);
     MockNM nm = new MockNM("127.0.0.1:8032", 15 * 1024, rm.getResourceTrackerService());
     nm.registerNode();
     
@@ -368,6 +448,7 @@ public class TestRMAppCertificateManager {
   private class MockRMAppCertificateManager extends RMAppCertificateManager {
     private final boolean loadTrustStore;
     private final String systemTMP;
+    private long oldCertificateExpiration;
   
     public MockRMAppCertificateManager(boolean loadTrustStore, RMContext rmContext) throws Exception {
       super(rmContext);
@@ -447,7 +528,7 @@ public class TestRMAppCertificateManager {
             HopsUtil.extractOUFromSubject(extractedCert.getSubjectX500Principal().getName()));
   
         RMAppCertificateGeneratedEvent startEvent = new RMAppCertificateGeneratedEvent(applicationId,
-            rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword, expiration);
+            rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword, expiration, RMAppEventType.CERTS_GENERATED);
         getRmContext().getDispatcher().getEventHandler().handle(startEvent);
       } catch (Exception ex) {
         LOG.error(ex, ex);
@@ -515,17 +596,132 @@ public class TestRMAppCertificateManager {
         assertFalse(certificateMissing);
       }
     }
-  }
   
-  private class MockFailingRMAppCertificateManager extends RMAppCertificateManager {
-  
-    public MockFailingRMAppCertificateManager() {
-      super(rmContext);
+    public void setOldCertificateExpiration(long oldCertificateExpiration) {
+      this.oldCertificateExpiration = oldCertificateExpiration;
     }
   
     @Override
+    public Runnable createCertificateRenewerTask(ApplicationId appId, String appuser, Integer currentCryptoVersion) {
+      return new MockCertificateRenewer(appId, appuser, currentCryptoVersion, 1);
+    }
+  
+    private boolean renewalException = false;
+    
+    public boolean getRenewalException() {
+      return renewalException;
+    }
+    
+    public class MockCertificateRenewer extends CertificateRenewer {
+      private final long oldCertificateExpiration;
+      
+      public MockCertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion, long oldCertificateExpiration) {
+        super(appId, appUser, currentCryptoVersion);
+        this.oldCertificateExpiration = oldCertificateExpiration;
+      }
+      
+      @Override
+      public void run() {
+        try {
+          LOG.info("Renewing certificate for application " + appId);
+          KeyPair keyPair = generateKeyPair();
+          int oldCryptoVersion = currentCryptoVersion;
+          PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair, ++currentCryptoVersion);
+          int newCryptoVersion = Integer.parseInt(HopsUtil.extractOUFromSubject(csr.getSubject().toString()));
+          if (++oldCryptoVersion != newCryptoVersion) {
+            LOG.error("Crypto version of new certificate is wrong: " + newCryptoVersion);
+            renewalException = true;
+          }
+          X509Certificate signedCertificate = sendCSRAndGetSigned(csr);
+          long newCertificateExpiration = signedCertificate.getNotAfter().getTime();
+          if (newCertificateExpiration <= oldCertificateExpiration) {
+            LOG.error("New certificate expiration time is older than old certificate");
+            renewalException = true;
+          }
+  
+          KeyStoresWrapper keyStoresWrapper = createApplicationStores(signedCertificate, keyPair.getPrivate(), appUser,
+              appId);
+          byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
+          byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
+  
+          getRenewalTasks().remove(appId);
+          
+          getRmContext().getDispatcher().getEventHandler().handle(new RMAppCertificateGeneratedEvent(appId,
+              rawProtectedKeyStore, keyStoresWrapper.getKeyStorePassword(), rawTrustStore, keyStoresWrapper
+              .getTrustStorePassword(), newCertificateExpiration, RMAppEventType.CERTS_RENEWED));
+          LOG.info("Renewed certificate for application " + appId);
+        } catch (Exception ex) {
+          LOG.error("Exception while renewing certificate. This should not have happened here", ex);
+          renewalException = true;
+        }
+      }
+    }
+  }
+  
+  private class MockFailingRMAppCertificateManager extends RMAppCertificateManager {
+    private int numberOfRenewalFailures = 0;
+    private boolean renewalFailed = false;
+    private final Integer succeedAfterRetries;
+    
+    public MockFailingRMAppCertificateManager(Integer succeedAfterRetries) {
+      super(rmContext);
+      this.succeedAfterRetries = succeedAfterRetries;
+    }
+  
+    public int getNumberOfRenewalFailures() {
+      return numberOfRenewalFailures;
+    }
+  
+    public boolean hasRenewalFailed() {
+      return renewalFailed;
+    }
+    
+    @Override
+    public boolean isRPCTLSEnabled() {
+      return true;
+    }
+    
+    @Override
     public void generateCertificate(ApplicationId appId, String appUser, Integer cryptoMaterialVersion) {
       getRmContext().getDispatcher().getEventHandler().handle(new RMAppEvent(appId, RMAppEventType.KILL));
+    }
+    
+    @Override
+    public Runnable createCertificateRenewerTask(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
+      return new MockFailingCertificateRenewer(appId, appUser, currentCryptoVersion, succeedAfterRetries);
+    }
+    
+    public class MockFailingCertificateRenewer extends CertificateRenewer {
+  
+      private final Integer succeedAfterRetries;
+      public MockFailingCertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion,
+          Integer succeedAfterRetries) {
+        super(appId, appUser, currentCryptoVersion);
+        this.succeedAfterRetries = succeedAfterRetries;
+      }
+      
+      @Override
+      public void run() {
+        try {
+          if (numberOfFailures < succeedAfterRetries) {
+            throw new Exception("Ooops something went wrong");
+          }
+          getRenewalTasks().remove(appId);
+          LOG.info("Renewed certificate for application " + appId);
+        } catch (Exception ex) {
+          getRenewalTasks().remove(appId);
+          if (++numberOfFailures <= 2) {
+            numberOfRenewalFailures++;
+            LOG.warn("Failed to renew certificate for application " + appId + ". Retries remaining " + (2 -
+                numberOfFailures + 1));
+            ScheduledFuture task = getScheduler().schedule(this, 10, TimeUnit.MILLISECONDS);
+            getRenewalTasks().put(appId, task);
+          } else {
+            LOG.error("Failed to renew certificate for application " + appId + ". Failed more than 2 times, giving up");
+            renewalFailed = true;
+          }
+        }
+      }
     }
   }
   

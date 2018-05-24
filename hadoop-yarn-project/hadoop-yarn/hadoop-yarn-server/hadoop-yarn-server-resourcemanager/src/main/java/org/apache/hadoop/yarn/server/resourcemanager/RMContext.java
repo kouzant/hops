@@ -164,4 +164,6 @@ public interface RMContext {
   public String getUserFolderHashAlgo();
   
   RMAppCertificateManager getRMAppCertificateManager();
+  
+  void setRMAppCertificateManager(RMAppCertificateManager rmAppCertificateManager);
 }

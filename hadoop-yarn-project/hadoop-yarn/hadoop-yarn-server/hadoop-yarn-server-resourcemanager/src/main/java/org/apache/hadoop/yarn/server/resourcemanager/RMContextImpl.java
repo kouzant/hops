@@ -576,7 +576,8 @@ public class RMContextImpl implements RMContext {
     return rmAppCertificateManager;
   }
   
-  public void setRmAppCertificateManager(RMAppCertificateManager rmAppCertificateManager) {
+  @Override
+  public void setRMAppCertificateManager(RMAppCertificateManager rmAppCertificateManager) {
     this.rmAppCertificateManager = rmAppCertificateManager;
   }
 }

@@ -268,6 +268,8 @@ public class RMAppImpl implements RMApp, Recoverable {
         RMAppEventType.KILL,
         new FinalSavingTransition(
           new AppKilledTransition(), RMAppState.KILLED))
+    .addTransition(RMAppState.SUBMITTED, RMAppState.SUBMITTED,
+        RMAppEventType.CERTS_RENEWED, new RMAppCertificatesRenewedTransition())
 
      // Transitions from ACCEPTED state
     .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED,
@@ -295,6 +297,8 @@ public class RMAppImpl implements RMApp, Recoverable {
     .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED, 
         RMAppEventType.APP_RUNNING_ON_NODE,
         new AppRunningOnNodeTransition())
+    .addTransition(RMAppState.ACCEPTED, RMAppState.ACCEPTED,
+        RMAppEventType.CERTS_RENEWED, new RMAppCertificatesRenewedTransition())
 
      // Transitions from RUNNING state
     .addTransition(RMAppState.RUNNING, RMAppState.RUNNING,
@@ -318,6 +322,8 @@ public class RMAppImpl implements RMApp, Recoverable {
         new AttemptFailedTransition(RMAppState.ACCEPTED))
     .addTransition(RMAppState.RUNNING, RMAppState.KILLING,
         RMAppEventType.KILL, new KillAttemptTransition())
+    .addTransition(RMAppState.RUNNING, RMAppState.RUNNING,
+        RMAppEventType.CERTS_RENEWED, new RMAppCertificatesRenewedTransition())
 
      // Transitions from FINAL_SAVING state
     .addTransition(RMAppState.FINAL_SAVING,
@@ -1207,6 +1213,17 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
   }
 
+  private static final class RMAppCertificatesRenewedTransition extends RMAppTransition {
+    @Override
+    public void transition(RMAppImpl app, RMAppEvent event) {
+      LOG.info("Received new certificate");
+      // TODO(Antonis) Update crypto material
+      // TODO(Antonis) Update current version of material
+      // TODO(Antonis) Notify RMNodes about new material
+      // TODO(Antonis) Re-register with RMAppCertificate renewer
+    }
+  }
+  
   private void rememberTargetTransitions(RMAppEvent event,
       Object transitionToDo, RMAppState targetFinalState) {
     transitionTodo = transitionToDo;

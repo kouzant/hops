@@ -27,8 +27,8 @@ public class RMAppCertificateGeneratedEvent extends RMAppEvent {
   private final long expirationEpoch;
   
   public RMAppCertificateGeneratedEvent(ApplicationId appId, byte[] keyStore, char[] keyStorePassword,
-      byte[] trustStore, char[] trustStorePassword, long expirationEpoch) {
-    super(appId, RMAppEventType.CERTS_GENERATED);
+      byte[] trustStore, char[] trustStorePassword, long expirationEpoch, RMAppEventType type) {
+    super(appId, type);
     this.keyStore = keyStore;
     this.keyStorePassword = keyStorePassword;
     this.trustStore = trustStore;
