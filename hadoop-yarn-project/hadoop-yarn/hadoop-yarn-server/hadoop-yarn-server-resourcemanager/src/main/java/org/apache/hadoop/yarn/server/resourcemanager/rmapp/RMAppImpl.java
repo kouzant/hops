@@ -1046,17 +1046,22 @@ public class RMAppImpl implements RMApp, Recoverable {
           LOG.error(msg, e);
         }
       }
-
+  
+      Integer cryptoMaterialVersionToRevoke = app.cryptoMaterialVersion + 1;
       // No existent attempts means the attempt associated with this app was not
       // started or started but not yet saved.
       if (app.attempts.isEmpty()) {
         
         if (app.isCryptoMaterialPresent()) {
-          app.scheduler.handle(new AppAddedSchedulerEvent(app.user,
-              app.submissionContext, false));
+          // ResourceManager may have crashed after it has renewed the certificate but before updating
+          // RMApp state, so revoke the current version plus 1 to be sure no missed certificate is valid
+          app.rmContext.getRMAppCertificateManager()
+              .revokeCertificateSynchronously(app.applicationId, app.user, cryptoMaterialVersionToRevoke);
           app.rmContext.getRMAppCertificateManager()
               .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
                   app.certificateExpiration);
+          app.scheduler.handle(new AppAddedSchedulerEvent(app.user,
+              app.submissionContext, false));
           return RMAppState.SUBMITTED;
         } else {
           RMAppCertificateManagerEvent revokeAndGenerateEvent = new RMAppCertificateManagerEvent(
@@ -1068,7 +1073,11 @@ public class RMAppImpl implements RMApp, Recoverable {
           return RMAppState.GENERATING_CERTS;
         }
       }
-
+  
+      // ResourceManager may have crashed after it has renewed the certificate but before updating
+      // RMApp state, so revoke the current version plus 1 to be sure no missed certificate is valid
+      app.rmContext.getRMAppCertificateManager()
+          .revokeCertificateSynchronously(app.applicationId, app.user, cryptoMaterialVersionToRevoke);
       app.rmContext.getRMAppCertificateManager()
           .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
               app.certificateExpiration);

@@ -22,6 +22,8 @@ import static org.mockito.Matchers.any;
 import static org.mockito.Matchers.anyLong;
 import static org.mockito.Matchers.anyObject;
 import static org.mockito.Matchers.eq;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.atMost;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -461,6 +463,9 @@ public class TestRMAppTransitions {
     verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
         eq(application.getCryptoMaterialVersion()));
     assertAppState(RMAppState.SUBMITTED, application);
+    verify(rmAppCertificateManager, atMost(1))
+        .registerWithCertificateRenewer(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()), eq(application.getCertificateExpiration()));
     if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       Assert.assertNotNull(application.getKeyStore());
@@ -505,6 +510,13 @@ public class TestRMAppTransitions {
     assertStartTimeSet(application);
     if (cryptoRecovered) {
       // Cryptographic material for the application has been recovered, state should be SUBMITTED
+      Integer cryptoMaterialVersionToRevoke = application.getCryptoMaterialVersion() + 1;
+      verify(rmAppCertificateManager, atMost(1))
+          .revokeCertificateSynchronously(eq(application.getApplicationId()), eq(application.getUser()),
+              eq(cryptoMaterialVersionToRevoke));
+      verify(rmAppCertificateManager, atMost(1))
+          .registerWithCertificateRenewer(eq(application.getApplicationId()), eq(application.getUser()),
+              eq(application.getCryptoMaterialVersion()), eq(application.getCertificateExpiration()));
       assertAppState(RMAppState.SUBMITTED, application);
       verify(rmAppCertificateManager, never())
           .generateCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
@@ -517,6 +529,9 @@ public class TestRMAppTransitions {
       rmDispatcher.await();
       // While waiting for the event dispatcher to drain, RMApp has received CERTS_GENERATED event
       // and updated the crypto material version
+      verify(rmAppCertificateManager, never())
+          .revokeCertificateSynchronously(eq(application.getApplicationId()), eq(application.getUser()),
+              any(Integer.class));
       verify(rmAppCertificateManager).generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
           eq(application.getCryptoMaterialVersion()));
       assertAppState(RMAppState.SUBMITTED, application);

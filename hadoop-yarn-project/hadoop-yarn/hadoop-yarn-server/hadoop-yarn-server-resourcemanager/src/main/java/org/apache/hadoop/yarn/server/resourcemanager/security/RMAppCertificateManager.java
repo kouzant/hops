@@ -438,7 +438,7 @@ public class RMAppCertificateManager extends AbstractService
   @VisibleForTesting
   public void revokeCertificate(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
     if (isRPCTLSEnabled()) {
-      LOG.info("Revoking certificate for application: " + appId);
+      LOG.info("Revoking certificate for application: " + appId + " with version " + cryptoMaterialVersion);
       try {
         putToQueue(appId, applicationUser, cryptoMaterialVersion);
         if (certificateLocalizationService != null) {
@@ -447,6 +447,13 @@ public class RMAppCertificateManager extends AbstractService
       } catch (InterruptedException ex) {
         LOG.warn("Could not remove material for user " + applicationUser + " and application " + appId, ex);
       }
+    }
+  }
+  
+  public void revokeCertificateSynchronously(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
+    if (isRPCTLSEnabled()) {
+      LOG.info("Revoking certificate for application: " + appId + " with version " + cryptoMaterialVersion);
+      revokeInternal(getCertificateIdentifier(appId, applicationUser, cryptoMaterialVersion));
     }
   }
   
