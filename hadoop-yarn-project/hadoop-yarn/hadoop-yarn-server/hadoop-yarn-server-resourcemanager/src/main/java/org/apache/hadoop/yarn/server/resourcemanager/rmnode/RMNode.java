@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.rmnode;
 
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 import org.apache.hadoop.net.Node;
@@ -172,4 +173,6 @@ public interface RMNode {
   long getUntrackedTimeStamp();
 
   void setUntrackedTimeStamp(long timeStamp);
+  
+  Map<ApplicationId, RMNodeUpdateCryptoMaterialForAppEvent> getAppCryptoMaterialToUpdate();
 }

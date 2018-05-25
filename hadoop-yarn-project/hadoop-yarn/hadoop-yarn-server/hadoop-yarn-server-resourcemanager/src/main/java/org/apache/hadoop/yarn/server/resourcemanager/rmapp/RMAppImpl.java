@@ -74,6 +74,7 @@ import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.security.client.ClientToAMTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeUpdateCryptoMaterialForAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAppManagerEvent;
@@ -1145,7 +1146,12 @@ public class RMAppImpl implements RMApp, Recoverable {
               app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration);
       app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
       
-      // TODO(Antonis) Notify RMNodes about new material
+      for (NodeId nodeId : app.ranNodes) {
+        RMNodeUpdateCryptoMaterialForAppEvent updateEvent =
+            new RMNodeUpdateCryptoMaterialForAppEvent(nodeId, app.applicationId, app.keyStore, app.keyStorePassword,
+                app.trustStore, app.trustStorePassword);
+        app.handler.handle(updateEvent);
+      }
       
       app.rmContext.getRMAppCertificateManager()
           .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion, app.certificateExpiration);
