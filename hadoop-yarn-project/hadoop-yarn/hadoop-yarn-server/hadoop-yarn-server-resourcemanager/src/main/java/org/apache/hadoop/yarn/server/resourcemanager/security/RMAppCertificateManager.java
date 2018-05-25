@@ -192,7 +192,7 @@ public class RMAppCertificateManager extends AbstractService
   }
   
   public void registerWithCertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion,
-      long expiration) {
+      Long expiration) {
     if (!isRPCTLSEnabled()) {
       return;
     }
@@ -213,7 +213,7 @@ public class RMAppCertificateManager extends AbstractService
     return new CertificateRenewer(appId, appuser, currentCryptoVersion);
   }
   
-  public void unregisterFromCertificateRenewer(ApplicationId appId) {
+  public void deregisterFromCertificateRenewer(ApplicationId appId) {
     if (!isRPCTLSEnabled()) {
       return;
     }
@@ -440,6 +440,8 @@ public class RMAppCertificateManager extends AbstractService
     if (isRPCTLSEnabled()) {
       LOG.info("Revoking certificate for application: " + appId + " with version " + cryptoMaterialVersion);
       try {
+        // Deregister application from certificate renewal, if it exists
+        deregisterFromCertificateRenewer(appId);
         putToQueue(appId, applicationUser, cryptoMaterialVersion);
         if (certificateLocalizationService != null) {
           certificateLocalizationService.removeMaterial(applicationUser, appId.toString());

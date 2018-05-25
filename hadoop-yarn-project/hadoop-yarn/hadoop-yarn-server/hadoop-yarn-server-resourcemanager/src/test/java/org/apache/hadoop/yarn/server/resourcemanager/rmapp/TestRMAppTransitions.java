@@ -620,6 +620,9 @@ public class TestRMAppTransitions {
     assertFinalAppStatus(FinalApplicationStatus.FAILED, application);
     Assert.assertTrue("Finished app missing diagnostics",
         application.getDiagnostics().indexOf(diagnostics) != -1);
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
     return application;
   }
 
@@ -699,6 +702,9 @@ public class TestRMAppTransitions {
     assertAppFinalStateNotSaved(application);
     verifyApplicationFinished(RMAppState.KILLED);
     verifyAppRemovedSchedulerEvent(RMAppState.KILLED);
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
 
   @Test
@@ -716,6 +722,12 @@ public class TestRMAppTransitions {
     assertFailed(application, rejectedText);
     assertAppFinalStateSaved(application);
     verifyApplicationFinished(RMAppState.FAILED);
+    verify(rmAppCertificateManager, never())
+        .generateCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .revokeCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .registerWithCertificateRenewer(any(ApplicationId.class), any(String.class), any(Integer.class), any(Long.class));
   }
 
   @Test (timeout = 30000)
@@ -733,6 +745,12 @@ public class TestRMAppTransitions {
     assertFailed(application, rejectedText);
     assertAppFinalStateSaved(application);
     verifyApplicationFinished(RMAppState.FAILED);
+    verify(rmAppCertificateManager, never())
+        .generateCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .revokeCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .registerWithCertificateRenewer(any(ApplicationId.class), any(String.class), any(Integer.class), any(Long.class));
     rmContext.getStateStore().removeApplication(application);
   }
 
@@ -755,6 +773,12 @@ public class TestRMAppTransitions {
     assertKilled(application);
     verifyApplicationFinished(RMAppState.KILLED);
     verifyAppRemovedSchedulerEvent(RMAppState.KILLED);
+    verify(rmAppCertificateManager, never())
+        .generateCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .revokeCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .registerWithCertificateRenewer(any(ApplicationId.class), any(String.class), any(Integer.class), any(Long.class));
   }
 
   @Test (timeout = 30000)
@@ -772,6 +796,12 @@ public class TestRMAppTransitions {
     assertFailed(application, rejectedText);
     assertAppFinalStateSaved(application);
     verifyApplicationFinished(RMAppState.FAILED);
+    verify(rmAppCertificateManager, never())
+        .generateCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .revokeCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .registerWithCertificateRenewer(any(ApplicationId.class), any(String.class), any(Integer.class), any(Long.class));
   }
 
   @Test (timeout = 30000)
@@ -789,6 +819,12 @@ public class TestRMAppTransitions {
     assertFailed(application, rejectedText);
     assertAppFinalStateSaved(application);
     verifyApplicationFinished(RMAppState.FAILED);
+    verify(rmAppCertificateManager, atMost(1))
+        .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
 
   @Test
@@ -811,6 +847,12 @@ public class TestRMAppTransitions {
     assertAppFinalStateSaved(application);
     verifyApplicationFinished(RMAppState.KILLED);
     verifyAppRemovedSchedulerEvent(RMAppState.KILLED);
+    verify(rmAppCertificateManager, atMost(1))
+        .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
 
   @Test
@@ -832,6 +874,12 @@ public class TestRMAppTransitions {
       application.handle(event);
       rmDispatcher.await();
       assertAppState(RMAppState.ACCEPTED, application);
+      verify(rmAppCertificateManager, atMost(1))
+          .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+              eq(application.getCryptoMaterialVersion()));
+      verify(rmAppCertificateManager, atMost(1))
+          .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+              eq(application.getCryptoMaterialVersion()));
     }
 
     // ACCEPTED => FAILED event RMAppEventType.RMAppEventType.ATTEMPT_FAILED 
@@ -874,6 +922,12 @@ public class TestRMAppTransitions {
     assertAppFinalStateSaved(application);
     verifyApplicationFinished(RMAppState.KILLED);
     verifyAppRemovedSchedulerEvent(RMAppState.KILLED);
+    verify(rmAppCertificateManager, atMost(1))
+        .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
   
   @Test
@@ -897,6 +951,12 @@ public class TestRMAppTransitions {
     assertAppFinalStateSaved(application);
     verifyApplicationFinished(RMAppState.KILLED);
     verifyAppRemovedSchedulerEvent(RMAppState.KILLED);
+    verify(rmAppCertificateManager, atMost(1))
+        .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
 
   @Test
@@ -921,6 +981,12 @@ public class TestRMAppTransitions {
     assertKilled(application);
     verifyApplicationFinished(RMAppState.KILLED);
     verifyAppRemovedSchedulerEvent(RMAppState.KILLED);
+    verify(rmAppCertificateManager, atMost(1))
+        .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
 
   @Test
@@ -940,6 +1006,12 @@ public class TestRMAppTransitions {
               RMAppEventType.ATTEMPT_FAILED, "", false);
       application.handle(event);
       rmDispatcher.await();
+      verify(rmAppCertificateManager, never())
+          .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+              eq(application.getCryptoMaterialVersion()));
+      verify(rmAppCertificateManager, atMost(1))
+          .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+              any(Integer.class));
       assertAppState(RMAppState.ACCEPTED, application);
       appAttempt = application.getCurrentAppAttempt();
       Assert.assertEquals(++expectedAttemptId, 
@@ -978,6 +1050,12 @@ public class TestRMAppTransitions {
     assertFailed(application, ".*Failing the application.*");
     assertAppFinalStateSaved(application);
     verifyApplicationFinished(RMAppState.FAILED);
+    verify(rmAppCertificateManager, atMost(1))
+        .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
 
   @Test
@@ -1019,6 +1097,9 @@ public class TestRMAppTransitions {
     assertFinalAppStatus(FinalApplicationStatus.FAILED, application);
     Assert.assertTrue("Finished app missing diagnostics", application
       .getDiagnostics().indexOf(diagMsg) != -1);
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
 
   @Test
@@ -1067,6 +1148,10 @@ public class TestRMAppTransitions {
 
     assertTimesAtFinish(application);
     assertAppState(RMAppState.FAILED, application);
+    verify(rmAppCertificateManager, never())
+        .generateCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .revokeCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
   }
 
   @Test (timeout = 30000)
@@ -1121,6 +1206,9 @@ public class TestRMAppTransitions {
 
     assertTimesAtFinish(application);
     assertAppState(RMAppState.KILLED, application);
+    verify(rmAppCertificateManager, atMost(1))
+        .revokeCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            eq(application.getCryptoMaterialVersion()));
   }
   
   @Test(timeout = 30000)
@@ -1166,6 +1254,12 @@ public class TestRMAppTransitions {
     RMAppState finalState = appState.getState();
     Assert.assertEquals("Application is not in finalState.", finalState,
         application.getState());
+    // All recovered states are final so they should not generate certificates nor revoke
+    verify(rmAppCertificateManager, never())
+        .generateCertificate(eq(application.getApplicationId()), eq(application.getUser()),
+            any(Integer.class));
+    verify(rmAppCertificateManager, never())
+        .revokeCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
   }
   
   public void createRMStateForApplications(

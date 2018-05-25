@@ -53,6 +53,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppCertificateGeneratedEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
@@ -68,6 +69,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -329,6 +331,8 @@ public class TestRMAppCertificateManager {
     dispatcher.await();
     Mockito.verify(manager, Mockito.atMost(1))
         .revokeCertificate(appId, username, cryptoMaterialVersion);
+    Mockito.verify(manager, Mockito.atMost(1))
+        .deregisterFromCertificateRenewer(appId);
   
     TimeUnit.SECONDS.sleep(3);
     
@@ -430,6 +434,10 @@ public class TestRMAppCertificateManager {
     RMApp recoveredApp = rm2.getRMContext().getRMApps().get(application.getApplicationId());
     assertNotNull(recoveredApp);
     assertTrue(Arrays.equals(newKeyStore, recoveredApp.getKeyStore()));
+    
+    rm2.killApp(application.getApplicationId());
+    rm2.waitForState(application.getApplicationId(), RMAppState.KILLED);
+    assertTrue(rm2.getRMContext().getRMAppCertificateManager().getRenewalTasks().isEmpty());
     rm2.stop();
   }
   
