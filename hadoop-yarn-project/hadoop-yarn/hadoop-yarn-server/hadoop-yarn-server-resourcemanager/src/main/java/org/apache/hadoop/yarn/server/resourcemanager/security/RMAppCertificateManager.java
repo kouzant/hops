@@ -30,6 +30,7 @@ import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
@@ -67,6 +68,7 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalUnit;
 import java.util.ArrayList;
 import java.util.Enumeration;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
@@ -76,6 +78,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 public class RMAppCertificateManager extends AbstractService
     implements EventHandler<RMAppCertificateManagerEvent> {
@@ -85,6 +89,15 @@ public class RMAppCertificateManager extends AbstractService
   private final static String SIGNATURE_ALGORITHM = "SHA256withRSA";
   private final static int KEY_SIZE = 1024;
   private final static int REVOCATION_QUEUE_SIZE = 100;
+  private final static Map<String, ChronoUnit> CHRONOUNITS = new HashMap<>();
+  static {
+    CHRONOUNITS.put("MS", ChronoUnit.MILLIS);
+    CHRONOUNITS.put("S", ChronoUnit.SECONDS);
+    CHRONOUNITS.put("M", ChronoUnit.MINUTES);
+    CHRONOUNITS.put("H", ChronoUnit.HOURS);
+    CHRONOUNITS.put("D", ChronoUnit.DAYS);
+  }
+  private static final Pattern DELAY_PATTERN = Pattern.compile("(^[0-9]+)(\\p{Alpha}+)");
   
   private final SecureRandom rng;
   private final String TMP = System.getProperty("java.io.tmpdir");
@@ -126,6 +139,27 @@ public class RMAppCertificateManager extends AbstractService
     this.conf = conf;
     this.handler = rmContext.getDispatcher().getEventHandler();
     this.certificateLocalizationService = rmContext.getCertificateLocalizationService();
+    
+    String delayConfiguration = conf.get(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY,
+        YarnConfiguration.DEFAULT_RM_APP_CERTIFICATE_RENEWER_DELAY);
+    Matcher delayMatcher = DELAY_PATTERN.matcher(delayConfiguration);
+    if (delayMatcher.matches()) {
+      amountOfTimeToSubtractFromExpiration = Long.parseLong(delayMatcher.group(1));
+      String stringChronoUnit = delayMatcher.group(2);
+      unitOfTime = CHRONOUNITS.get(stringChronoUnit.toUpperCase());
+      if (unitOfTime == null) {
+        final StringBuilder validUnits = new StringBuilder();
+        for (String key : CHRONOUNITS.keySet()) {
+          validUnits.append(key).append(", ");
+        }
+        validUnits.append("\b\b");
+        throw new IllegalArgumentException("Could not parse ChronoUnit: " + stringChronoUnit + ". Valid values are "
+            + validUnits.toString());
+      }
+    } else {
+      throw new IllegalArgumentException("Could not parse value " + delayConfiguration + " of "
+          + YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY);
+    }
     rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance().getActor(conf);
     keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
     keyPairGenerator.initialize(KEY_SIZE);
@@ -178,12 +212,6 @@ public class RMAppCertificateManager extends AbstractService
   @VisibleForTesting
   protected RMContext getRmContext() {
     return rmContext;
-  }
-  
-  @VisibleForTesting
-  public void setTimeToSubtractFromExpiration(long amountOfTimeToSubtractFromExpiration, TemporalUnit unitOfTime) {
-    this.amountOfTimeToSubtractFromExpiration = amountOfTimeToSubtractFromExpiration;
-    this.unitOfTime = unitOfTime;
   }
   
   @VisibleForTesting

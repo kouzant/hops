@@ -121,6 +121,7 @@ public class TestRMAppCertificateManager {
   public void beforeTest() throws Exception {
     conf = new Configuration();
     conf.set(YarnConfiguration.HOPS_HOPSWORKS_HOST_KEY, "https://bbc3.sics.se:33473");
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "5s");
     RMAppCertificateActionsFactory.getInstance().clear();
     RMStorageFactory.setConfiguration(conf);
     YarnAPIStorageFactory.setConfiguration(conf);
@@ -212,7 +213,6 @@ public class TestRMAppCertificateManager {
     MockRMAppCertificateManager certificateManager = new MockRMAppCertificateManager(false, rmContext);
     certificateManager.init(conf);
     certificateManager.start();
-    certificateManager.setTimeToSubtractFromExpiration(5, ChronoUnit.SECONDS);
     Instant now = Instant.now();
     Instant expiration = now.plus(10, ChronoUnit.SECONDS);
     ApplicationId appId = ApplicationId.newInstance(now.toEpochMilli(), 1);
@@ -239,7 +239,6 @@ public class TestRMAppCertificateManager {
     MockFailingRMAppCertificateManager certificateManager = new MockFailingRMAppCertificateManager(Integer.MAX_VALUE);
     certificateManager.init(conf);
     certificateManager.start();
-    certificateManager.setTimeToSubtractFromExpiration(5, ChronoUnit.SECONDS);
   
     Instant now = Instant.now();
     Instant expiration = now.plus(10, ChronoUnit.SECONDS);
@@ -267,7 +266,6 @@ public class TestRMAppCertificateManager {
     MockFailingRMAppCertificateManager certificateManager = new MockFailingRMAppCertificateManager(2);
     certificateManager.init(conf);
     certificateManager.start();
-    certificateManager.setTimeToSubtractFromExpiration(5, ChronoUnit.SECONDS);
   
     Instant now = Instant.now();
     Instant expiration = now.plus(10, ChronoUnit.SECONDS);
@@ -369,11 +367,11 @@ public class TestRMAppCertificateManager {
         "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
     conf.setBoolean(YarnConfiguration.RECOVERY_ENABLED, true);
     conf.set(YarnConfiguration.RM_STORE, DBRMStateStore.class.getName());
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "45s");
     
     MockRM rm  = new MyMockRM(conf);
     rm.start();
   
-    rm.getRMContext().getRMAppCertificateManager().setTimeToSubtractFromExpiration(45, ChronoUnit.SECONDS);
     MockNM nm = new MockNM("127.0.0.1:8032", 15 * 1024, rm.getResourceTrackerService());
     nm.registerNode();
     
@@ -427,6 +425,7 @@ public class TestRMAppCertificateManager {
     assertEquals(currentCryptoMaterialVersion, appState.getCryptoMaterialVersion());
     rm.stop();
     
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "2d");
     MyMockRM rm2 = new MyMockRM(conf);
     rm2.start();
     nm.setResourceTrackerService(rm2.getResourceTrackerService());
