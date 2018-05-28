@@ -18,14 +18,18 @@
 
 package org.apache.hadoop.yarn;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -41,6 +45,7 @@ import org.apache.hadoop.yarn.api.records.impl.pb.ContainerIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.SerializedExceptionPBImpl;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerRequest;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.NodeHeartbeatRequestPBImpl;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.NodeHeartbeatResponsePBImpl;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.RegisterNodeManagerRequestPBImpl;
@@ -183,6 +188,61 @@ public class TestYarnServerApiClasses {
         .getResource().getMemorySize());
   }
 
+  @Test
+  public void testNodeHeartbeatResponseWithUpdateCryptoForApps() {
+    NodeHeartbeatResponsePBImpl original = new NodeHeartbeatResponsePBImpl();
+    Map<ApplicationId, UpdatedCryptoForApp> updatedCryptoForApps = new HashMap<>();
+    
+    long now = System.currentTimeMillis();
+    ApplicationId appId1 = ApplicationId.newInstance(now, 1);
+    UpdatedCryptoForApp crypto1 = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
+    ByteBuffer keyStore1 = ByteBuffer.wrap("keyStore1".getBytes());
+    char[] keyStorePassword1 = "keyStorePassword1".toCharArray();
+    ByteBuffer trustStore1 = ByteBuffer.wrap("trustStore1".getBytes());
+    char[] trustStorePassword1 = "trustStorePassword1".toCharArray();
+    crypto1.setKeyStore(keyStore1);
+    crypto1.setKeyStorePassword(keyStorePassword1);
+    crypto1.setTrustStore(trustStore1);
+    crypto1.setTrustStorePassword(trustStorePassword1);
+    updatedCryptoForApps.put(appId1, crypto1);
+    
+    ApplicationId appId2 = ApplicationId.newInstance(now, 2);
+    UpdatedCryptoForApp crypto2 = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
+    ByteBuffer keyStore2 = ByteBuffer.wrap("keyStore2".getBytes());
+    char[] keyStorePassword2 = "keyStorePassword2".toCharArray();
+    ByteBuffer trustStore2 = ByteBuffer.wrap("trustStore2".getBytes());
+    char[] trustStorePassword2 = "trustStorePassword2".toCharArray();
+    crypto2.setKeyStore(keyStore2);
+    crypto2.setKeyStorePassword(keyStorePassword2);
+    crypto2.setTrustStore(trustStore2);
+    crypto2.setTrustStorePassword(trustStorePassword2);
+    updatedCryptoForApps.put(appId2, crypto2);
+    
+    original.setUpdatedCryptoForApps(updatedCryptoForApps);
+    
+    NodeHeartbeatResponsePBImpl copy = new NodeHeartbeatResponsePBImpl(original.getProto());
+    Map<ApplicationId, UpdatedCryptoForApp> copyCrypto = copy.getUpdatedCryptoForApps();
+    assertNotNull(copyCrypto);
+    assertEquals(2, copyCrypto.size());
+    
+    UpdatedCryptoForApp copyAppCrypto1 = copyCrypto.get(appId1);
+    assertNotNull(copyAppCrypto1);
+    assertTrue(keyStore1.equals(copyAppCrypto1.getKeyStore()));
+    assertArrayEquals(keyStorePassword1, copyAppCrypto1.getKeyStorePassword());
+    assertTrue(trustStore1.equals(copyAppCrypto1.getTrustStore()));
+    assertArrayEquals(trustStorePassword1, copyAppCrypto1.getTrustStorePassword());
+    
+    UpdatedCryptoForApp copyAppCrypto2 = copyCrypto.get(appId2);
+    assertNotNull(copyAppCrypto2);
+    assertTrue(keyStore2.equals(copyAppCrypto2.getKeyStore()));
+    assertArrayEquals(keyStorePassword2, copyAppCrypto2.getKeyStorePassword());
+    assertTrue(trustStore2.equals(copyAppCrypto2.getTrustStore()));
+    assertArrayEquals(trustStorePassword2, copyAppCrypto2.getTrustStorePassword());
+    
+    assertFalse(copyAppCrypto1.getKeyStore().equals(copyAppCrypto2.getKeyStore()));
+    assertFalse(copyAppCrypto1.getTrustStore().equals(copyAppCrypto2.getTrustStore()));
+  }
+  
   /**
    * Test RegisterNodeManagerRequestPBImpl.
    */

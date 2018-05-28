@@ -29,11 +29,13 @@ import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeUpdateCryptoMaterialForAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode
         .UpdatedContainerInfo;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
@@ -196,5 +198,10 @@ public class RMNodeWrapper implements RMNode {
 
   @Override
   public void setUntrackedTimeStamp(long timeStamp) {
+  }
+  
+  @Override
+  public Map<ApplicationId, RMNodeUpdateCryptoMaterialForAppEvent> getAppCryptoMaterialToUpdate() {
+    return node.getAppCryptoMaterialToUpdate();
   }
 }

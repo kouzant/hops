@@ -515,6 +515,9 @@ public class ResourceTrackerService extends AbstractService implements
 
     // Send ping
     this.nmLivelinessMonitor.receivedPing(nodeId);
+    
+    // TODO(Antonis) Extract updated Application certificates from request and remove them from RMNode
+    // cryptoMaterialToUpdate map
 
     // 3. Check if it's a 'fresh' heartbeat i.e. not duplicate heartbeat
     NodeHeartbeatResponse lastNodeHeartbeatResponse = rmNode.getLastNodeHeartBeatResponse();
@@ -548,6 +551,8 @@ public class ResourceTrackerService extends AbstractService implements
 
     populateKeys(request, nodeHeartBeatResponse);
 
+    // TODO(Antonis) Piggyback renewed certificates for applications
+    
     ConcurrentMap<ApplicationId, ByteBuffer> systemCredentials =
         rmContext.getSystemCredentialsForApps();
     if (!systemCredentials.isEmpty()) {
