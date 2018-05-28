@@ -38,9 +38,9 @@ import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.api.records.ResourceUtilization;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
-import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeUpdateCryptoMaterialForAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode
         .UpdatedContainerInfo;
 
@@ -68,7 +68,7 @@ public class NodeInfo {
     private List<ContainerId> toCleanUpContainers;
     private List<ApplicationId> toCleanUpApplications;
     private List<ApplicationId> runningApplications;
-    private Map<ApplicationId, RMNodeUpdateCryptoMaterialForAppEvent> appCryptoMaterialToUpdate;
+    private Map<ApplicationId, UpdatedCryptoForApp> appCryptoMaterialToUpdate;
 
     public FakeRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
         Resource perNode, String rackName, String healthReport,
@@ -215,7 +215,7 @@ public class NodeInfo {
     }
     
     @Override
-    public Map<ApplicationId, RMNodeUpdateCryptoMaterialForAppEvent> getAppCryptoMaterialToUpdate() {
+    public Map<ApplicationId, UpdatedCryptoForApp> getAppCryptoMaterialToUpdate() {
       return appCryptoMaterialToUpdate;
     }
   }

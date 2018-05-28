@@ -27,9 +27,9 @@ import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.NodeState;
 import org.apache.hadoop.yarn.api.records.Resource;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNode;
-import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeUpdateCryptoMaterialForAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode
         .UpdatedContainerInfo;
 
@@ -201,7 +201,7 @@ public class RMNodeWrapper implements RMNode {
   }
   
   @Override
-  public Map<ApplicationId, RMNodeUpdateCryptoMaterialForAppEvent> getAppCryptoMaterialToUpdate() {
+  public Map<ApplicationId, UpdatedCryptoForApp> getAppCryptoMaterialToUpdate() {
     return node.getAppCryptoMaterialToUpdate();
   }
 }

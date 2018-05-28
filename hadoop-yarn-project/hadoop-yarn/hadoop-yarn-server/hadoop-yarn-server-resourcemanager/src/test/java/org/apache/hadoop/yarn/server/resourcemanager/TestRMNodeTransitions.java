@@ -48,6 +48,7 @@ import org.apache.hadoop.yarn.api.records.ResourceOption;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.event.InlineDispatcher;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
@@ -925,11 +926,11 @@ public class TestRMNodeTransitions {
         node.getNodeID(), appId, keyStore, keyStorePassword, trustStore, trustStorePassword);
     node.handle(updateEvent);
     assertEquals(1, node.getAppCryptoMaterialToUpdate().size());
-    RMNodeUpdateCryptoMaterialForAppEvent cryptoToUpdate = node.getAppCryptoMaterialToUpdate().get(appId);
+    UpdatedCryptoForApp cryptoToUpdate = node.getAppCryptoMaterialToUpdate().get(appId);
     assertNotNull(cryptoToUpdate);
-    assertTrue(Arrays.equals(keyStore, cryptoToUpdate.getKeyStore()));
+    assertTrue(Arrays.equals(keyStore, cryptoToUpdate.getKeyStore().array()));
     assertTrue(Arrays.equals(keyStorePassword, cryptoToUpdate.getKeyStorePassword()));
-    assertTrue(Arrays.equals(trustStore, cryptoToUpdate.getTrustStore()));
+    assertTrue(Arrays.equals(trustStore, cryptoToUpdate.getTrustStore().array()));
     assertTrue(Arrays.equals(trustStorePassword, cryptoToUpdate.getTrustStorePassword()));
   }
   

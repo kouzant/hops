@@ -18,6 +18,7 @@
 
 package org.apache.hadoop.yarn.server.resourcemanager.rmnode;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -61,6 +62,7 @@ import org.apache.hadoop.yarn.nodelabels.CommonNodeLabelsManager;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NMContainerStatus;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.api.records.NodeHealthStatus;
 import org.apache.hadoop.yarn.server.resourcemanager.ClusterMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.NodesListManagerEvent;
@@ -167,7 +169,7 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       new HashMap<>();
   
   // Map of renewed application certificates that should be propagated to NM
-  private final Map<ApplicationId, RMNodeUpdateCryptoMaterialForAppEvent> appCryptoMaterialToUpdate =
+  private final Map<ApplicationId, UpdatedCryptoForApp> appCryptoMaterialToUpdate =
       new ConcurrentHashMap<>();
 
   protected NodeHeartbeatResponse latestNodeHeartBeatResponse = recordFactory
@@ -791,7 +793,14 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
     public void transition(RMNodeImpl rmNode, RMNodeEvent rmNodeEvent) {
       RMNodeUpdateCryptoMaterialForAppEvent updateEvent = (RMNodeUpdateCryptoMaterialForAppEvent) rmNodeEvent;
       LOG.info("Node " + rmNode.toString() + " received UPDATE_CRYPTO_MATERIAL event for app " + updateEvent.getAppId());
-      rmNode.appCryptoMaterialToUpdate.put(updateEvent.getAppId(), updateEvent);
+      UpdatedCryptoForApp updatedCrypto = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
+      ByteBuffer keyStore = ByteBuffer.wrap(updateEvent.getKeyStore());
+      ByteBuffer trustStore = ByteBuffer.wrap(updateEvent.getTrustStore());
+      updatedCrypto.setKeyStore(keyStore);
+      updatedCrypto.setKeyStorePassword(updateEvent.getKeyStorePassword());
+      updatedCrypto.setTrustStore(trustStore);
+      updatedCrypto.setTrustStorePassword(updateEvent.getTrustStorePassword());
+      rmNode.appCryptoMaterialToUpdate.put(updateEvent.getAppId(), updatedCrypto);
     }
   }
   
@@ -1093,7 +1102,7 @@ public static class RecommissionNodeTransition
   }
   
   @Override
-  public Map<ApplicationId, RMNodeUpdateCryptoMaterialForAppEvent> getAppCryptoMaterialToUpdate() {
+  public Map<ApplicationId, UpdatedCryptoForApp> getAppCryptoMaterialToUpdate() {
     return appCryptoMaterialToUpdate;
   }
 }

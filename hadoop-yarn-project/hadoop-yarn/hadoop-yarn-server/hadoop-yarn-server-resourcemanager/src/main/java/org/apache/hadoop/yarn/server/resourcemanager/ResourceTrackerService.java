@@ -553,6 +553,7 @@ public class ResourceTrackerService extends AbstractService implements
 
     // TODO(Antonis) Piggyback renewed certificates for applications
     
+    
     ConcurrentMap<ApplicationId, ByteBuffer> systemCredentials =
         rmContext.getSystemCredentialsForApps();
     if (!systemCredentials.isEmpty()) {
