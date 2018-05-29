@@ -30,6 +30,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.hadoop.yarn.api.records.ApplicationAttemptId;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -44,6 +45,7 @@ import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.ContainerIdPBImpl;
 import org.apache.hadoop.yarn.api.records.impl.pb.SerializedExceptionPBImpl;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
+import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.api.protocolrecords.impl.pb.NodeHeartbeatRequestPBImpl;
@@ -138,7 +140,26 @@ public class TestYarnServerApiClasses {
         new NodeHeartbeatRequestPBImpl(original.getProto());
     Assert.assertNull(copy.getNodeLabels());
   }
-
+  
+  @Test
+  public void testNodeHeartbeatRequestPBImplWithUpdatedCryptoForApps() {
+    NodeHeartbeatRequestPBImpl original = new NodeHeartbeatRequestPBImpl();
+    Set<ApplicationId> updatedApps = new HashSet<>();
+    long now = System.currentTimeMillis();
+    ApplicationId appId1 = ApplicationId.newInstance(now, 1);
+    ApplicationId appId2 = ApplicationId.newInstance(now, 2);
+    updatedApps.add(appId1);
+    updatedApps.add(appId2);
+    original.setUpdatedApplicationsWithNewCryptoMaterial(updatedApps);
+    
+    NodeHeartbeatRequestPBImpl copy = new NodeHeartbeatRequestPBImpl(original.getProto());
+    Set<ApplicationId> copyUpdatedApps = copy.getUpdatedApplicationsWithNewCryptoMaterial();
+    assertNotNull(copyUpdatedApps);
+    assertEquals(2, copyUpdatedApps.size());
+    assertTrue(copyUpdatedApps.contains(appId1));
+    assertTrue(copyUpdatedApps.contains(appId2));
+  }
+  
   /**
    * Test NodeHeartbeatResponsePBImpl.
    */
@@ -187,7 +208,7 @@ public class TestYarnServerApiClasses {
     assertEquals(1024, copy.getContainersToDecrease().get(1)
         .getResource().getMemorySize());
   }
-
+  
   @Test
   public void testNodeHeartbeatResponseWithUpdateCryptoForApps() {
     NodeHeartbeatResponsePBImpl original = new NodeHeartbeatResponsePBImpl();

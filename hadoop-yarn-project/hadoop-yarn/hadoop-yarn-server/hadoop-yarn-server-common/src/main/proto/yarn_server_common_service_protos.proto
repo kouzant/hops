@@ -64,6 +64,7 @@ message NodeHeartbeatRequestProto {
   optional MasterKeyProto last_known_nm_token_master_key = 3;
   optional NodeLabelsProto nodeLabels = 4;
   repeated LogAggregationReportProto log_aggregation_reports_for_apps = 5;
+  repeated ApplicationIdProto updatedApplicationsWithNewCryptoMaterial = 6;
 }
 
 message LogAggregationReportProto {
