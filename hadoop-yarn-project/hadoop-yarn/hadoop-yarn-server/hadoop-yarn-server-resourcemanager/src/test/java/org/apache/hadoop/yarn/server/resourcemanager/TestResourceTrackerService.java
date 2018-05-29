@@ -305,10 +305,10 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
   
   /**
    * Submit one application, wait for the certificate renewal to kick off and check the Heartbeat response
-   * 
+   *
    * @throws Exception
    */
-  @Test
+  @Test(timeout = 75000)
   public void testNodeHeartbeatWithUpdatedCryptoMaterialForApp() throws Exception {
     Configuration conf = new Configuration();
     conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "30s");
@@ -350,7 +350,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     Assert.assertArrayEquals(app.getKeyStorePassword(), updatedCryptoForApp.getKeyStorePassword());
     Assert.assertArrayEquals(app.getTrustStorePassword(), updatedCryptoForApp.getTrustStorePassword());
     
-    // Wait again for the renewer to run again
+    // Wait for the certificate renewer to run again
     TimeUnit.SECONDS.sleep(25);
     response = nm1.nodeHeartbeat(true);
     Assert.assertNotNull(response.getUpdatedCryptoForApps());
@@ -364,6 +364,17 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     Assert.assertArrayEquals(app.getTrustStorePassword(), newUpdatedCryptoForApp.getTrustStorePassword());
     
     Assert.assertFalse(newUpdatedCryptoForApp.getKeyStore().equals(updatedCryptoForApp.getKeyStore()));
+    
+    // Kill application
+    rm.killApp(app.getApplicationId());
+    rm.waitForState(app.getApplicationId(), RMAppState.KILLED);
+    
+    response = nm1.nodeHeartbeat(true);
+    // There should be no updated crypto material in this response
+    Assert.assertNotNull(response.getUpdatedCryptoForApps());
+    Assert.assertTrue(response.getUpdatedCryptoForApps().isEmpty());
+    RMNode rmNode = rm.getRMContext().getRMNodes().get(nm1.getNodeId());
+    Assert.assertTrue(rmNode.getAppCryptoMaterialToUpdate().isEmpty());
     
     rm.stop();
   }
