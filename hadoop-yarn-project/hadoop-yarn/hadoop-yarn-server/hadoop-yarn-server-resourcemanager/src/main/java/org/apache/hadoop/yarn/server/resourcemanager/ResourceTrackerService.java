@@ -33,6 +33,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.ipc.Server;
 import org.apache.hadoop.net.Node;
@@ -62,6 +63,7 @@ import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerRequ
 import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerResponse;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerRequest;
 import org.apache.hadoop.yarn.server.api.protocolrecords.UnRegisterNodeManagerResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.api.records.MasterKey;
 import org.apache.hadoop.yarn.server.api.records.NodeAction;
 import org.apache.hadoop.yarn.server.api.records.NodeStatus;
@@ -516,8 +518,15 @@ public class ResourceTrackerService extends AbstractService implements
     // Send ping
     this.nmLivelinessMonitor.receivedPing(nodeId);
     
-    // TODO(Antonis) Extract updated Application certificates from request and remove them from RMNode
-    // cryptoMaterialToUpdate map
+    if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      Set<ApplicationId> updatedApps = request.getUpdatedApplicationsWithNewCryptoMaterial();
+      if (updatedApps != null) {
+        for (ApplicationId appId : updatedApps) {
+          rmNode.getAppCryptoMaterialToUpdate().remove(appId);
+        }
+      }
+    }
 
     // 3. Check if it's a 'fresh' heartbeat i.e. not duplicate heartbeat
     NodeHeartbeatResponse lastNodeHeartbeatResponse = rmNode.getLastNodeHeartBeatResponse();
@@ -550,9 +559,10 @@ public class ResourceTrackerService extends AbstractService implements
         nodeHeartBeatResponse);
 
     populateKeys(request, nodeHeartBeatResponse);
-
-    // TODO(Antonis) Piggyback renewed certificates for applications
-    
+    if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      setAppsToUpdateWithNewCryptoMaterial(nodeHeartBeatResponse, rmNode);
+    }
     
     ConcurrentMap<ApplicationId, ByteBuffer> systemCredentials =
         rmContext.getSystemCredentialsForApps();
@@ -598,6 +608,15 @@ public class ResourceTrackerService extends AbstractService implements
     return nodeHeartBeatResponse;
   }
 
+  private void setAppsToUpdateWithNewCryptoMaterial(NodeHeartbeatResponse response, RMNode rmNode) {
+    Set<Map.Entry<ApplicationId, UpdatedCryptoForApp>> appsToUpdate = rmNode.getAppCryptoMaterialToUpdate().entrySet();
+    Map<ApplicationId, UpdatedCryptoForApp> payload = new HashMap<>(appsToUpdate.size());
+    for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : appsToUpdate) {
+      payload.put(entry.getKey(), entry.getValue());
+    }
+    response.setUpdatedCryptoForApps(payload);
+  }
+  
   /**
    * Check if node in decommissioning state.
    * @param nodeId
