@@ -37,4 +37,7 @@ public enum ContainerEventType {
   CONTAINER_EXITED_WITH_SUCCESS,
   CONTAINER_EXITED_WITH_FAILURE,
   CONTAINER_KILLED_ON_REQUEST,
+  
+  // Producer: NodeStatusUpdater
+  UPDATE_CRYPTO_MATERIAL,
 }
