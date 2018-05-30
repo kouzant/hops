@@ -18,9 +18,12 @@
 
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.container;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -33,10 +36,12 @@ import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.net.HopsSSLSocketFactory;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -265,6 +270,8 @@ public class ContainerImpl implements Container {
     .addTransition(ContainerState.RUNNING, ContainerState.EXITED_WITH_FAILURE,
         ContainerEventType.CONTAINER_KILLED_ON_REQUEST,
         new KilledExternallyTransition())
+    .addTransition(ContainerState.RUNNING, ContainerState.RUNNING,
+        ContainerEventType.UPDATE_CRYPTO_MATERIAL, new UpdateCryptoMaterialTransition())
 
     // From CONTAINER_EXITED_WITH_SUCCESS State
     .addTransition(ContainerState.EXITED_WITH_SUCCESS, ContainerState.DONE,
@@ -808,7 +815,64 @@ public class ContainerImpl implements Container {
       }
     }
   }
-
+  
+  private File keyStoreLocalizedPath = null;
+  private File trustStoreLocalizedPath = null;
+  private File passwordFileLocalizedPath = null;
+  
+  /**
+   * Transition from RUNNING -> RUNNING state when new cryptographic material
+   * should be materialized
+   */
+  static class UpdateCryptoMaterialTransition extends ContainerTransition {
+    @Override
+    public void transition(ContainerImpl container, ContainerEvent event) {
+      if (event instanceof ContainerUpdateCryptoMaterialEvent) {
+        ContainerUpdateCryptoMaterialEvent updateEvt = (ContainerUpdateCryptoMaterialEvent) event;
+        ByteBuffer newKeyStore = updateEvt.getKeyStore();
+        ByteBuffer newTrustStore = updateEvt.getTrustStore();
+        
+        char[] newKeyStorePassword = updateEvt.getKeyStorePassword();
+        
+        if (container.keyStoreLocalizedPath == null || container.trustStoreLocalizedPath == null
+            || container.passwordFileLocalizedPath == null) {
+          for (Map.Entry<Path, List<String>> localizedResource : container.getLocalizedResources().entrySet()) {
+            if (container.keyStoreLocalizedPath == null &&
+                localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME)) {
+              container.keyStoreLocalizedPath = new File(localizedResource.getKey().toUri());
+            }
+            if (container.trustStoreLocalizedPath == null &&
+                localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_TRUSTSTORE_FILE_NAME)) {
+              container.trustStoreLocalizedPath = new File(localizedResource.getKey().toUri());
+            }
+            if (container.passwordFileLocalizedPath == null  &&
+                localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_PASSWD_FILE_NAME)) {
+              container.passwordFileLocalizedPath = new File(localizedResource.getKey().toUri());
+            }
+            if (container.keyStoreLocalizedPath != null && container.trustStoreLocalizedPath != null &&
+                container.passwordFileLocalizedPath != null) {
+              break;
+            }
+          }
+        }
+        
+        try {
+          FileChannel fileChannel = new FileOutputStream(container.keyStoreLocalizedPath, false).getChannel();
+          fileChannel.write(newKeyStore);
+          fileChannel.close();
+          fileChannel = new FileOutputStream(container.trustStoreLocalizedPath, false).getChannel();
+          fileChannel.write(newTrustStore);
+          fileChannel.close();
+          // Assume key store password is the same for the trust store and for the key itself
+          FileUtils.write(container.passwordFileLocalizedPath, String.valueOf(newKeyStorePassword));
+        } catch (IOException ex) {
+          // TODO(Antonis) How should I handle errors here????
+          LOG.error(ex, ex);
+        }
+      }
+    }
+  }
+  
   /**
    * Transition from RUNNING or KILLING state to EXITED_WITH_SUCCESS state
    * upon EXITED_WITH_SUCCESS message.
