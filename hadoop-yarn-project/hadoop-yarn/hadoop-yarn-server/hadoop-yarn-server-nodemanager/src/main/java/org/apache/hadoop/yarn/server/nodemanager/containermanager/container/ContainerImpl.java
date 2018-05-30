@@ -857,6 +857,11 @@ public class ContainerImpl implements Container {
         }
         
         try {
+          if (container.keyStoreLocalizedPath == null || container.trustStoreLocalizedPath == null ||
+              container.passwordFileLocalizedPath == null) {
+            throw new IOException("Could not identify localized cryptographic material path for container " +
+                container.getContainerId());
+          }
           FileChannel fileChannel = new FileOutputStream(container.keyStoreLocalizedPath, false).getChannel();
           fileChannel.write(newKeyStore);
           fileChannel.close();

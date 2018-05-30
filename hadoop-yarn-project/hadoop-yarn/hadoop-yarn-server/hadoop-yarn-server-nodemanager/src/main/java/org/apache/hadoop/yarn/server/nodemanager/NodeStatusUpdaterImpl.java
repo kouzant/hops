@@ -38,6 +38,7 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.security.Credentials;
@@ -876,23 +877,32 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
               }
             }
             
-            Map<ApplicationId, UpdatedCryptoForApp> cryptoMaterialToUpdate = response.getUpdatedCryptoForApps();
-            if (cryptoMaterialToUpdate != null) {
-              for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : cryptoMaterialToUpdate.entrySet()) {
-                Application application = context.getApplications().get(entry.getKey());
-                if (application != null) {
-                  UpdatedCryptoForApp crypto = entry.getValue();
-                  Set<ContainerId> containers = application.getContainers().keySet();
-                  for (ContainerId cid : containers) {
-                    ContainerUpdateCryptoMaterialEvent event = new ContainerUpdateCryptoMaterialEvent(cid,
-                        crypto.getKeyStore(), crypto.getKeyStorePassword(), crypto.getTrustStore(),
-                        crypto.getTrustStorePassword());
-                    dispatcher.getEventHandler().handle(event);
+            if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, CommonConfigurationKeys
+                .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+              Map<ApplicationId, UpdatedCryptoForApp> cryptoMaterialToUpdate = response.getUpdatedCryptoForApps();
+              if (cryptoMaterialToUpdate != null) {
+                for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : cryptoMaterialToUpdate.entrySet()) {
+                  Application application = context.getApplications().get(entry.getKey());
+                  
+                  if (application != null) {
+                    UpdatedCryptoForApp crypto = entry.getValue();
+                    context.getCertificateLocalizationService()
+                        .updateCryptoMaterial(application.getUser(), application.getAppId().toString(),
+                            crypto.getKeyStore().asReadOnlyBuffer(), String.valueOf(crypto.getKeyStorePassword()),
+                            crypto.getTrustStore().asReadOnlyBuffer(), String.valueOf(crypto.getTrustStorePassword()));
+                    
+                    Set<ContainerId> containers = application.getContainers().keySet();
+                    for (ContainerId cid : containers) {
+                      ContainerUpdateCryptoMaterialEvent event = new ContainerUpdateCryptoMaterialEvent(cid,
+                          crypto.getKeyStore(), crypto.getKeyStorePassword(), crypto.getTrustStore(),
+                          crypto.getTrustStorePassword());
+                      dispatcher.getEventHandler().handle(event);
+                    }
+                    applicationsWithUpdatedCryptoMaterial.add(entry.getKey());
+                  } else {
+                    LOG.warn("Received UpdatedCryptoMaterial request for missing application " + entry.getKey());
+                    applicationsWithUpdatedCryptoMaterial.add(entry.getKey());
                   }
-                  applicationsWithUpdatedCryptoMaterial.add(entry.getKey());
-                } else {
-                  LOG.warn("Received UpdatedCryptoMaterial request for missing application " + entry.getKey());
-                  applicationsWithUpdatedCryptoMaterial.add(entry.getKey());
                 }
               }
             }
