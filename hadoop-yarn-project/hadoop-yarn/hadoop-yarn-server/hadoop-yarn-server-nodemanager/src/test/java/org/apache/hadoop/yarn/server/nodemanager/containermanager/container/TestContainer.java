@@ -18,6 +18,7 @@
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.container;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -28,9 +29,11 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.io.File;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.file.Paths;
 import java.util.AbstractMap.SimpleEntry;
 import java.util.Arrays;
 import java.util.Collection;
@@ -48,8 +51,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 
+import com.google.common.collect.Lists;
+import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.Path;
+import org.apache.hadoop.net.HopsSSLSocketFactory;
+import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
 import org.apache.hadoop.yarn.api.records.ContainerId;
@@ -100,6 +107,9 @@ public class TestContainer {
   final NodeManagerMetrics metrics = NodeManagerMetrics.create();
   final Configuration conf = new YarnConfiguration();
   final String FAKE_LOCALIZATION_ERROR = "Fake localization error";
+  private static final String BASE_DIR = Paths.get(System.getProperty("test.build.dir",
+      Paths.get("target", "test-dir").toString()),
+      TestContainer.class.getSimpleName()).toString();
   
   /**
    * Verify correct container request events sent to localizer.
@@ -534,6 +544,70 @@ public class TestContainer {
       if (wc != null) {
         wc.finished();
       }
+    }
+  }
+  
+  @Test
+  public void testCryptoMaterialUpdate() throws Exception {
+    long now = System.currentTimeMillis();
+    File BASE_FILE = new File(BASE_DIR);
+    java.nio.file.Path keyStorePathJ = Paths.get(BASE_FILE.getAbsolutePath(), "keystore.jks");
+    java.nio.file.Path trustStorePathJ = Paths.get(BASE_FILE.getAbsolutePath(), "truststore.jks");
+    java.nio.file.Path passwdPathJ = Paths.get(BASE_FILE.getAbsolutePath(), "passwd.key");
+    if (BASE_FILE.exists()) {
+      keyStorePathJ.toFile().delete();
+      trustStorePathJ.toFile().delete();
+      passwdPathJ.toFile().delete();
+    } else {
+      BASE_FILE.mkdirs();
+    }
+    
+    WrappedContainer wc = null;
+    try {
+      ByteBuffer keyStore = ByteBuffer.wrap("keystore".getBytes());
+      String password = "password";
+      
+      assertFalse(keyStorePathJ.toFile().exists());
+      assertFalse(trustStorePathJ.toFile().exists());
+      assertFalse(passwdPathJ.toFile().exists());
+      
+      Path keyStorePath = new Path(
+          URL.newInstance("file", null, -1, keyStorePathJ.toFile().getAbsolutePath()).toPath().toUri());
+      Path trustStorePath = new Path(
+          URL.newInstance("file", null, -1, trustStorePathJ.toFile().getAbsolutePath()).toPath().toUri());
+      Path passwordPath = new Path(
+          URL.newInstance("file", null, -1, passwdPathJ.toFile().getAbsolutePath()).toPath().toUri());
+      
+      String user = UserGroupInformation.getCurrentUser().getUserName();
+      wc = new WrappedContainer(1, now, 1234, user, "userFolder");
+      wc.initContainer();
+      wc.localizeResources();
+      Map<Path, List<String>> localizedResources = wc.c.getLocalizedResources();
+      assertNotNull(localizedResources);
+      wc.launchContainer();
+      assertEquals(ContainerState.RUNNING, wc.c.getContainerState());
+      localizedResources.put(keyStorePath, Lists.newArrayList(HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME));
+      localizedResources.put(trustStorePath, Lists.newArrayList(HopsSSLSocketFactory.LOCALIZED_TRUSTSTORE_FILE_NAME));
+      localizedResources.put(passwordPath, Lists.newArrayList(HopsSSLSocketFactory.LOCALIZED_PASSWD_FILE_NAME));
+      
+      ContainerUpdateCryptoMaterialEvent event = new ContainerUpdateCryptoMaterialEvent(wc.cId, keyStore, password
+          .toCharArray(), keyStore, password.toCharArray());
+      wc.c.handle(event);
+      
+      assertTrue(keyStorePathJ.toFile().exists());
+      assertTrue(trustStorePathJ.toFile().exists());
+      assertTrue(passwdPathJ.toFile().exists());
+  
+      wc.killContainer();
+      assertEquals(ContainerState.KILLING, wc.c.getContainerState());
+      assertNull(wc.c.getLocalizedResources());
+      wc.containerKilledOnRequest();
+      verifyCleanupCall(wc);
+    } finally {
+      if (wc != null) {
+        wc.finished();
+      }
+      FileUtils.deleteDirectory(BASE_FILE);
     }
   }
   
