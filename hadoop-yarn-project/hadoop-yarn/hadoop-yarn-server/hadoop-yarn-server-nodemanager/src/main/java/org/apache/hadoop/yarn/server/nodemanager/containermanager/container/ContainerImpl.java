@@ -134,6 +134,10 @@ public class ContainerImpl implements Container {
   // whether container was marked as killed after recovery
   private boolean recoveredAsKilled = false;
   private Context context;
+  
+  private File keyStoreLocalizedPath = null;
+  private File trustStoreLocalizedPath = null;
+  private File passwordFileLocalizedPath = null;
 
   public ContainerImpl(Configuration conf, Dispatcher dispatcher,
       ContainerLaunchContext launchContext, Credentials creds,
@@ -816,10 +820,6 @@ public class ContainerImpl implements Container {
     }
   }
   
-  private File keyStoreLocalizedPath = null;
-  private File trustStoreLocalizedPath = null;
-  private File passwordFileLocalizedPath = null;
-  
   /**
    * Transition from RUNNING -> RUNNING state when new cryptographic material
    * should be materialized
@@ -836,7 +836,7 @@ public class ContainerImpl implements Container {
         
         if (container.keyStoreLocalizedPath == null || container.trustStoreLocalizedPath == null
             || container.passwordFileLocalizedPath == null) {
-          for (Map.Entry<Path, List<String>> localizedResource : container.getLocalizedResources().entrySet()) {
+          for (Map.Entry<Path, List<String>> localizedResource : container.localizedResources.entrySet()) {
             if (container.keyStoreLocalizedPath == null &&
                 localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME)) {
               container.keyStoreLocalizedPath = new File(localizedResource.getKey().toUri());
