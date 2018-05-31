@@ -50,6 +50,7 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.collect.Lists;
 import org.apache.commons.io.FileUtils;
@@ -593,6 +594,9 @@ public class TestContainer {
       ContainerUpdateCryptoMaterialEvent event = new ContainerUpdateCryptoMaterialEvent(wc.cId, keyStore, password
           .toCharArray(), keyStore, password.toCharArray());
       wc.c.handle(event);
+      
+      // Update is done asynchronously, so wait a while
+      TimeUnit.MILLISECONDS.sleep(100);
       
       assertTrue(keyStorePathJ.toFile().exists());
       assertTrue(trustStorePathJ.toFile().exists());
