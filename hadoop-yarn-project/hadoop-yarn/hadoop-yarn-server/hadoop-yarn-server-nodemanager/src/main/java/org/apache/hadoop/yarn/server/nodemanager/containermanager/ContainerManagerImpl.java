@@ -22,11 +22,17 @@ import static org.apache.hadoop.service.Service.STATE.STARTED;
 
 import java.io.DataInputStream;
 import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.nio.file.Files;
 import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.nio.file.attribute.PosixFilePermission;
+import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -34,11 +40,17 @@ import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
+import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -110,6 +122,7 @@ import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrDecreaseContainersResourceEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrSignalContainersEvent;
+import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateCryptoMaterialEvent;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerManagerEvent;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
@@ -200,6 +213,8 @@ public class ContainerManagerImpl extends CompositeService implements
   protected boolean amrmProxyEnabled = false;
 
   private long waitForContainersOnShutdownMillis;
+  
+  private final ExecutorService cryptoMaterialUpdaterThreadPool;
 
   public ContainerManagerImpl(Context context, ContainerExecutor exec,
       DeletionService deletionContext, NodeStatusUpdater nodeStatusUpdater,
@@ -247,6 +262,12 @@ public class ContainerManagerImpl extends CompositeService implements
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     this.readLock = lock.readLock();
     this.writeLock = lock.writeLock();
+  
+    this.cryptoMaterialUpdaterThreadPool = Executors.newFixedThreadPool(3,
+        new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("Container crypto material updater thread #%d")
+            .build());
   }
 
   @Override
@@ -561,6 +582,9 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     if (server != null) {
       server.stop();
+    }
+    if (cryptoMaterialUpdaterThreadPool != null) {
+      cryptoMaterialUpdaterThreadPool.shutdownNow();
     }
     super.serviceStop();
   }
@@ -1423,6 +1447,133 @@ public class ContainerManagerImpl extends CompositeService implements
     }
   }
 
+  private final Map<ContainerId, Future> cryptoMaterialUpdaters = new HashMap<>();
+  
+  private Future removeCryptoUpdaterTask(ContainerId cid) {
+    Future task = null;
+    synchronized (cryptoMaterialUpdaters) {
+      task = cryptoMaterialUpdaters.remove(cid);
+    }
+    return task;
+  }
+  
+  private void scheduleCryptoUpdaterForContainer(CMgrUpdateCryptoMaterialEvent event) {
+    LOG.info("Scheduling crypto updater for container " + event.getContainerId());
+    Future previousTask = removeCryptoUpdaterTask(event.getContainerId());
+    if (previousTask != null) {
+      previousTask.cancel(true);
+    }
+    ContainerImpl container = (ContainerImpl) context.getContainers().get(event.getContainerId());
+    if (container != null) {
+      ContainerCryptoMaterialUpdater updater = new ContainerCryptoMaterialUpdater(container, event.getKeyStore(),
+          event.getKeyStorePassword(), event.getTrustStore(), event.getTrustStorePassword());
+      scheduleUpdaterInternal(updater, container.getContainerId());
+    }
+  }
+  
+  private void scheduleUpdaterInternal(ContainerCryptoMaterialUpdater updater, ContainerId cid) {
+    // Make sure we put the task to the Map before the worker tries to remove itself from the Map
+    synchronized (cryptoMaterialUpdaters) {
+      Future task = cryptoMaterialUpdaterThreadPool.submit(updater);
+      cryptoMaterialUpdaters.put(cid, task);
+    }
+  }
+  
+  private class ContainerCryptoMaterialUpdater implements Runnable {
+    private final ContainerImpl container;
+    private final ByteBuffer keyStore;
+    private final char[] keyStorePassword;
+    private final ByteBuffer trustStore;
+    private final char[] trustStorePassword;
+    private int numberOfFailures;
+    private long backoffTime;
+    
+    private ContainerCryptoMaterialUpdater(ContainerImpl container, ByteBuffer keyStore, char[] keyStorePassword,
+        ByteBuffer trustStore, char[] trustStorePassword) {
+      this.container = container;
+      this.keyStore = keyStore;
+      this.keyStorePassword = keyStorePassword;
+      this.trustStore = trustStore;
+      this.trustStorePassword = trustStorePassword;
+      this.numberOfFailures = 0;
+      this.backoffTime = 0L;
+    }
+    
+    @Override
+    public void run() {
+      try {
+        TimeUnit.MILLISECONDS.sleep(backoffTime);
+        if (!container.getContainerState().equals(
+            org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerState.RUNNING)) {
+          LOG.info("Crypto updater for container " + container.getContainerId() + " run but the container is not in " +
+              "RUNNING state, instead state is: " + container.getContainerState());
+          removeCryptoUpdaterTask(container.getContainerId());
+          return;
+        }
+        container.identifyCryptoMaterialLocation();
+        File keyStorePath = container.getKeyStoreLocalizedPath();
+        File trustStorePath = container.getTrustStoreLocalizedPath();
+        File passwordFilePath = container.getPasswordFileLocalizedPath();
+        if (keyStorePath == null || trustStorePath == null || passwordFilePath == null) {
+          throw new IOException("Could not identify localized cryptographic material location for container " +
+              container.getContainerId());
+        }
+        writeByteBufferToFile(keyStorePath, keyStore);
+        writeByteBufferToFile(trustStorePath, trustStore);
+        // Assume key store password is the same for the trust store and for the key itself
+        writeStringToFile(passwordFilePath, String.valueOf(keyStorePassword));
+        removeCryptoUpdaterTask(container.getContainerId());
+        LOG.debug("Updated crypto material for container: " + container.getContainerId());
+      } catch (IOException ex) {
+        LOG.error(ex, ex);
+        // Re-schedule here with backoff
+        numberOfFailures++;
+        removeCryptoUpdaterTask(container.getContainerId());
+        if (numberOfFailures < 6) {
+          backoffTime += 500L;
+          LOG.warn("Re-scheduling updating crypto material for container " + container.getContainerId() + " after "
+              + backoffTime + "ms");
+          scheduleUpdaterInternal(this, container.getContainerId());
+        } else {
+          LOG.error("Reached maximum number of retries for container " + container.getContainerId() + ", giving up",
+              ex);
+        }
+      } catch (InterruptedException ex) {
+        Thread.currentThread().interrupt();
+      }
+    }
+    
+    private void writeByteBufferToFile(File target, ByteBuffer data) throws IOException {
+      Path targetPath = target.toPath();
+      Set<PosixFilePermission> permissions = addOwnerWritePermission(targetPath);
+      FileChannel fileChannel = new FileOutputStream(target, false).getChannel();
+      fileChannel.write(data);
+      fileChannel.close();
+      removeOwnerWritePermission(targetPath, permissions);
+    }
+  
+    private void writeStringToFile(File target, String data) throws IOException {
+      Path targetPath = target.toPath();
+      Set<PosixFilePermission> permissions = addOwnerWritePermission(targetPath);
+      FileUtils.writeStringToFile(target, data);
+      removeOwnerWritePermission(targetPath, permissions);
+    }
+    
+    private Set<PosixFilePermission> addOwnerWritePermission(Path target) throws IOException {
+      Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(target);
+      if (permissions.add(PosixFilePermission.OWNER_WRITE)) {
+        Files.setPosixFilePermissions(target, permissions);
+      }
+      return permissions;
+    }
+    
+    private void removeOwnerWritePermission(Path target, Set<PosixFilePermission> permissions) throws IOException {
+      if (permissions.remove(PosixFilePermission.OWNER_WRITE)) {
+        Files.setPosixFilePermissions(target, permissions);
+      }
+    }
+  }
+  
   class ContainerEventDispatcher implements EventHandler<ContainerEvent> {
     @Override
     public void handle(ContainerEvent event) {
@@ -1549,6 +1700,9 @@ public class ContainerManagerImpl extends CompositeService implements
           .getContainersToSignal()) {
         internalSignalToContainer(request, "ResourceManager");
       }
+      break;
+    case UPDATE_CRYPTO_MATERIAL:
+      scheduleCryptoUpdaterForContainer((CMgrUpdateCryptoMaterialEvent) event);
       break;
     default:
         throw new YarnRuntimeException(
