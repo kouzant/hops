@@ -19,11 +19,9 @@
 package org.apache.hadoop.yarn.server.nodemanager.containermanager.container;
 
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.EnumSet;
@@ -32,12 +30,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
@@ -275,8 +271,6 @@ public class ContainerImpl implements Container {
     .addTransition(ContainerState.RUNNING, ContainerState.EXITED_WITH_FAILURE,
         ContainerEventType.CONTAINER_KILLED_ON_REQUEST,
         new KilledExternallyTransition())
-    .addTransition(ContainerState.RUNNING, ContainerState.RUNNING,
-        ContainerEventType.UPDATE_CRYPTO_MATERIAL, new UpdateCryptoMaterialTransition())
 
     // From CONTAINER_EXITED_WITH_SUCCESS State
     .addTransition(ContainerState.EXITED_WITH_SUCCESS, ContainerState.DONE,
@@ -586,7 +580,41 @@ public class ContainerImpl implements Container {
     dispatcher.getEventHandler().handle(
         new ContainerLocalizationCleanupEvent(this, rsrc));
   }
-
+  
+  public synchronized File getKeyStoreLocalizedPath() {
+    return keyStoreLocalizedPath;
+  }
+  
+  public synchronized File getTrustStoreLocalizedPath() {
+    return trustStoreLocalizedPath;
+  }
+  
+  public synchronized File getPasswordFileLocalizedPath() {
+    return passwordFileLocalizedPath;
+  }
+  
+  public synchronized void identifyCryptoMaterialLocation() {
+    if (keyStoreLocalizedPath == null || trustStoreLocalizedPath == null || passwordFileLocalizedPath == null) {
+      for (Map.Entry<Path, List<String>> localizedResource : localizedResources.entrySet()) {
+        if (keyStoreLocalizedPath == null &&
+            localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME)) {
+          keyStoreLocalizedPath = new File(localizedResource.getKey().toString());
+        }
+        if (trustStoreLocalizedPath == null &&
+            localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_TRUSTSTORE_FILE_NAME)) {
+          trustStoreLocalizedPath = new File(localizedResource.getKey().toString());
+        }
+        if (passwordFileLocalizedPath == null  &&
+            localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_PASSWD_FILE_NAME)) {
+          passwordFileLocalizedPath = new File(localizedResource.getKey().toString());
+        }
+        if (keyStoreLocalizedPath != null && trustStoreLocalizedPath != null && passwordFileLocalizedPath != null) {
+          break;
+        }
+      }
+    }
+  }
+  
   static class ContainerTransition implements
       SingleArcTransition<ContainerImpl, ContainerEvent> {
 
@@ -798,8 +826,6 @@ public class ContainerImpl implements Container {
     }
   }
 
-  private Thread updaterThread = null;
-  
   /**
    * Transition from LOCALIZED state to RUNNING state upon receiving
    * a CONTAINER_LAUNCHED event
@@ -819,120 +845,6 @@ public class ContainerImpl implements Container {
         container.dispatcher.getEventHandler().handle(
             new ContainersLauncherEvent(container,
                 ContainersLauncherEventType.CLEANUP_CONTAINER));
-      }
-    }
-  }
-  
-  /**
-   * Transition from RUNNING -> RUNNING state when new cryptographic material
-   * should be materialized
-   */
-  static class UpdateCryptoMaterialTransition extends ContainerTransition {
-    @Override
-    public void transition(ContainerImpl container, ContainerEvent event) {
-      if (event instanceof ContainerUpdateCryptoMaterialEvent) {
-        ContainerUpdateCryptoMaterialEvent updateEvt = (ContainerUpdateCryptoMaterialEvent) event;
-        ByteBuffer newKeyStore = updateEvt.getKeyStore();
-        ByteBuffer newTrustStore = updateEvt.getTrustStore();
-        char[] newKeyStorePassword = updateEvt.getKeyStorePassword();
-        char[] newTrustStorePassword = updateEvt.getTrustStorePassword();
-        
-        if (container.updaterThread != null) {
-          container.updaterThread.interrupt();
-        }
-        container.updaterThread = new UpdaterThread(container, newKeyStore, newKeyStorePassword, newTrustStore,
-            newTrustStorePassword);
-        container.updaterThread.setDaemon(true);
-        container.updaterThread.setName("Container crypto material updater thread");
-        container.updaterThread.start();
-      }
-    }
-    
-    private static class UpdaterThread extends Thread {
-      private final ContainerImpl container;
-      private final ByteBuffer keyStore;
-      private final char[] keyStorePassword;
-      private final ByteBuffer trustStore;
-      private final char[] trustStorePassword;
-      private final long backoffTime;
-      private final int numberOfFailures;
-      
-      private UpdaterThread(ContainerImpl container, ByteBuffer keyStore, char[] keyStorePassword,
-          ByteBuffer trustStore, char[] trustStorePassword) {
-        this(container, keyStore, keyStorePassword, trustStore, trustStorePassword, 0, 0);
-      }
-      private UpdaterThread(ContainerImpl container, ByteBuffer keyStore, char[] keyStorePassword,
-          ByteBuffer trustStore, char[] trustStorePassword, long backoffTime, int numberOfFailures) {
-        this.container = container;
-        this.keyStore = keyStore;
-        this.keyStorePassword = keyStorePassword;
-        this.trustStore = trustStore;
-        this.trustStorePassword = trustStorePassword;
-        this.backoffTime = backoffTime;
-        this.numberOfFailures = numberOfFailures;
-      }
-      
-      @Override
-      public void run() {
-        try {
-          TimeUnit.MILLISECONDS.sleep(backoffTime);
-          
-          if (!container.getContainerState().equals(ContainerState.RUNNING)) {
-            return;
-          }
-          identifyCryptoMaterialLocation();
-          if (container.keyStoreLocalizedPath == null || container.trustStoreLocalizedPath == null
-              || container.passwordFileLocalizedPath == null) {
-            throw new IOException("Could not identify localized cryptographic material location for container " +
-                container.getContainerId() + ". Trying again...");
-          }
-          FileChannel fileChannel = new FileOutputStream(container.keyStoreLocalizedPath, false).getChannel();
-          fileChannel.write(keyStore);
-          fileChannel.close();
-          fileChannel = new FileOutputStream(container.trustStoreLocalizedPath, false).getChannel();
-          fileChannel.write(trustStore);
-          fileChannel.close();
-          // Assume key store password is the same for the trust store and for the key itself
-          FileUtils.write(container.passwordFileLocalizedPath, String.valueOf(keyStorePassword));
-          
-        } catch (IOException ex) {
-          LOG.error(ex, ex);
-          if (numberOfFailures < 4) {
-            LOG.info("Re-scheduling updating crypto material for container " + container.getContainerId() + " after "
-                + backoffTime + "ms");
-            container.updaterThread = new UpdaterThread(container, keyStore, keyStorePassword, trustStore,
-                trustStorePassword, backoffTime + 500L, numberOfFailures + 1);
-            container.updaterThread.setDaemon(true);
-            container.updaterThread.setName("Container crypto material updater thread");
-            container.updaterThread.start();
-          }
-        } catch (InterruptedException ex) {
-          Thread.currentThread().interrupt();
-        }
-      }
-      
-      private void identifyCryptoMaterialLocation() {
-        if (container.keyStoreLocalizedPath == null || container.trustStoreLocalizedPath == null
-            || container.passwordFileLocalizedPath == null) {
-          for (Map.Entry<Path, List<String>> localizedResource : container.localizedResources.entrySet()) {
-            if (container.keyStoreLocalizedPath == null &&
-                localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME)) {
-              container.keyStoreLocalizedPath = new File(localizedResource.getKey().toUri());
-            }
-            if (container.trustStoreLocalizedPath == null &&
-                localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_TRUSTSTORE_FILE_NAME)) {
-              container.trustStoreLocalizedPath = new File(localizedResource.getKey().toUri());
-            }
-            if (container.passwordFileLocalizedPath == null  &&
-                localizedResource.getValue().contains(HopsSSLSocketFactory.LOCALIZED_PASSWD_FILE_NAME)) {
-              container.passwordFileLocalizedPath = new File(localizedResource.getKey().toUri());
-            }
-            if (container.keyStoreLocalizedPath != null && container.trustStoreLocalizedPath != null &&
-                container.passwordFileLocalizedPath != null) {
-              break;
-            }
-          }
-        }
       }
     }
   }

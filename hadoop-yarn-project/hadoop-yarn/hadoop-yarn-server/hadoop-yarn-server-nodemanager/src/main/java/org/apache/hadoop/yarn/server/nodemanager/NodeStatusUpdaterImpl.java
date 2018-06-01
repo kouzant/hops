@@ -82,13 +82,11 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.ContainerManag
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.Application;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.application.ApplicationState;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.Container;
-import org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerUpdateCryptoMaterialEvent;
 import org.apache.hadoop.yarn.server.nodemanager.containermanager.monitor.ContainersMonitor;
 import org.apache.hadoop.yarn.server.nodemanager.metrics.NodeManagerMetrics;
 import org.apache.hadoop.yarn.server.nodemanager.nodelabels.NodeLabelsProvider;
 import org.apache.hadoop.yarn.server.nodemanager.util.NodeManagerHardwareUtils;
 import org.apache.hadoop.yarn.util.resource.Resources;
-import org.apache.hadoop.yarn.server.nodemanager.util.NodeManagerHardwareUtils;
 import org.apache.hadoop.yarn.util.YarnVersionInfo;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -893,9 +891,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
                     
                     Set<ContainerId> containers = application.getContainers().keySet();
                     for (ContainerId cid : containers) {
-                      ContainerUpdateCryptoMaterialEvent event = new ContainerUpdateCryptoMaterialEvent(cid,
-                          crypto.getKeyStore(), crypto.getKeyStorePassword(), crypto.getTrustStore(),
-                          crypto.getTrustStorePassword());
+                      CMgrUpdateCryptoMaterialEvent event = new CMgrUpdateCryptoMaterialEvent(cid, crypto.getKeyStore(),
+                          crypto.getKeyStorePassword(), crypto.getTrustStore(), crypto.getTrustStorePassword());
                       dispatcher.getEventHandler().handle(event);
                     }
                     applicationsWithUpdatedCryptoMaterial.add(entry.getKey());

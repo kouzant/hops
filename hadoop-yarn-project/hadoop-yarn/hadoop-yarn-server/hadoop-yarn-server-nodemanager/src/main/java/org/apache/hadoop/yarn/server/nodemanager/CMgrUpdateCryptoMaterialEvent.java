@@ -15,25 +15,31 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.yarn.server.nodemanager.containermanager.container;
+package org.apache.hadoop.yarn.server.nodemanager;
 
 import org.apache.hadoop.yarn.api.records.ContainerId;
 
 import java.nio.ByteBuffer;
 
-public class ContainerUpdateCryptoMaterialEvent extends ContainerEvent {
+public class CMgrUpdateCryptoMaterialEvent extends ContainerManagerEvent {
+  private final ContainerId containerId;
   private final ByteBuffer keyStore;
   private final char[] keyStorePassword;
   private final ByteBuffer trustStore;
   private final char[] trustStorePassword;
   
-  public ContainerUpdateCryptoMaterialEvent(ContainerId cID, ByteBuffer keyStore, char[] keyStorePassword,
+  public CMgrUpdateCryptoMaterialEvent(ContainerId containerId, ByteBuffer keyStore, char[] keyStorePassword,
       ByteBuffer trustStore, char[] trustStorePassword) {
-    super(cID, ContainerEventType.UPDATE_CRYPTO_MATERIAL);
+    super(ContainerManagerEventType.UPDATE_CRYPTO_MATERIAL);
+    this.containerId = containerId;
     this.keyStore = keyStore;
     this.keyStorePassword = keyStorePassword;
     this.trustStore = trustStore;
     this.trustStorePassword = trustStorePassword;
+  }
+  
+  public ContainerId getContainerId() {
+    return containerId;
   }
   
   public ByteBuffer getKeyStore() {
