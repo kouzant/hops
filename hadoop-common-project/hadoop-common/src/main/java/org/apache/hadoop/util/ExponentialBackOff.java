@@ -17,15 +17,12 @@
  */
 package org.apache.hadoop.util;
 
-import java.util.Random;
-
 public class ExponentialBackOff implements BackOff {
-  private static final long INITIAL_INTERVAL_MILLIS = 100;
-  private static final long MAXIMUM_INTERVAL_MILLIS = 60000;
-  private static final double RANDOMIZATION_FACTOR = 0.5;
-  private static final double MULTIPLIER = 1.5;
-  private static final int MAXIMUM_RETRIES = 10;
-  private static final Random RANDOM = new Random();
+  public static final long INITIAL_INTERVAL_MILLIS = 100;
+  public static final long MAXIMUM_INTERVAL_MILLIS = 60000;
+  public static final double RANDOMIZATION_FACTOR = 0.5;
+  public static final double MULTIPLIER = 1.5;
+  public static final int MAXIMUM_RETRIES = 10;
   
   private long initialIntervalMillis;
   private long maximumIntervalMillis;
@@ -75,6 +72,30 @@ public class ExponentialBackOff implements BackOff {
     numberOfRetries = 0;
   }
   
+  public long getInitialIntervalMillis() {
+    return initialIntervalMillis;
+  }
+  
+  public long getMaximumIntervalMillis() {
+    return maximumIntervalMillis;
+  }
+  
+  public double getRandomizationFactor() {
+    return randomizationFactor;
+  }
+  
+  public double getMultiplier() {
+    return multiplier;
+  }
+  
+  public int getMaximumRetries() {
+    return maximumRetries;
+  }
+  
+  public int getNumberOfRetries() {
+    return numberOfRetries;
+  }
+  
   public static class Builder {
     
     private long initialIntervalMillis = INITIAL_INTERVAL_MILLIS;
@@ -86,27 +107,55 @@ public class ExponentialBackOff implements BackOff {
     public ExponentialBackOff build() {
       return new ExponentialBackOff(this);
     }
-    
+  
+    /**
+     * Sets the initial retry interval in milliseconds. It should be {@code > 0}.
+     * @param initialIntervalMillis
+     * @return
+     */
     public Builder setInitialIntervalMillis(long initialIntervalMillis) {
       this.initialIntervalMillis = initialIntervalMillis;
       return this;
     }
-    
+  
+    /**
+     * Sets the maximum interval allows in milliseconds. After that subsequent retries interval will not get
+     * higher than this.
+     *
+     * @param maximumIntervalMillis
+     * @return
+     */
     public Builder setMaximumIntervalMillis(long maximumIntervalMillis) {
       this.maximumIntervalMillis = maximumIntervalMillis;
       return this;
     }
-    
+  
+    /**
+     * Sets a randomization factor to create a new range of values around the current retry interval.
+     * It should be {@code 0 <= randomizationFactor < 1}.
+     * @param randomizationFactor
+     * @return
+     */
     public Builder setRandomizationFactor(double randomizationFactor) {
       this.randomizationFactor = randomizationFactor;
       return this;
     }
-    
+  
+    /**
+     * Sets the value to multiply the current retry interval. It should be {@code >= 1}.
+     * @param multiplier
+     * @return
+     */
     public Builder setMultiplier(double multiplier) {
       this.multiplier = multiplier;
       return this;
     }
-    
+  
+    /**
+     * Sets the maximum number of retries allowed. It should be {@code >= 1}
+     * @param maximumRetries
+     * @return
+     */
     public Builder setMaximumRetries(int maximumRetries) {
       this.maximumRetries = maximumRetries;
       return this;
