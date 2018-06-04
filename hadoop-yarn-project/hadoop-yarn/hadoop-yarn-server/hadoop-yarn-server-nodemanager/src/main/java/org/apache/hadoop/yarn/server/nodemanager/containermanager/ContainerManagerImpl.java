@@ -1534,6 +1534,7 @@ public class ContainerManagerImpl extends CompositeService implements
         // Assume key store password is the same for the trust store and for the key itself
         writeStringToFile(passwordFilePath, String.valueOf(keyStorePassword));
         removeCryptoUpdaterTask(container.getContainerId());
+        updateStateStore();
         LOG.debug("Updated crypto material for container: " + container.getContainerId());
       } catch (IOException ex) {
         LOG.error(ex, ex);
@@ -1581,6 +1582,15 @@ public class ContainerManagerImpl extends CompositeService implements
       if (permissions.remove(PosixFilePermission.OWNER_WRITE)) {
         Files.setPosixFilePermissions(target, permissions);
       }
+    }
+    
+    private void updateStateStore() throws IOException {
+      ApplicationId applicationId = container.getContainerId().getApplicationAttemptId().getApplicationId();
+      context.getNMStateStore().storeApplication(applicationId,
+          buildAppProto(applicationId, container.getUser(), container.getUserFolder(), container.getCredentials(),
+              container.getLaunchContext().getApplicationACLs(), container.getContainerTokenIdentifier()
+                  .getLogAggregationContext(),
+              keyStore, String.valueOf(keyStorePassword), trustStore, String.valueOf(trustStorePassword)));
     }
   }
   
