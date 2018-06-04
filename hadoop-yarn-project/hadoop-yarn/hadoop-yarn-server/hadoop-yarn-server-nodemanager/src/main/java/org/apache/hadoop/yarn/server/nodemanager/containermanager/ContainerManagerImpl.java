@@ -71,6 +71,8 @@ import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.service.ServiceStateChangeListener;
+import org.apache.hadoop.util.BackOff;
+import org.apache.hadoop.util.ExponentialBackOff;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
@@ -1485,7 +1487,7 @@ public class ContainerManagerImpl extends CompositeService implements
     private final char[] keyStorePassword;
     private final ByteBuffer trustStore;
     private final char[] trustStorePassword;
-    private int numberOfFailures;
+    private final BackOff backoff;
     private long backoffTime;
     
     private ContainerCryptoMaterialUpdater(ContainerImpl container, ByteBuffer keyStore, char[] keyStorePassword,
@@ -1495,8 +1497,17 @@ public class ContainerManagerImpl extends CompositeService implements
       this.keyStorePassword = keyStorePassword;
       this.trustStore = trustStore;
       this.trustStorePassword = trustStorePassword;
-      this.numberOfFailures = 0;
+      this.backoff = createBackOffPolicy();
       this.backoffTime = 0L;
+    }
+
+    private BackOff createBackOffPolicy() {
+      return new ExponentialBackOff.Builder()
+          .setInitialIntervalMillis(200)
+          .setMaximumIntervalMillis(5000)
+          .setMultiplier(1.4)
+          .setMaximumRetries(6)
+          .build();
     }
     
     @Override
@@ -1527,10 +1538,9 @@ public class ContainerManagerImpl extends CompositeService implements
       } catch (IOException ex) {
         LOG.error(ex, ex);
         // Re-schedule here with backoff
-        numberOfFailures++;
         removeCryptoUpdaterTask(container.getContainerId());
-        if (numberOfFailures < 6) {
-          backoffTime += 500L;
+        backoffTime = backoff.getBackOffInMillis();
+        if (backoffTime != -1) {
           LOG.warn("Re-scheduling updating crypto material for container " + container.getContainerId() + " after "
               + backoffTime + "ms");
           scheduleUpdaterInternal(this, container.getContainerId());
