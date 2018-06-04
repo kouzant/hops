@@ -1049,11 +1049,6 @@ public class MockRM extends ResourceManager {
     }
   
     @Override
-    public boolean isRPCTLSEnabled() {
-      return true;
-    }
-  
-    @Override
     public KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
       KeyStore trustStore = KeyStore.getInstance("JKS");
       trustStore.load(null, null);
