@@ -29,6 +29,7 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.KeyStoreTestUtil;
 import org.apache.hadoop.security.ssl.SSLFactory;
+import org.apache.hadoop.util.ExponentialBackOff;
 import org.apache.hadoop.yarn.MockApps;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
@@ -38,15 +39,12 @@ import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPB
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
-import org.apache.hadoop.yarn.server.resourcemanager.Application;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.DBRMStateStore;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.MemoryRMStateStore;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.RMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationStateData;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
@@ -69,7 +67,6 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -254,7 +251,7 @@ public class TestRMAppCertificateManager {
     
     TimeUnit.SECONDS.sleep(10);
     assertTrue(tasks.isEmpty());
-    assertEquals(2, certificateManager.getNumberOfRenewalFailures());
+    assertEquals(4, certificateManager.getNumberOfRenewalFailures());
     assertTrue(certificateManager.hasRenewalFailed());
     certificateManager.stop();
   }
@@ -754,21 +751,21 @@ public class TestRMAppCertificateManager {
       @Override
       public void run() {
         try {
-          if (numberOfFailures < succeedAfterRetries) {
+          if (((ExponentialBackOff)backOff).getNumberOfRetries() < succeedAfterRetries) {
             throw new Exception("Ooops something went wrong");
           }
           getRenewalTasks().remove(appId);
           LOG.info("Renewed certificate for application " + appId);
         } catch (Exception ex) {
           getRenewalTasks().remove(appId);
-          if (++numberOfFailures <= 2) {
+          backOffTime = backOff.getBackOffInMillis();
+          if (backOffTime != -1) {
             numberOfRenewalFailures++;
-            LOG.warn("Failed to renew certificate for application " + appId + ". Retries remaining " + (2 -
-                numberOfFailures + 1));
-            ScheduledFuture task = getScheduler().schedule(this, 10, TimeUnit.MILLISECONDS);
+            LOG.warn("Failed to renew certificate for application " + appId + ". Retrying in " + backOffTime + " ms");
+            ScheduledFuture task = getScheduler().schedule(this, backOffTime, TimeUnit.MILLISECONDS);
             getRenewalTasks().put(appId, task);
           } else {
-            LOG.error("Failed to renew certificate for application " + appId + ". Failed more than 2 times, giving up");
+            LOG.error("Failed to renew certificate for application " + appId + " Failed more than 4 times, giving up");
             renewalFailed = true;
           }
         }
