@@ -29,6 +29,8 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.util.BackOff;
+import org.apache.hadoop.util.ExponentialBackOff;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
@@ -278,14 +280,24 @@ public class RMAppCertificateManager extends AbstractService
   public class CertificateRenewer implements Runnable {
     protected final ApplicationId appId;
     protected final String appUser;
+    protected final BackOff backOff;
     protected Integer currentCryptoVersion;
-    protected int numberOfFailures;
+    protected long backOffTime = 0L;
     
     public CertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
       this.appId = appId;
       this.appUser = appUser;
       this.currentCryptoVersion = currentCryptoVersion;
-      numberOfFailures = 0;
+      this.backOff = createBackOffPolicy();
+    }
+  
+    private BackOff createBackOffPolicy() {
+      return new ExponentialBackOff.Builder()
+          .setInitialIntervalMillis(200)
+          .setMaximumIntervalMillis(5000)
+          .setMultiplier(1.5)
+          .setMaximumRetries(4)
+          .build();
     }
     
     @Override
@@ -315,13 +327,13 @@ public class RMAppCertificateManager extends AbstractService
       } catch (Exception ex) {
         LOG.error(ex, ex);
         renewalTasks.remove(appId);
-        if (++numberOfFailures <= 2) {
-          LOG.warn("Failed to renew certificate for application " + appId + ". Retries remaining "
-              + (2 - numberOfFailures + 1));
-          ScheduledFuture task = scheduler.schedule(this, 5, TimeUnit.SECONDS);
+        backOffTime = backOff.getBackOffInMillis();
+        if (backOffTime != -1) {
+          LOG.warn("Failed to renew certificate for application " + appId + ". Retrying in " + backOffTime + " ms");
+          ScheduledFuture task = scheduler.schedule(this, backOffTime, TimeUnit.MILLISECONDS);
           renewalTasks.put(appId, task);
         } else {
-          LOG.error("Failed to renew certificate for application " + appId + ". Failed more than 2 times, giving up");
+          LOG.error("Failed to renew certificate for application " + appId + ". Failed more than 4 times, giving up");
         }
       }
     }
