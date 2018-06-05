@@ -23,6 +23,7 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
@@ -32,6 +33,7 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
@@ -404,6 +406,7 @@ public class ResourceTrackerService extends AbstractService implements
       this.rmContext.getDispatcher().getEventHandler().handle(
               new RMNodeStartedEvent(nodeId, request.getNMContainerStatuses(),
                   request.getRunningApplications()));
+      pushCryptoUpdatedEventsForRunningApps(request.getRunningApplications(), rmNode);
     } else {
       LOG.info("Reconnect from the node at: " + host);
       this.nmLivelinessMonitor.unregister(nodeId);
@@ -420,6 +423,7 @@ public class ResourceTrackerService extends AbstractService implements
           .handle(
               new RMNodeReconnectEvent(nodeId, rmNode, request
                   .getRunningApplications(), request.getNMContainerStatuses()));
+      pushCryptoUpdatedEventsForRunningApps(request.getRunningApplications(), oldNode);
     }
     // On every node manager register we will be clearing NMToken keys if
     // present for any running application.
@@ -476,6 +480,30 @@ public class ResourceTrackerService extends AbstractService implements
     return response;
   }
 
+  private void pushCryptoUpdatedEventsForRunningApps(List<ApplicationId> runningApps, RMNode rmNode) {
+    if (!getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, CommonConfigurationKeys
+        .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      return;
+    }
+    for (ApplicationId appId : runningApps) {
+      RMApp rmApp = rmContext.getRMApps().get(appId);
+      if (rmApp != null) {
+        ByteBuffer keyStore = ByteBuffer.wrap(rmApp.getKeyStore());
+        char[] keyStorePassword = rmApp.getKeyStorePassword();
+        ByteBuffer trustStore = ByteBuffer.wrap(rmApp.getTrustStore());
+        char[] trustStorePassword = rmApp.getTrustStorePassword();
+        int cryptoVersion = rmApp.getCryptoMaterialVersion();
+        UpdatedCryptoForApp updatedCrypto = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
+        updatedCrypto.setKeyStore(keyStore);
+        updatedCrypto.setKeyStorePassword(keyStorePassword);
+        updatedCrypto.setTrustStore(trustStore);
+        updatedCrypto.setTrustStorePassword(trustStorePassword);
+        updatedCrypto.setVersion(cryptoVersion);
+        rmNode.getAppCryptoMaterialToUpdate().putIfAbsent(appId, updatedCrypto);
+      }
+    }
+  }
+  
   @SuppressWarnings("unchecked")
   @Override
   public NodeHeartbeatResponse nodeHeartbeat(NodeHeartbeatRequest request)
@@ -608,7 +636,9 @@ public class ResourceTrackerService extends AbstractService implements
     return nodeHeartBeatResponse;
   }
 
-  private void setAppsToUpdateWithNewCryptoMaterial(NodeHeartbeatResponse response, RMNode rmNode) {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected void setAppsToUpdateWithNewCryptoMaterial(NodeHeartbeatResponse response, RMNode rmNode) {
     Set<Map.Entry<ApplicationId, UpdatedCryptoForApp>> appsToUpdate = rmNode.getAppCryptoMaterialToUpdate().entrySet();
     Map<ApplicationId, UpdatedCryptoForApp> payload = new HashMap<>(appsToUpdate.size());
     for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : appsToUpdate) {

@@ -41,13 +41,16 @@ import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.TimeUnit;
 
+import com.google.common.collect.Lists;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
+import org.apache.hadoop.hdfs.server.protocol.HeartbeatResponse;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.io.IOUtils;
 import org.apache.hadoop.io.Text;
@@ -60,6 +63,7 @@ import org.apache.hadoop.security.token.Token;
 import org.apache.hadoop.security.token.delegation.DelegationKey;
 import org.apache.hadoop.service.Service.STATE;
 import org.apache.hadoop.test.GenericTestUtils;
+import org.apache.hadoop.yarn.api.protocolrecords.AllocateResponse;
 import org.apache.hadoop.yarn.api.protocolrecords.FinishApplicationMasterRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportRequest;
 import org.apache.hadoop.yarn.api.protocolrecords.GetApplicationReportResponse;
@@ -88,6 +92,8 @@ import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.security.client.RMDelegationTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NMContainerStatus;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.RegisterNodeManagerResponse;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.api.records.NodeAction;
 import org.apache.hadoop.yarn.server.resourcemanager.metrics.SystemMetricsPublisher;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.RMNodeLabelsManager;
@@ -109,6 +115,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.QueueMetrics;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.capacity.TestUtils;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.fair.FairScheduler;
+import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.util.ConverterUtils;
@@ -538,7 +546,7 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     rmAppState =rmState.getApplicationState();
     Assert.assertEquals(4, rmAppState.size());
   }
-
+  
   private void assertCryptoMaterialStateNotEmpty(ApplicationStateData appState) {
     Assert.assertNotNull(appState.getKeyStore());
     Assert.assertNotEquals(0, appState.getKeyStore().length);
@@ -559,6 +567,117 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     Assert.assertNotEquals(0, app.getTrustStore().length);
     Assert.assertNotNull(app.getTrustStore());
     Assert.assertNotEquals(0, app.getTrustStorePassword().length);
+  }
+  
+  
+  @Test(timeout = 30000)
+  public void testRMRestartBeforeSendingCryptoUpdateToNM() throws Exception {
+    conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
+    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "40s");
+    // Start RM 1
+    MockRM rm1 = new RMWithCustomRTService(conf);
+    rms.add(rm1);
+    Assume.assumeFalse(rm1.getResourceScheduler() instanceof FairScheduler);
+    rm1.start();
+    
+    // Start NM
+    MockNM nm = new MockNM("127.0.0.1:1337", 20 * 1024, rm1.getResourceTrackerService());
+    nm.registerNode();
+    // Launch application
+    RMApp app = rm1.submitApp(1024);
+    RMAppAttempt appAttempt = app.getCurrentAppAttempt();
+    NodeHeartbeatResponse nmHeartbeatResponse = nm.nodeHeartbeat(true);
+    Assert.assertTrue(nmHeartbeatResponse.getUpdatedCryptoForApps().isEmpty());
+    MockAM am = rm1.sendAMLaunched(appAttempt.getAppAttemptId());
+    am.registerAppAttempt();
+    rm1.waitForState(app.getApplicationId(), RMAppState.RUNNING);
+    
+    AllocateResponse allocateResponse = am.allocate("127.0.0.1", 2 * 1024, 2, new ArrayList<ContainerId>());
+    nm.nodeHeartbeat(true);
+    
+    while (allocateResponse.getAllocatedContainers().size() < 2) {
+      nm.nodeHeartbeat(true);
+      allocateResponse = am.allocate(new ArrayList<ResourceRequest>(), new ArrayList<ContainerId>());
+      TimeUnit.MILLISECONDS.sleep(100);
+    }
+    LOG.info("Containers allocated");
+    
+    // Trigger Certificate renewal but without sending event to NM
+    RMNode rmNode = rm1.getRMContext().getRMNodes().get(nm.getNodeId());
+    
+    LOG.info("Sleeping until the renewal is scheduled");
+    while (rmNode.getAppCryptoMaterialToUpdate().isEmpty()) {
+      TimeUnit.MILLISECONDS.sleep(100);
+    }
+    nmHeartbeatResponse = nm.nodeHeartbeat(true);
+    // This should be empty because RM 1 is fixed not to send update crypto events
+    Assert.assertTrue(nmHeartbeatResponse.getUpdatedCryptoForApps().isEmpty());
+    
+    rm1.stop();
+    // Start RM 2
+    MockRM rm2 = createMockRM(conf);
+    rm2.start();
+    // Update NM RT to point to RM 2
+    nm.setResourceTrackerService(rm2.getResourceTrackerService());
+    nmHeartbeatResponse = nm.nodeHeartbeat(true);
+    Assert.assertEquals(NodeAction.RESYNC, nmHeartbeatResponse.getNodeAction());
+    
+    // new NM to represent re-registration
+    nm = new MockNM("127.0.0.1:1337", 20 * 1024, rm2.getResourceTrackerService());
+    List<ApplicationId> runningApps = new ArrayList<>();
+    runningApps.add(app.getApplicationId());
+    nm.registerNode(runningApps);
+    nmHeartbeatResponse = nm.nodeHeartbeat(true);
+    Assert.assertEquals(1, nmHeartbeatResponse.getUpdatedCryptoForApps().size());
+    Assert.assertTrue(nmHeartbeatResponse.getUpdatedCryptoForApps().containsKey(app.getApplicationId()));
+    int sentCryptoVersion = nmHeartbeatResponse.getUpdatedCryptoForApps().get(app.getApplicationId()).getVersion();
+    Assert.assertEquals(app.getCryptoMaterialVersion(), new Integer(sentCryptoVersion));
+  }
+  
+  private class RMWithCustomRTService extends MockRM {
+  
+    private RMWithCustomRTService(Configuration conf) {
+      super(conf);
+    }
+    
+    @Override
+    protected ResourceTrackerService createResourceTrackerService() {
+      RMContainerTokenSecretManager containerTokenSecretManager =
+          getRMContext().getContainerTokenSecretManager();
+      containerTokenSecretManager.rollMasterKey();
+      NMTokenSecretManagerInRM nmTokenSecretManager =
+          getRMContext().getNMTokenSecretManager();
+      nmTokenSecretManager.rollMasterKey();
+      return new RTServiceNotUpdatingCryptoMaterial(getRMContext(), nodesListManager, this.nmLivelinessMonitor,
+          containerTokenSecretManager, nmTokenSecretManager);
+    }
+    
+    private class RTServiceNotUpdatingCryptoMaterial extends ResourceTrackerService {
+  
+      public RTServiceNotUpdatingCryptoMaterial(RMContext rmContext,
+          NodesListManager nodesListManager,
+          NMLivelinessMonitor nmLivelinessMonitor,
+          RMContainerTokenSecretManager containerTokenSecretManager,
+          NMTokenSecretManagerInRM nmTokenSecretManager) {
+        super(rmContext, nodesListManager, nmLivelinessMonitor, containerTokenSecretManager, nmTokenSecretManager);
+      }
+      
+      @Override
+      protected void setAppsToUpdateWithNewCryptoMaterial(NodeHeartbeatResponse response, RMNode rmNode) {
+        response.setUpdatedCryptoForApps(new HashMap<ApplicationId, UpdatedCryptoForApp>());
+      }
+  
+      @Override
+      protected void serviceStart() {
+        // override to not start rpc handler
+      }
+  
+      @Override
+      protected void serviceStop() {
+        // don't do anything
+      }
+    }
   }
   
   @Test (timeout = 60000)

@@ -884,16 +884,21 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
                   
                   if (application != null) {
                     UpdatedCryptoForApp crypto = entry.getValue();
-                    context.getCertificateLocalizationService()
-                        .updateCryptoMaterial(application.getUser(), application.getAppId().toString(),
-                            crypto.getKeyStore().asReadOnlyBuffer(), String.valueOf(crypto.getKeyStorePassword()),
-                            crypto.getTrustStore().asReadOnlyBuffer(), String.valueOf(crypto.getTrustStorePassword()));
-                    
-                    Set<ContainerId> containers = application.getContainers().keySet();
-                    for (ContainerId cid : containers) {
-                      CMgrUpdateCryptoMaterialEvent event = new CMgrUpdateCryptoMaterialEvent(cid, crypto.getKeyStore(),
-                          crypto.getKeyStorePassword(), crypto.getTrustStore(), crypto.getTrustStorePassword());
-                      dispatcher.getEventHandler().handle(event);
+                    if (crypto.getVersion() > application.getCryptoMaterialVersion()) {
+                      context.getCertificateLocalizationService()
+                          .updateCryptoMaterial(application.getUser(), application.getAppId().toString(),
+                              crypto.getKeyStore().asReadOnlyBuffer(), String.valueOf(crypto.getKeyStorePassword()),
+                              crypto.getTrustStore().asReadOnlyBuffer(),
+                              String.valueOf(crypto.getTrustStorePassword()));
+  
+                      Set<ContainerId> containers = application.getContainers().keySet();
+                      for (ContainerId cid : containers) {
+                        CMgrUpdateCryptoMaterialEvent event =
+                            new CMgrUpdateCryptoMaterialEvent(cid, crypto.getKeyStore(),
+                                crypto.getKeyStorePassword(), crypto.getTrustStore(), crypto.getTrustStorePassword(),
+                                crypto.getVersion());
+                        dispatcher.getEventHandler().handle(event);
+                      }
                     }
                     applicationsWithUpdatedCryptoMaterial.add(entry.getKey());
                   } else {

@@ -305,7 +305,7 @@ public class TestContainerManager extends BaseContainerManagerTest {
     ByteBuffer newTrustStore = ByteBuffer.wrap("newTrustStore".getBytes());
     char[] newPassword = "newPassword".toCharArray();
     CMgrUpdateCryptoMaterialEvent updateEvent = new CMgrUpdateCryptoMaterialEvent(cid, newKeyStore, newPassword,
-        newTrustStore, newPassword);
+        newTrustStore, newPassword, 0);
     containerManager.handle(updateEvent);
     
     TimeUnit.MILLISECONDS.sleep(500);

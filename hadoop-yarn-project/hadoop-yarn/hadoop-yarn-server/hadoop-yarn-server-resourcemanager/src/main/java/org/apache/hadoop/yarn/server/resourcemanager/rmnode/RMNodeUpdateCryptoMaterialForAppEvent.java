@@ -26,16 +26,18 @@ public class RMNodeUpdateCryptoMaterialForAppEvent extends RMNodeEvent {
   private final char[] keyStorePassword;
   private final byte[] trustStore;
   private final char[] trustStorePassword;
+  private final int version;
   
   public RMNodeUpdateCryptoMaterialForAppEvent(NodeId nodeId, ApplicationId appId,
       byte[] keyStore, char[] keyStorePassword,
-      byte[] trustStore, char[] trustStorePassword) {
+      byte[] trustStore, char[] trustStorePassword, int version) {
     super(nodeId, RMNodeEventType.UPDATE_CRYPTO_MATERIAL);
     this.appId = appId;
     this.keyStore = keyStore;
     this.keyStorePassword = keyStorePassword;
     this.trustStore = trustStore;
     this.trustStorePassword = trustStorePassword;
+    this.version = version;
   }
   
   public ApplicationId getAppId() {
@@ -56,5 +58,9 @@ public class RMNodeUpdateCryptoMaterialForAppEvent extends RMNodeEvent {
   
   public char[] getTrustStorePassword() {
     return trustStorePassword;
+  }
+  
+  public int getVersion() {
+    return version;
   }
 }

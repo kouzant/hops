@@ -27,15 +27,17 @@ public class CMgrUpdateCryptoMaterialEvent extends ContainerManagerEvent {
   private final char[] keyStorePassword;
   private final ByteBuffer trustStore;
   private final char[] trustStorePassword;
+  private final int version;
   
   public CMgrUpdateCryptoMaterialEvent(ContainerId containerId, ByteBuffer keyStore, char[] keyStorePassword,
-      ByteBuffer trustStore, char[] trustStorePassword) {
+      ByteBuffer trustStore, char[] trustStorePassword, int version) {
     super(ContainerManagerEventType.UPDATE_CRYPTO_MATERIAL);
     this.containerId = containerId;
     this.keyStore = keyStore;
     this.keyStorePassword = keyStorePassword;
     this.trustStore = trustStore;
     this.trustStorePassword = trustStorePassword;
+    this.version = version;
   }
   
   public ContainerId getContainerId() {
@@ -56,5 +58,9 @@ public class CMgrUpdateCryptoMaterialEvent extends ContainerManagerEvent {
   
   public char[] getTrustStorePassword() {
     return trustStorePassword;
+  }
+  
+  public int getVersion() {
+    return version;
   }
 }

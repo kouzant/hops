@@ -923,7 +923,7 @@ public class TestRMNodeTransitions {
     byte[] trustStore = "trustStore".getBytes();
     char[] trustStorePassword = "trustStorePassword".toCharArray();
     RMNodeUpdateCryptoMaterialForAppEvent updateEvent = new RMNodeUpdateCryptoMaterialForAppEvent(
-        node.getNodeID(), appId, keyStore, keyStorePassword, trustStore, trustStorePassword);
+        node.getNodeID(), appId, keyStore, keyStorePassword, trustStore, trustStorePassword, 0);
     node.handle(updateEvent);
     assertEquals(1, node.getAppCryptoMaterialToUpdate().size());
     UpdatedCryptoForApp cryptoToUpdate = node.getAppCryptoMaterialToUpdate().get(appId);
