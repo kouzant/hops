@@ -24,12 +24,13 @@ import java.nio.ByteBuffer;
 public abstract class UpdatedCryptoForApp {
   
   public static UpdatedCryptoForApp newInstance(ByteBuffer keyStore, char[] keyStorePassword, ByteBuffer trustStore,
-      char[] trustStorePassword) {
+      char[] trustStorePassword, int version) {
     UpdatedCryptoForApp updatedCryptoForApp = Records.newRecord(UpdatedCryptoForApp.class);
     updatedCryptoForApp.setKeyStore(keyStore);
     updatedCryptoForApp.setKeyStorePassword(keyStorePassword);
     updatedCryptoForApp.setTrustStore(trustStore);
     updatedCryptoForApp.setTrustStorePassword(trustStorePassword);
+    updatedCryptoForApp.setVersion(version);
     
     return updatedCryptoForApp;
   }
@@ -49,4 +50,8 @@ public abstract class UpdatedCryptoForApp {
   public abstract char[] getTrustStorePassword();
   
   public abstract void setTrustStorePassword(char[] trustStorePassword);
+  
+  public abstract int getVersion();
+  
+  public abstract void setVersion(int version);
 }

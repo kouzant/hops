@@ -154,6 +154,7 @@ public class NodeHeartbeatResponsePBImpl extends
             .setKeyStorePassword(String.valueOf(entry.getValue().getKeyStorePassword()))
             .setTrustStore(ProtoUtils.convertToProtoFormat(entry.getValue().getTrustStore().duplicate()))
             .setTrustStorePassword(String.valueOf(entry.getValue().getTrustStorePassword()))
+            .setVersion(entry.getValue().getVersion())
         ));
     }
   }

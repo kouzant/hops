@@ -179,4 +179,23 @@ public class UpdatedCryptoForAppPBImpl extends UpdatedCryptoForApp {
     }
     builder.setTrustStorePassword(String.valueOf(trustStorePassword));
   }
+  
+  @Override
+  public int getVersion() {
+    YarnServerCommonServiceProtos.UpdatedCryptoForAppProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasVersion()) {
+      return -1;
+    }
+    return p.getVersion();
+  }
+  
+  @Override
+  public void setVersion(int version) {
+    maybeInitBuilder();
+    if (version == -1) {
+      builder.clearVersion();
+      return;
+    }
+    builder.setVersion(version);
+  }
 }

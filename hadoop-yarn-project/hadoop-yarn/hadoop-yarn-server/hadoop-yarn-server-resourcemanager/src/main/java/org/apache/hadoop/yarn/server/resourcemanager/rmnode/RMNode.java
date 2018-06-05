@@ -22,6 +22,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.rmnode;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 import org.apache.hadoop.net.Node;
 import org.apache.hadoop.yarn.api.records.ApplicationId;

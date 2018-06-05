@@ -342,14 +342,16 @@ public class ContainerManagerImpl extends CompositeService implements
     Credentials creds = new Credentials();
     creds.readTokenStorageStream(
         new DataInputStream(p.getCredentials().newInput()));
-
+    int cryptoMaterialVersion = -1;
+    
     if (getConfig() != null && getConfig().getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       materializeCertificates(appId, p.getUser(), p.getUserFolder(),
           ProtoUtils.convertFromProtoFormat(p.getKeyStore()), p.getKeyStorePassword(),
           ProtoUtils.convertFromProtoFormat(p.getTrustStore()), p.getTrustStorePassword());
+      cryptoMaterialVersion = p.getCryptoVersion();
     }
-
+    
     List<ApplicationACLMapProto> aclProtoList = p.getAclsList();
     Map<ApplicationAccessType, String> acls =
         new HashMap<ApplicationAccessType, String>(aclProtoList.size());
@@ -365,8 +367,15 @@ public class ContainerManagerImpl extends CompositeService implements
     }
 
     LOG.info("Recovering application " + appId);
-    ApplicationImpl app = new ApplicationImpl(dispatcher, p.getUser(), appId,
-        creds, context, p.getUserFolder());
+    ApplicationImpl app = null;
+    if (cryptoMaterialVersion == -1) {
+      // Basically if RPC TLS is disabled
+      app = new ApplicationImpl(dispatcher, p.getUser(), appId,
+          creds, context, p.getUserFolder());
+    } else {
+      app = new ApplicationImpl(dispatcher, p.getUser(), appId, creds, context, p.getUserFolder(),
+          cryptoMaterialVersion);
+    }
     context.getApplications().put(appId, app);
     app.handle(new ApplicationInitEvent(appId, acls, logAggregationContext));
   }
@@ -924,7 +933,7 @@ public class ContainerManagerImpl extends CompositeService implements
       String user, String userFolder, Credentials credentials,
       Map<ApplicationAccessType, String> appAcls,
       LogAggregationContext logAggregationContext, ByteBuffer keyStore, String keyStorePass,
-      ByteBuffer trustStore, String trustStorePass) {
+      ByteBuffer trustStore, String trustStorePass, int cryptoVersion) {
 
     ContainerManagerApplicationProto.Builder builder =
         ContainerManagerApplicationProto.newBuilder();
@@ -941,6 +950,8 @@ public class ContainerManagerImpl extends CompositeService implements
       builder.setTrustStorePassword(trustStorePass);
     }
 
+    builder.setCryptoVersion(cryptoVersion);
+    
     if (logAggregationContext != null) {
       builder.setLogAggregationContext((
           (LogAggregationContextPBImpl)logAggregationContext).getProto());
@@ -1015,8 +1026,16 @@ public class ContainerManagerImpl extends CompositeService implements
       }
     }
     
+    int cryptoMaterialVersion = -1;
     // Inject crypto material when RPC TLS is enabled as LocalResources
-    injectCryptoMaterialAsLocalResources(user, containerId, launchContext);
+    if (getConfig() != null && getConfig().getBoolean(
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      injectCryptoMaterialAsLocalResources(user, containerId, launchContext);
+      // Crypto version of this material might be greater than 0, but from the NM's perspective it's
+      // the first time it receives it
+      cryptoMaterialVersion = 0;
+    }
     
     // Sanity check for local resources
     for (Map.Entry<String, LocalResource> rsrc : launchContext
@@ -1049,7 +1068,7 @@ public class ContainerManagerImpl extends CompositeService implements
       if (!serviceStopped) {
         // Create the application
         Application application =
-            new ApplicationImpl(dispatcher, user, applicationID, credentials, context, userFolder);
+            new ApplicationImpl(dispatcher, user, applicationID, credentials, context, userFolder, cryptoMaterialVersion);
         if (null == context.getApplications().putIfAbsent(applicationID,
           application)) {
           LOG.info("Creating a new application reference for app " + applicationID);
@@ -1057,9 +1076,10 @@ public class ContainerManagerImpl extends CompositeService implements
               containerTokenIdentifier.getLogAggregationContext();
           Map<ApplicationAccessType, String> appAcls =
               container.getLaunchContext().getApplicationACLs();
+          
           context.getNMStateStore().storeApplication(applicationID,
               buildAppProto(applicationID, user, userFolder, credentials, appAcls,
-                  logAggregationContext,keyStore, keyStorePass, trustStore, trustStorePass));
+                  logAggregationContext, keyStore, keyStorePass, trustStore, trustStorePass, cryptoMaterialVersion));
           dispatcher.getEventHandler().handle(
             new ApplicationInitEvent(applicationID, appAcls,
               logAggregationContext));
@@ -1108,31 +1128,27 @@ public class ContainerManagerImpl extends CompositeService implements
   private void injectCryptoMaterialAsLocalResources(String applicationUser, ContainerId containerId,
       ContainerLaunchContext containerLaunchContext)
       throws YarnException, IOException {
-    if (getConfig() != null && getConfig().getBoolean(
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      try {
-        String applicationId = containerId.getApplicationAttemptId().getApplicationId().toString();
-        CryptoMaterial cryptoMaterial = context
-            .getCertificateLocalizationService().getMaterialLocation(applicationUser, applicationId);
-        Path keyStoreLocation = cryptoMaterial.getKeyStoreLocation();
-        Path trustStoreLocation = cryptoMaterial.getTrustStoreLocation();
-        Path passwdLocation = cryptoMaterial.getPasswdLocation();
-        
-        if (keyStoreLocation == null || trustStoreLocation == null || passwdLocation == null) {
-          throw new YarnException("One of the crypto materials for container " + containerId.toString() + " has not " +
-              "been localized correctly and is null");
-        }
-        
-        Map<File, String> resources = new HashMap<>(3);
-        resources.put(keyStoreLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME);
-        resources.put(trustStoreLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_TRUSTSTORE_FILE_NAME);
-        resources.put(passwdLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_PASSWD_FILE_NAME);
-        
-        addAsLocalResource(resources, containerId, containerLaunchContext);
-      } catch (InterruptedException ex) {
-        throw new YarnException(ex);
+    try {
+      String applicationId = containerId.getApplicationAttemptId().getApplicationId().toString();
+      CryptoMaterial cryptoMaterial = context
+          .getCertificateLocalizationService().getMaterialLocation(applicationUser, applicationId);
+      Path keyStoreLocation = cryptoMaterial.getKeyStoreLocation();
+      Path trustStoreLocation = cryptoMaterial.getTrustStoreLocation();
+      Path passwdLocation = cryptoMaterial.getPasswdLocation();
+      
+      if (keyStoreLocation == null || trustStoreLocation == null || passwdLocation == null) {
+        throw new YarnException("One of the crypto materials for container " + containerId.toString() + " has not " +
+            "been localized correctly and is null");
       }
+      
+      Map<File, String> resources = new HashMap<>(3);
+      resources.put(keyStoreLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME);
+      resources.put(trustStoreLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_TRUSTSTORE_FILE_NAME);
+      resources.put(passwdLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_PASSWD_FILE_NAME);
+      
+      addAsLocalResource(resources, containerId, containerLaunchContext);
+    } catch (InterruptedException ex) {
+      throw new YarnException(ex);
     }
   }
   
@@ -1468,7 +1484,7 @@ public class ContainerManagerImpl extends CompositeService implements
     ContainerImpl container = (ContainerImpl) context.getContainers().get(event.getContainerId());
     if (container != null) {
       ContainerCryptoMaterialUpdater updater = new ContainerCryptoMaterialUpdater(container, event.getKeyStore(),
-          event.getKeyStorePassword(), event.getTrustStore(), event.getTrustStorePassword());
+          event.getKeyStorePassword(), event.getTrustStore(), event.getTrustStorePassword(), event.getVersion());
       scheduleUpdaterInternal(updater, container.getContainerId());
     }
   }
@@ -1487,16 +1503,18 @@ public class ContainerManagerImpl extends CompositeService implements
     private final char[] keyStorePassword;
     private final ByteBuffer trustStore;
     private final char[] trustStorePassword;
+    private final int cryptoVersion;
     private final BackOff backoff;
     private long backoffTime;
     
     private ContainerCryptoMaterialUpdater(ContainerImpl container, ByteBuffer keyStore, char[] keyStorePassword,
-        ByteBuffer trustStore, char[] trustStorePassword) {
+        ByteBuffer trustStore, char[] trustStorePassword, int cryptoVersion) {
       this.container = container;
       this.keyStore = keyStore;
       this.keyStorePassword = keyStorePassword;
       this.trustStore = trustStore;
       this.trustStorePassword = trustStorePassword;
+      this.cryptoVersion = cryptoVersion;
       this.backoff = createBackOffPolicy();
       this.backoffTime = 0L;
     }
@@ -1586,11 +1604,13 @@ public class ContainerManagerImpl extends CompositeService implements
     
     private void updateStateStore() throws IOException {
       ApplicationId applicationId = container.getContainerId().getApplicationAttemptId().getApplicationId();
+      Application app = context.getApplications().get(applicationId);
+      app.setCryptoMaterialVersion(cryptoVersion);
       context.getNMStateStore().storeApplication(applicationId,
           buildAppProto(applicationId, container.getUser(), container.getUserFolder(), container.getCredentials(),
               container.getLaunchContext().getApplicationACLs(), container.getContainerTokenIdentifier()
                   .getLogAggregationContext(),
-              keyStore, String.valueOf(keyStorePassword), trustStore, String.valueOf(trustStorePassword)));
+              keyStore, String.valueOf(keyStorePassword), trustStore, String.valueOf(trustStorePassword), cryptoVersion));
     }
   }
   

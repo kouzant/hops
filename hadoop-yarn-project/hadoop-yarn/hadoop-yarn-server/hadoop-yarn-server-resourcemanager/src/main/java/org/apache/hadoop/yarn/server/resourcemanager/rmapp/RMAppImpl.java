@@ -1149,7 +1149,7 @@ public class RMAppImpl implements RMApp, Recoverable {
       for (NodeId nodeId : app.ranNodes) {
         RMNodeUpdateCryptoMaterialForAppEvent updateEvent =
             new RMNodeUpdateCryptoMaterialForAppEvent(nodeId, app.applicationId, app.keyStore, app.keyStorePassword,
-                app.trustStore, app.trustStorePassword);
+                app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion);
         app.handler.handle(updateEvent);
       }
       

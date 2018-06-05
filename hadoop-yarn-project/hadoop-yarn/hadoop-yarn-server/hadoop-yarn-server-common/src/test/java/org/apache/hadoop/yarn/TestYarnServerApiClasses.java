@@ -225,6 +225,7 @@ public class TestYarnServerApiClasses {
     crypto1.setKeyStorePassword(keyStorePassword1);
     crypto1.setTrustStore(trustStore1);
     crypto1.setTrustStorePassword(trustStorePassword1);
+    crypto1.setVersion(1);
     updatedCryptoForApps.put(appId1, crypto1);
     
     ApplicationId appId2 = ApplicationId.newInstance(now, 2);
@@ -237,6 +238,7 @@ public class TestYarnServerApiClasses {
     crypto2.setKeyStorePassword(keyStorePassword2);
     crypto2.setTrustStore(trustStore2);
     crypto2.setTrustStorePassword(trustStorePassword2);
+    crypto2.setVersion(1);
     updatedCryptoForApps.put(appId2, crypto2);
     
     original.setUpdatedCryptoForApps(updatedCryptoForApps);
@@ -252,6 +254,7 @@ public class TestYarnServerApiClasses {
     assertArrayEquals(keyStorePassword1, copyAppCrypto1.getKeyStorePassword());
     assertTrue(trustStore1.equals(copyAppCrypto1.getTrustStore()));
     assertArrayEquals(trustStorePassword1, copyAppCrypto1.getTrustStorePassword());
+    assertEquals(1, copyAppCrypto1.getVersion());
     
     UpdatedCryptoForApp copyAppCrypto2 = copyCrypto.get(appId2);
     assertNotNull(copyAppCrypto2);
@@ -259,6 +262,7 @@ public class TestYarnServerApiClasses {
     assertArrayEquals(keyStorePassword2, copyAppCrypto2.getKeyStorePassword());
     assertTrue(trustStore2.equals(copyAppCrypto2.getTrustStore()));
     assertArrayEquals(trustStorePassword2, copyAppCrypto2.getTrustStorePassword());
+    assertEquals(1, copyAppCrypto2.getVersion());
     
     assertFalse(copyAppCrypto1.getKeyStore().equals(copyAppCrypto2.getKeyStore()));
     assertFalse(copyAppCrypto1.getTrustStore().equals(copyAppCrypto2.getTrustStore()));

@@ -800,6 +800,7 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
       updatedCrypto.setKeyStorePassword(updateEvent.getKeyStorePassword());
       updatedCrypto.setTrustStore(trustStore);
       updatedCrypto.setTrustStorePassword(updateEvent.getTrustStorePassword());
+      updatedCrypto.setVersion(updateEvent.getVersion());
       rmNode.appCryptoMaterialToUpdate.put(updateEvent.getAppId(), updatedCrypto);
     }
   }
