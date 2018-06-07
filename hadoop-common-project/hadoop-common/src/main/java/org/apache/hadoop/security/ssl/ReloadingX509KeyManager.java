@@ -21,6 +21,8 @@ import com.google.common.annotations.VisibleForTesting;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.hadoop.util.BackOff;
+import org.apache.hadoop.util.ExponentialBackOff;
 
 import javax.net.ssl.KeyManager;
 import javax.net.ssl.KeyManagerFactory;
@@ -29,6 +31,7 @@ import javax.net.ssl.X509ExtendedKeyManager;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.net.Socket;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
@@ -52,9 +55,11 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
   
   private AtomicReference<X509ExtendedKeyManager> keyManagerLocalRef;
   private long lastLoadedTimestamp;
-  private ScheduledFuture reloader = null;
+  private WeakReference<ScheduledFuture> reloader = null;
   // For testing
   private final AtomicBoolean fileExists = new AtomicBoolean(true);
+  // For testing
+  private int numberOfFailures = 0;
   
   /**
    * Creates a reloadable keystore manager.
@@ -106,8 +111,9 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
    */
   public void init() {
     if (reloader == null) {
-      reloader = KeyManagersReloaderThreadPool.getInstance().scheduleTask(new Reloader(), reloadInterval,
+      ScheduledFuture task = KeyManagersReloaderThreadPool.getInstance().scheduleTask(new Reloader(), reloadInterval,
           reloadTimeUnit);
+      reloader = new WeakReference<>(task);
     }
   }
   
@@ -116,7 +122,11 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
    */
   public void stop() {
     if (reloader != null) {
-      reloader.cancel(true);
+      ScheduledFuture task = reloader.get();
+      if (task != null) {
+        task.cancel(true);
+        reloader = null;
+      }
     }
   }
   
@@ -133,6 +143,10 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
   @VisibleForTesting
   public AtomicBoolean getFileExists() {
     return fileExists;
+  }
+  
+  public int getNumberOfFailures() {
+    return numberOfFailures;
   }
   
   private boolean needsReload() {
@@ -251,15 +265,42 @@ public class ReloadingX509KeyManager extends X509ExtendedKeyManager {
   }
   
   private class Reloader implements Runnable {
+    private final BackOff backOff;
+    private long backOffTimeout = 0L;
+    
+    private Reloader() {
+      backOff = new ExponentialBackOff.Builder()
+          .setInitialIntervalMillis(50)
+          .setMaximumIntervalMillis(2000)
+          .setMaximumRetries(KeyManagersReloaderThreadPool.MAX_NUMBER_OF_RETRIES)
+          .build();
+    }
+    
     @Override
     public void run() {
       if (needsReload()) {
         try {
+          TimeUnit.MILLISECONDS.sleep(backOffTimeout);
           keyManagerLocalRef.set(loadKeyManager());
-        } catch (GeneralSecurityException | IOException ex) {
-          LOG.error("Could not reload Key Manager. Using the previously loaded key store", ex);
+          if (hasFailed()) {
+            numberOfFailures = 0;
+            backOff.reset();
+          }
+        } catch (Exception ex) {
+          backOffTimeout = backOff.getBackOffInMillis();
+          numberOfFailures++;
+          if (backOffTimeout != -1) {
+            LOG.warn("Could not reload Key Manager (using the old), trying again in " + backOffTimeout + " ms");
+          } else {
+            LOG.error("Could not reload Key Manager, stop retrying", ex);
+            stop();
+          }
         }
       }
+    }
+    
+    private boolean hasFailed() {
+      return backOffTimeout > 0;
     }
   }
 }

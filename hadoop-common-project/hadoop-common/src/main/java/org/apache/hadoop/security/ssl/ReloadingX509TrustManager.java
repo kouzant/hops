@@ -25,6 +25,8 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.classification.InterfaceStability;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.hadoop.util.BackOff;
+import org.apache.hadoop.util.ExponentialBackOff;
 
 import javax.net.ssl.TrustManager;
 import javax.net.ssl.TrustManagerFactory;
@@ -32,6 +34,7 @@ import javax.net.ssl.X509TrustManager;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
+import java.lang.ref.WeakReference;
 import java.security.GeneralSecurityException;
 import java.security.KeyStore;
 import java.security.cert.CertificateException;
@@ -63,7 +66,11 @@ public final class ReloadingX509TrustManager
   private long reloadInterval;
   private AtomicReference<X509TrustManager> trustManagerRef;
 
-  private ScheduledFuture reloader = null;
+  private WeakReference<ScheduledFuture> reloader = null;
+  private final BackOff backOff;
+  private long backOffTimeout = 0L;
+  
+  private int numberOfFailures = 0;
   
   /**
    * Creates a reloadable trustmanager. The trustmanager reloads itself
@@ -113,6 +120,11 @@ public final class ReloadingX509TrustManager
     trustManagerRef = new AtomicReference<X509TrustManager>();
     trustManagerRef.set(loadTrustManager());
     this.reloadInterval = reloadInterval;
+    this.backOff = new ExponentialBackOff.Builder()
+        .setInitialIntervalMillis(50)
+        .setMaximumIntervalMillis(2000)
+        .setMaximumRetries(KeyManagersReloaderThreadPool.MAX_NUMBER_OF_RETRIES)
+        .build();
   }
 
   /**
@@ -120,7 +132,9 @@ public final class ReloadingX509TrustManager
    */
   public void init() {
     if (reloader == null) {
-      reloader = KeyManagersReloaderThreadPool.getInstance().scheduleTask(this, reloadInterval, TimeUnit.MILLISECONDS);
+      ScheduledFuture task = KeyManagersReloaderThreadPool.getInstance().scheduleTask(this, reloadInterval, TimeUnit
+          .MILLISECONDS);
+      reloader = new WeakReference<>(task);
     }
   }
 
@@ -129,7 +143,11 @@ public final class ReloadingX509TrustManager
    */
   public void destroy() {
     if (reloader != null) {
-      reloader.cancel(true);
+      ScheduledFuture task = reloader.get();
+      if (task != null) {
+        task.cancel(true);
+        reloader = null;
+      }
     }
   }
 
@@ -142,6 +160,10 @@ public final class ReloadingX509TrustManager
     return reloadInterval;
   }
 
+  public int getNumberOfFailures() {
+    return numberOfFailures;
+  }
+  
   @Override
   public void checkClientTrusted(X509Certificate[] chain, String authType)
     throws CertificateException {
@@ -220,13 +242,29 @@ public final class ReloadingX509TrustManager
     return trustManager;
   }
 
+  private boolean hasFailed() {
+    return backOffTimeout > 0;
+  }
+  
   @Override
   public void run() {
     if (needsReload()) {
       try {
+        TimeUnit.MILLISECONDS.sleep(backOffTimeout);
         trustManagerRef.set(loadTrustManager());
+        if (hasFailed()) {
+          backOff.reset();
+          numberOfFailures = 0;
+        }
       } catch (Exception ex) {
-        LOG.warn(RELOAD_ERROR_MESSAGE + ex.toString(), ex);
+        backOffTimeout = backOff.getBackOffInMillis();
+        numberOfFailures++;
+        if (backOffTimeout != -1) {
+          LOG.warn(RELOAD_ERROR_MESSAGE + ex.toString() + " trying again in " + backOffTimeout + " ms");
+        } else {
+          LOG.error(RELOAD_ERROR_MESSAGE + ", stop retrying", ex);
+          destroy();
+        }
       }
     }
   }

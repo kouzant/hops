@@ -20,7 +20,6 @@ package org.apache.hadoop.security.ssl;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.util.ShutdownHookManager;
 
-import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executors;
@@ -32,6 +31,8 @@ import java.util.concurrent.TimeUnit;
  * Thread pool used by reloading key managers to schedule tasks
  */
 public final class KeyManagersReloaderThreadPool {
+  public static final int MAX_NUMBER_OF_RETRIES = 3;
+  
   private static final int THREAD_POOL_SIZE = 10;
   private final ScheduledExecutorService scheduler;
   // For testing
