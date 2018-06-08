@@ -45,7 +45,7 @@ public class CMgrUpdateCryptoMaterialEvent extends ContainerManagerEvent {
   }
   
   public ByteBuffer getKeyStore() {
-    return keyStore;
+    return keyStore.asReadOnlyBuffer();
   }
   
   public char[] getKeyStorePassword() {
@@ -53,7 +53,7 @@ public class CMgrUpdateCryptoMaterialEvent extends ContainerManagerEvent {
   }
   
   public ByteBuffer getTrustStore() {
-    return trustStore;
+    return trustStore.asReadOnlyBuffer();
   }
   
   public char[] getTrustStorePassword() {

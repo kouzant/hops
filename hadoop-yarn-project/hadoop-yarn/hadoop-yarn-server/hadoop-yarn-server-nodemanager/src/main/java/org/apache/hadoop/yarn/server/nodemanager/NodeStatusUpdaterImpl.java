@@ -887,9 +887,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
                     if (crypto.getVersion() > application.getCryptoMaterialVersion()) {
                       context.getCertificateLocalizationService()
                           .updateCryptoMaterial(application.getUser(), application.getAppId().toString(),
-                              crypto.getKeyStore().asReadOnlyBuffer(), String.valueOf(crypto.getKeyStorePassword()),
-                              crypto.getTrustStore().asReadOnlyBuffer(),
-                              String.valueOf(crypto.getTrustStorePassword()));
+                              crypto.getKeyStore(), String.valueOf(crypto.getKeyStorePassword()),
+                              crypto.getTrustStore(), String.valueOf(crypto.getTrustStorePassword()));
   
                       Set<ContainerId> containers = application.getContainers().keySet();
                       for (ContainerId cid : containers) {

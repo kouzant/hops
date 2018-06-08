@@ -30,9 +30,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.FileChannel;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
 import java.nio.file.attribute.PosixFilePermission;
-import java.nio.file.attribute.PosixFilePermissions;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -217,6 +215,7 @@ public class ContainerManagerImpl extends CompositeService implements
   private long waitForContainersOnShutdownMillis;
   
   private final ExecutorService cryptoMaterialUpdaterThreadPool;
+  private final Map<ContainerId, Future> cryptoMaterialUpdaters = new HashMap<>();
 
   public ContainerManagerImpl(Context context, ContainerExecutor exec,
       DeletionService deletionContext, NodeStatusUpdater nodeStatusUpdater,
@@ -1464,8 +1463,6 @@ public class ContainerManagerImpl extends CompositeService implements
       throw RPCUtil.getRemoteException(msg);
     }
   }
-
-  private final Map<ContainerId, Future> cryptoMaterialUpdaters = new HashMap<>();
   
   private Future removeCryptoUpdaterTask(ContainerId cid) {
     Future task = null;
@@ -1573,19 +1570,29 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     
     private void writeByteBufferToFile(File target, ByteBuffer data) throws IOException {
+      Set<PosixFilePermission> permissions = null;
       Path targetPath = target.toPath();
-      Set<PosixFilePermission> permissions = addOwnerWritePermission(targetPath);
+      if (!target.canWrite()) {
+        permissions = addOwnerWritePermission(targetPath);
+      }
       FileChannel fileChannel = new FileOutputStream(target, false).getChannel();
       fileChannel.write(data);
       fileChannel.close();
-      removeOwnerWritePermission(targetPath, permissions);
+      if (permissions != null) {
+        removeOwnerWritePermission(targetPath, permissions);
+      }
     }
   
     private void writeStringToFile(File target, String data) throws IOException {
+      Set<PosixFilePermission> permissions = null;
       Path targetPath = target.toPath();
-      Set<PosixFilePermission> permissions = addOwnerWritePermission(targetPath);
+      if (!target.canWrite()) {
+        permissions = addOwnerWritePermission(targetPath);
+      }
       FileUtils.writeStringToFile(target, data);
-      removeOwnerWritePermission(targetPath, permissions);
+      if (permissions != null) {
+        removeOwnerWritePermission(targetPath, permissions);
+      }
     }
     
     private Set<PosixFilePermission> addOwnerWritePermission(Path target) throws IOException {
@@ -1769,6 +1776,11 @@ public class ContainerManagerImpl extends CompositeService implements
     return this.context;
   }
 
+  @VisibleForTesting
+  public Map<ContainerId, Future> getCryptoMaterialUpdaters() {
+    return cryptoMaterialUpdaters;
+  }
+  
   public Map<String, ByteBuffer> getAuxServiceMetaData() {
     return this.auxiliaryServices.getMetaData();
   }

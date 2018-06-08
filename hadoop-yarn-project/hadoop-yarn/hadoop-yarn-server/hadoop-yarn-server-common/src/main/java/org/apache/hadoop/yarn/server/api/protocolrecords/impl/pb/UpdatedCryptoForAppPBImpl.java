@@ -102,13 +102,13 @@ public class UpdatedCryptoForAppPBImpl extends UpdatedCryptoForApp {
   public ByteBuffer getKeyStore() {
     YarnServerCommonServiceProtos.UpdatedCryptoForAppProtoOrBuilder p = viaProto ? proto : builder;
     if (this.keyStore != null) {
-      return this.keyStore;
+      return this.keyStore.asReadOnlyBuffer();
     }
     if (!p.hasKeyStore()) {
       return null;
     }
     this.keyStore = convertFromProtoFormat(p.getKeyStore());
-    return this.keyStore;
+    return this.keyStore.asReadOnlyBuffer();
   }
   
   @Override
@@ -143,13 +143,13 @@ public class UpdatedCryptoForAppPBImpl extends UpdatedCryptoForApp {
   public ByteBuffer getTrustStore() {
     YarnServerCommonServiceProtos.UpdatedCryptoForAppProtoOrBuilder p = viaProto ? proto : builder;
     if (this.trustStore != null) {
-      return this.trustStore;
+      return this.trustStore.asReadOnlyBuffer();
     }
     if (!p.hasTrustStore()) {
       return null;
     }
     this.trustStore = convertFromProtoFormat(p.getTrustStore());
-    return this.trustStore;
+    return this.trustStore.asReadOnlyBuffer();
   }
   
   @Override
