@@ -28,6 +28,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -928,9 +929,9 @@ public class TestRMNodeTransitions {
     assertEquals(1, node.getAppCryptoMaterialToUpdate().size());
     UpdatedCryptoForApp cryptoToUpdate = node.getAppCryptoMaterialToUpdate().get(appId);
     assertNotNull(cryptoToUpdate);
-    assertTrue(Arrays.equals(keyStore, cryptoToUpdate.getKeyStore().array()));
+    assertTrue(ByteBuffer.wrap(keyStore).equals(cryptoToUpdate.getKeyStore()));
     assertTrue(Arrays.equals(keyStorePassword, cryptoToUpdate.getKeyStorePassword()));
-    assertTrue(Arrays.equals(trustStore, cryptoToUpdate.getTrustStore().array()));
+    assertTrue(ByteBuffer.wrap(trustStore).equals(cryptoToUpdate.getTrustStore()));
     assertTrue(Arrays.equals(trustStorePassword, cryptoToUpdate.getTrustStorePassword()));
   }
   
