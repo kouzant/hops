@@ -325,21 +325,21 @@ public class TestRMAppCertificateManager {
         appId, username, cryptoMaterialVersion, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
   
     dispatcher.await();
-    Mockito.verify(mockRemoteActions, Mockito.atMost(1)).sign(Mockito.any(PKCS10CertificationRequest.class));
+    Mockito.verify(mockRemoteActions).sign(Mockito.any(PKCS10CertificationRequest.class));
     
     manager.handle(new RMAppCertificateManagerEvent(
         appId, username, cryptoMaterialVersion, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
     
     dispatcher.await();
-    Mockito.verify(manager, Mockito.atMost(1))
+    Mockito.verify(manager)
         .revokeCertificate(appId, username, cryptoMaterialVersion);
-    Mockito.verify(manager, Mockito.atMost(1))
+    Mockito.verify(manager)
         .deregisterFromCertificateRenewer(appId);
   
     TimeUnit.SECONDS.sleep(3);
     
     String certificateIdentifier = username + "__" + appId.toString() + "__" + cryptoMaterialVersion;
-    Mockito.verify(mockRemoteActions, Mockito.atMost(1))
+    Mockito.verify(mockRemoteActions)
         .revoke(Mockito.eq(certificateIdentifier));
     
     manager.stop();
@@ -434,24 +434,27 @@ public class TestRMAppCertificateManager {
   
     Set<ApplicationId> updatedAppCrypto = new HashSet<>(1);
     updatedAppCrypto.add(application.getApplicationId());
+  
     
     nm.nodeHeartbeat(Collections.<ContainerStatus>emptyList(), Collections.<Container>emptyList(), true, nm
         .getNextResponseId(), updatedAppCrypto);
     
-    RMAppImpl spyApp = (RMAppImpl) Mockito.spy(application);
+    TimeUnit.MILLISECONDS.sleep(100);
     
-    Mockito.verify(spyApp, Mockito.atMost(1)).rmNodeHasUpdatedCryptoMaterial(Mockito.eq(nm.getNodeId()));
-    assertNull(spyApp.getRMNodesUpdatedCryptoMaterial());
-    assertFalse(spyApp.isAppRotatingCryptoMaterial());
+    RMAppImpl appImpl = (RMAppImpl) application;
+    assertNull(appImpl.getRMNodesUpdatedCryptoMaterial());
+    assertFalse(application.isAppRotatingCryptoMaterial());
     
     appState = rm.getRMContext().getStateStore().loadState().getApplicationState().get(application.getApplicationId());
     // By now material rotation should have stopped
     assertFalse(appState.isDuringMaterialRotation());
     assertEquals(-1L, appState.getMaterialRotationStartTime());
     
-    Mockito.verify(rm.getRMContext().getRMAppCertificateManager(), Mockito.atMost(1))
+    TimeUnit.MILLISECONDS.sleep(100);
+    
+    Mockito.verify(rm.getRMContext().getRMAppCertificateManager())
         .revokeCertificate(Mockito.eq(application.getApplicationId()), Mockito.eq(application.getUser()),
-            Mockito.eq(application.getCryptoMaterialVersion() - 1));
+            Mockito.eq(application.getCryptoMaterialVersion() - 1), Mockito.eq(true));
     rm.stop();
     
     conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "2d");

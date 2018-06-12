@@ -199,6 +199,8 @@ public class RMAppCertificateManager extends AbstractService
       generateCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE)) {
       revokeCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
+    } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE_AFTER_ROTATION)) {
+      revokeCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion(), true);
     } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE)) {
       revokeAndGenerateCertificates(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else {
@@ -477,15 +479,24 @@ public class RMAppCertificateManager extends AbstractService
   @InterfaceAudience.Private
   @VisibleForTesting
   public void revokeCertificate(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
+    revokeCertificate(appId, applicationUser, cryptoMaterialVersion, false);
+  }
+  
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  public void revokeCertificate(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion,
+      boolean isFromRenewal) {
     if (isRPCTLSEnabled()) {
       LOG.info("Revoking certificate for application: " + appId + " with version " + cryptoMaterialVersion);
       try {
         // Deregister application from certificate renewal, if it exists
-        deregisterFromCertificateRenewer(appId);
-        putToQueue(appId, applicationUser, cryptoMaterialVersion);
-        if (certificateLocalizationService != null) {
-          certificateLocalizationService.removeMaterial(applicationUser, appId.toString());
+        if (!isFromRenewal) {
+          deregisterFromCertificateRenewer(appId);
+          if (certificateLocalizationService != null) {
+            certificateLocalizationService.removeMaterial(applicationUser, appId.toString());
+          }
         }
+        putToQueue(appId, applicationUser, cryptoMaterialVersion);
       } catch (InterruptedException ex) {
         LOG.warn("Could not remove material for user " + applicationUser + " and application " + appId, ex);
       }

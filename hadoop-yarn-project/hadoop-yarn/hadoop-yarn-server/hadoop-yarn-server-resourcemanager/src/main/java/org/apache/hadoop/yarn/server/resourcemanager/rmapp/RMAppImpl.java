@@ -1328,6 +1328,14 @@ public class RMAppImpl implements RMApp, Recoverable {
 
     @Override
     public void transition(RMAppImpl app, RMAppEvent event) {
+      if ((transitionToDo instanceof AppKilledTransition) &&
+          (app.getState().equals(RMAppState.GENERATING_CERTS) || app.getState().equals(RMAppState.ACCEPTED))) {
+        app.sendCertificateRevocationEvent();
+      }
+      // In any other state later than SUBMITTED, the revocation will be done be the RMAppAttempt
+      if (app.getState().equals(RMAppState.SUBMITTED)) {
+        app.sendCertificateRevocationEvent();
+      }
       app.rememberTargetTransitionsAndStoreState(event, transitionToDo,
         targetedFinalState, stateToBeStored);
     }
@@ -1542,8 +1550,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (numberOfFailure >= app.maxAppAttempts) {
           app.isNumAttemptsBeyondThreshold = true;
         }
-        app.handler.handle(new RMAppCertificateManagerEvent(app.applicationId, app.user, app.cryptoMaterialVersion,
-            RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+        app.sendCertificateRevocationEvent();
         
         app.rememberTargetTransitionsAndStoreState(event,
           new AttemptFailedFinalStateSavedTransition(), RMAppState.FAILED,
@@ -1553,6 +1560,11 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
   }
 
+  private void sendCertificateRevocationEvent() {
+    handler.handle(new RMAppCertificateManagerEvent(applicationId, user, cryptoMaterialVersion,
+        RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+  }
+  
   @Override
   public String getApplicationType() {
     return this.applicationType;
@@ -2015,7 +2027,9 @@ public class RMAppImpl implements RMApp, Recoverable {
         rmNodesThatUpdatedCryptoMaterial.add(nodeId);
         if (rmNodesThatUpdatedCryptoMaterial.containsAll(ranNodes)) {
           int cryptoVersionToRevoke = cryptoMaterialVersion - 1;
-          rmContext.getRMAppCertificateManager().revokeCertificate(applicationId, user, cryptoVersionToRevoke);
+          RMAppCertificateManagerEvent event = new RMAppCertificateManagerEvent(applicationId, user,
+              cryptoVersionToRevoke, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE_AFTER_ROTATION);
+          handler.handle(event);
           rmNodesThatUpdatedCryptoMaterial = null;
           isAppRotatingCryptoMaterial.compareAndSet(true, false);
           materialRotationStartTime.set(-1L);
