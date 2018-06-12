@@ -247,6 +247,21 @@ public abstract class MockAsm extends MockApps {
     public long getCertificateExpiration() {
       throw new UnsupportedOperationException("Not supported yet.");
     }
+  
+    @Override
+    public boolean isAppRotatingCryptoMaterial() {
+      throw new UnsupportedOperationException("Not supported yet.");
+    }
+  
+    @Override
+    public long getMaterialRotationStartTime() {
+      throw new UnsupportedOperationException("Not supported yet.");
+    }
+  
+    @Override
+    public void rmNodeHasUpdatedCryptoMaterial(NodeId nodeId) {
+      throw new UnsupportedOperationException("Not supported yet.");
+    }
   }
 
   public static RMApp newApplication(int i) {

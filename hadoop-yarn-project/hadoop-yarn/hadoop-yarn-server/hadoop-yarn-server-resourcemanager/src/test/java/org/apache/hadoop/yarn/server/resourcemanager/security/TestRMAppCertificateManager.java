@@ -34,6 +34,8 @@ import org.apache.hadoop.yarn.MockApps;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
+import org.apache.hadoop.yarn.api.records.Container;
+import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
@@ -61,12 +63,14 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
+import org.mockito.Mock;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -88,9 +92,12 @@ import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -365,6 +372,7 @@ public class TestRMAppCertificateManager {
     conf.setBoolean(YarnConfiguration.RECOVERY_ENABLED, true);
     conf.set(YarnConfiguration.RM_STORE, DBRMStateStore.class.getName());
     conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "45s");
+    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
     
     MockRM rm  = new MyMockRM(conf);
     rm.start();
@@ -420,6 +428,30 @@ public class TestRMAppCertificateManager {
     assertTrue(Arrays.equals(newKeyStorePass, appState.getKeyStorePassword()));
     assertTrue(Arrays.equals(newTrustStorePass, appState.getTrustStorePassword()));
     assertEquals(currentCryptoMaterialVersion, appState.getCryptoMaterialVersion());
+    // Still NM didn't respond with updated crypto material for app
+    assertTrue(appState.isDuringMaterialRotation());
+    assertNotEquals(-1L, appState.getMaterialRotationStartTime());
+  
+    Set<ApplicationId> updatedAppCrypto = new HashSet<>(1);
+    updatedAppCrypto.add(application.getApplicationId());
+    
+    nm.nodeHeartbeat(Collections.<ContainerStatus>emptyList(), Collections.<Container>emptyList(), true, nm
+        .getNextResponseId(), updatedAppCrypto);
+    
+    RMAppImpl spyApp = (RMAppImpl) Mockito.spy(application);
+    
+    Mockito.verify(spyApp, Mockito.atMost(1)).rmNodeHasUpdatedCryptoMaterial(Mockito.eq(nm.getNodeId()));
+    assertNull(spyApp.getRMNodesUpdatedCryptoMaterial());
+    assertFalse(spyApp.isAppRotatingCryptoMaterial());
+    
+    appState = rm.getRMContext().getStateStore().loadState().getApplicationState().get(application.getApplicationId());
+    // By now material rotation should have stopped
+    assertFalse(appState.isDuringMaterialRotation());
+    assertEquals(-1L, appState.getMaterialRotationStartTime());
+    
+    Mockito.verify(rm.getRMContext().getRMAppCertificateManager(), Mockito.atMost(1))
+        .revokeCertificate(Mockito.eq(application.getApplicationId()), Mockito.eq(application.getUser()),
+            Mockito.eq(application.getCryptoMaterialVersion() - 1));
     rm.stop();
     
     conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "2d");
@@ -430,6 +462,10 @@ public class TestRMAppCertificateManager {
     RMApp recoveredApp = rm2.getRMContext().getRMApps().get(application.getApplicationId());
     assertNotNull(recoveredApp);
     assertTrue(Arrays.equals(newKeyStore, recoveredApp.getKeyStore()));
+    appState = rm2.getRMContext().getStateStore().loadState().getApplicationState().get(application.getApplicationId());
+    // RMApp should not recover in material rotation phase
+    assertFalse(appState.isDuringMaterialRotation());
+    assertEquals(-1L, appState.getMaterialRotationStartTime());
     
     rm2.killApp(application.getApplicationId());
     rm2.waitForState(application.getApplicationId(), RMAppState.KILLED);
@@ -489,7 +525,8 @@ public class TestRMAppCertificateManager {
   
     @Override
     protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
-      return new MockRMAppCertificateManager(false, rmContext);
+      MockRMAppCertificateManager spyCertManager = Mockito.spy(new MockRMAppCertificateManager(false, rmContext));
+      return spyCertManager;
     }
   }
   

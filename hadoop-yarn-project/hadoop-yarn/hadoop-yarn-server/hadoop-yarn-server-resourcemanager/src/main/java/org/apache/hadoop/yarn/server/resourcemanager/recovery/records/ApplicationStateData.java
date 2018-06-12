@@ -62,7 +62,8 @@ public abstract class ApplicationStateData {
   public static ApplicationStateData newInstance(long submitTime, long startTime,
       ApplicationSubmissionContext context, String user, CallerContext callerContext,
       byte[] keyStore, char[] keyStorePassword, byte[] trustStore, char[] trustStorePassword,
-      Integer cryptoMaterialVersion, long certificateExpiration) {
+      Integer cryptoMaterialVersion, long certificateExpiration, boolean isDuringMaterialRotation,
+      long materialRotationStartTime) {
     ApplicationStateData appState = newInstance(submitTime, startTime, context, user, callerContext);
     appState.setKeyStore(keyStore);
     appState.setKeyStorePassword(keyStorePassword);
@@ -70,6 +71,8 @@ public abstract class ApplicationStateData {
     appState.setTrustStorePassword(trustStorePassword);
     appState.setCryptoMaterialVersion(cryptoMaterialVersion);
     appState.setCertificateExpiration(certificateExpiration);
+    appState.setIsDuringMaterialRotation(isDuringMaterialRotation);
+    appState.setMaterialRotationStartTime(materialRotationStartTime);
     return appState;
   }
   
@@ -196,4 +199,12 @@ public abstract class ApplicationStateData {
   public abstract long getCertificateExpiration();
   
   public abstract void setCertificateExpiration(long certificateExpiration);
+  
+  public abstract boolean isDuringMaterialRotation();
+  
+  public abstract void setIsDuringMaterialRotation(boolean isDuringMaterialRotation);
+  
+  public abstract long getMaterialRotationStartTime();
+  
+  public abstract void setMaterialRotationStartTime(long materialRotationStartTime);
 }

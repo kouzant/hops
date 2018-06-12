@@ -67,6 +67,8 @@ public class MockRMApp implements RMApp {
   char[] trustStorePassword;
   Integer cryptoMaterialVersion = 0;
   long certificateExpiration;
+  boolean isAppDuringMaterialRotation = false;
+  long materialRotationStartTime = -1L;
 
   public MockRMApp(int newid, long time, RMAppState newState) {
     finish = time;
@@ -336,5 +338,20 @@ public class MockRMApp implements RMApp {
   @Override
   public long getCertificateExpiration() {
     return certificateExpiration;
+  }
+  
+  @Override
+  public boolean isAppRotatingCryptoMaterial() {
+    return isAppDuringMaterialRotation;
+  }
+  
+  @Override
+  public long getMaterialRotationStartTime() {
+    return materialRotationStartTime;
+  }
+  
+  @Override
+  public void rmNodeHasUpdatedCryptoMaterial(NodeId nodeId) {
+    // Do nothing
   }
 }

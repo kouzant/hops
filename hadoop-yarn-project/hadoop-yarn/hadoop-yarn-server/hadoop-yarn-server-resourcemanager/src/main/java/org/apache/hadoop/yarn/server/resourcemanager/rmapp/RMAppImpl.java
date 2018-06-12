@@ -37,6 +37,8 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListSet;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -426,6 +428,10 @@ public class RMAppImpl implements RMApp, Recoverable {
   private static final float MINIMUM_AM_BLACKLIST_THRESHOLD_VALUE = 0.0f;
   private static final float MAXIMUM_AM_BLACKLIST_THRESHOLD_VALUE = 1.0f;
 
+  private AtomicBoolean isAppRotatingCryptoMaterial;
+  private Set<NodeId> rmNodesThatUpdatedCryptoMaterial;
+  private AtomicLong materialRotationStartTime;
+  
   public RMAppImpl(ApplicationId applicationId, RMContext rmContext,
       Configuration config, String name, String user, String queue,
       ApplicationSubmissionContext submissionContext, YarnScheduler scheduler,
@@ -524,6 +530,9 @@ public class RMAppImpl implements RMApp, Recoverable {
             DEFAULT_AM_SCHEDULING_NODE_BLACKLISTING_DISABLE_THRESHOLD;
       }
     }
+    
+    isAppRotatingCryptoMaterial = new AtomicBoolean(false);
+    materialRotationStartTime = new AtomicLong(-1L);
   }
 
   @Override
@@ -874,6 +883,8 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.trustStorePassword = appState.getTrustStorePassword();
     this.cryptoMaterialVersion = appState.getCryptoMaterialVersion();
     this.certificateExpiration = appState.getCertificateExpiration();
+    this.isAppRotatingCryptoMaterial.set(appState.isDuringMaterialRotation());
+    this.materialRotationStartTime.set(appState.getMaterialRotationStartTime());
 
     // send the ATS create Event during RM recovery.
     // NOTE: it could be duplicated with events sent before RM get restarted.
@@ -1120,7 +1131,8 @@ public class RMAppImpl implements RMApp, Recoverable {
         ApplicationStateData appNewState =
             ApplicationStateData.newInstance(app.submitTime, app.startTime, app.submissionContext, app.user,
                 app.callerContext, app.keyStore, app.keyStorePassword,
-                app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration);
+                app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration,
+                app.isAppRotatingCryptoMaterial.get(), app.materialRotationStartTime.get());
         app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
         app.rmContext.getRMAppCertificateManager()
             .registerWithCertificateRenewer(app.applicationId, app.user, app.cryptoMaterialVersion,
@@ -1140,11 +1152,19 @@ public class RMAppImpl implements RMApp, Recoverable {
       LOG.info("Received new certificate");
       app.updateApplicationWithCryptoMaterial((RMAppCertificateGeneratedEvent) event);
       app.cryptoMaterialVersion++;
+      app.isAppRotatingCryptoMaterial.compareAndSet(false, true);
+      app.materialRotationStartTime.set(app.systemClock.getTime());
+      
       ApplicationStateData appNewState =
           ApplicationStateData.newInstance(app.submitTime, app.startTime, app.submissionContext, app.user,
               app.callerContext, app.keyStore, app.keyStorePassword,
-              app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration);
+              app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion, app.certificateExpiration,
+              app.isAppRotatingCryptoMaterial.get(), app.materialRotationStartTime.get());
       app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
+      
+      if (app.rmNodesThatUpdatedCryptoMaterial == null) {
+        app.rmNodesThatUpdatedCryptoMaterial = new HashSet<>(app.ranNodes.size());
+      }
       
       for (NodeId nodeId : app.ranNodes) {
         RMNodeUpdateCryptoMaterialForAppEvent updateEvent =
@@ -1966,5 +1986,49 @@ public class RMAppImpl implements RMApp, Recoverable {
   @Override
   public Integer getCryptoMaterialVersion() {
     return cryptoMaterialVersion;
+  }
+  
+  @VisibleForTesting
+  public Set<NodeId> getRMNodesUpdatedCryptoMaterial() {
+    return rmNodesThatUpdatedCryptoMaterial;
+  }
+  
+  @VisibleForTesting
+  public boolean isAppRotatingCryptoMaterial() {
+    return isAppRotatingCryptoMaterial.get();
+  }
+  
+  @Override
+  public long getMaterialRotationStartTime() {
+    return materialRotationStartTime.get();
+  }
+  
+  @Override
+  public void rmNodeHasUpdatedCryptoMaterial(NodeId nodeId) {
+    this.writeLock.lock();
+    try {
+      if (rmNodesThatUpdatedCryptoMaterial == null) {
+        LOG.error("Received RMNode updated crypto material but Set is null!");
+        return;
+      }
+      if (isAppRotatingCryptoMaterial.get()) {
+        rmNodesThatUpdatedCryptoMaterial.add(nodeId);
+        if (rmNodesThatUpdatedCryptoMaterial.containsAll(ranNodes)) {
+          int cryptoVersionToRevoke = cryptoMaterialVersion - 1;
+          rmContext.getRMAppCertificateManager().revokeCertificate(applicationId, user, cryptoVersionToRevoke);
+          rmNodesThatUpdatedCryptoMaterial = null;
+          isAppRotatingCryptoMaterial.compareAndSet(true, false);
+          materialRotationStartTime.set(-1L);
+          ApplicationStateData appNewState =
+              ApplicationStateData.newInstance(submitTime, startTime, submissionContext, user,
+                  callerContext, keyStore, keyStorePassword,
+                  trustStore, trustStorePassword, cryptoMaterialVersion, certificateExpiration,
+                  isAppRotatingCryptoMaterial.get(), -1L);
+          rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
+        }
+      }
+    } finally {
+      this.writeLock.unlock();
+    }
   }
 }

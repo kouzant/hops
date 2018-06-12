@@ -366,6 +366,33 @@ public class ApplicationStateDataPBImpl extends ApplicationStateData {
     builder.setCertificateExpiration(certificateExpiration);
   }
   
+  @Override
+  public boolean isDuringMaterialRotation() {
+    ApplicationStateDataProtoOrBuilder p = viaProto ? proto : builder;
+    return p.getIsDuringMaterialRotation();
+  }
+  
+  @Override
+  public void setIsDuringMaterialRotation(boolean isDuringMaterialRotation) {
+    maybeInitBuilder();
+    builder.setIsDuringMaterialRotation(isDuringMaterialRotation);
+  }
+  
+  @Override
+  public long getMaterialRotationStartTime() {
+    ApplicationStateDataProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasMaterialRotationStart()) {
+      return -1L;
+    }
+    return p.getMaterialRotationStart();
+  }
+  
+  @Override
+  public void setMaterialRotationStartTime(long materialRotationStartTime) {
+    maybeInitBuilder();
+    builder.setMaterialRotationStart(materialRotationStartTime);
+  }
+  
   private static String RM_APP_PREFIX = "RMAPP_";
   public static RMAppStateProto convertToProtoFormat(RMAppState e) {
     return RMAppStateProto.valueOf(RM_APP_PREFIX + e.name());

@@ -269,4 +269,10 @@ public interface RMApp extends EventHandler<RMAppEvent> {
   Integer getCryptoMaterialVersion();
   
   long getCertificateExpiration();
+  
+  long getMaterialRotationStartTime();
+  
+  void rmNodeHasUpdatedCryptoMaterial(NodeId nodeId);
+  
+  boolean isAppRotatingCryptoMaterial();
 }

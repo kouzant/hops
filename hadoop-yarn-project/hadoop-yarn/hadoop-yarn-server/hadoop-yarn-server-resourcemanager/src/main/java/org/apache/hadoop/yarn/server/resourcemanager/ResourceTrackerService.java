@@ -552,6 +552,8 @@ public class ResourceTrackerService extends AbstractService implements
       if (updatedApps != null) {
         for (ApplicationId appId : updatedApps) {
           rmNode.getAppCryptoMaterialToUpdate().remove(appId);
+          RMApp rmApp = rmContext.getRMApps().get(appId);
+          rmApp.rmNodeHasUpdatedCryptoMaterial(rmNode.getNodeID());
         }
       }
     }
