@@ -36,14 +36,18 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Container;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
+import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
+import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
+import org.apache.hadoop.yarn.server.resourcemanager.MockAM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
+import org.apache.hadoop.yarn.server.resourcemanager.RMAppManager;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.DBRMStateStore;
@@ -54,7 +58,10 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppCertificateGeneratedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
+import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
+import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.junit.After;
@@ -95,6 +102,7 @@ import java.util.Collections;
 import java.util.Enumeration;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
@@ -523,6 +531,85 @@ public class TestRMAppCertificateManager {
     rm2.stop();
   }
   
+  @Test
+  public void testContainerAllocationDuringMaterialRotation() throws Exception {
+    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
+    conf.setBoolean(YarnConfiguration.RECOVERY_ENABLED, true);
+    conf.set(YarnConfiguration.RM_STORE, DBRMStateStore.class.getName());
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "40s");
+    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
+    
+    MockRM rm = new MyMockRM2(conf);
+    rm.start();
+    MockNM nm1 = new MockNM("127.0.0.1:1234", 2 * 1024, rm.getResourceTrackerService());
+    nm1.registerNode();
+    
+    RMApp app = rm.submitApp(1024);
+    // Trigger scheduling for AM
+    nm1.nodeHeartbeat(true);
+  
+    RMAppAttempt appAttempt = app.getCurrentAppAttempt();
+    MockAM am = rm.sendAMLaunched(appAttempt.getAppAttemptId());
+    am.registerAppAttempt(true);
+    
+    // Allocate one container
+    am.allocate("127.0.0.1", 512, 1, Collections.emptyList());
+    
+    // Trigger scheduler
+    nm1.nodeHeartbeat(true);
+    List<Container> allocatedContainers = am.allocate(Collections.emptyList(), Collections.emptyList())
+        .getAllocatedContainers();
+    while (allocatedContainers.size() < 1) {
+      nm1.nodeHeartbeat(true);
+      TimeUnit.MILLISECONDS.sleep(200);
+      allocatedContainers = am.allocate(Collections.emptyList(), Collections.emptyList()).getAllocatedContainers();
+    }
+    
+    // Wait for the renewal to happen
+    while (!app.isAppRotatingCryptoMaterial()) {
+      TimeUnit.MILLISECONDS.sleep(500);
+    }
+    
+    // Register second NM
+    MockNM nm2 = new MockNM("127.0.0.2:1234", 2 * 1024, rm.getResourceTrackerService());
+    nm2.registerNode();
+  
+    assertTrue(app.isAppRotatingCryptoMaterial());
+    
+    // Allocate second container while app is in Crypto Material rotation phase (see MyMockRM2)
+    am.allocate("127.0.0.2", 512, 1, Collections.emptyList());
+    NodeHeartbeatResponse nmResponse = nm2.nodeHeartbeat(true);
+    assertTrue(nmResponse.getUpdatedCryptoForApps().isEmpty());
+    
+    allocatedContainers = am.allocate(Collections.emptyList(), Collections.emptyList()).getAllocatedContainers();
+    while (allocatedContainers.size() < 1) {
+      nmResponse = nm2.nodeHeartbeat(true);
+      assertTrue(nmResponse.getUpdatedCryptoForApps().isEmpty());
+      TimeUnit.MILLISECONDS.sleep(200);
+      allocatedContainers = am.allocate(Collections.emptyList(), Collections.emptyList()).getAllocatedContainers();
+    }
+    assertEquals(1, allocatedContainers.size());
+    assertEquals(nm2.getNodeId(), allocatedContainers.get(0).getNodeId());
+    
+    TimeUnit.MILLISECONDS.sleep(500);
+    RMNodeImpl rmNode2 = (RMNodeImpl) rm.getRMContext().getRMNodes().get(nm2.getNodeId());
+    assertNotNull(rmNode2);
+    
+    int wait = 0;
+    while (rmNode2.getAppCryptoMaterialToUpdate().isEmpty() && wait < 10) {
+      TimeUnit.MILLISECONDS.sleep(300);
+      wait++;
+    }
+    
+    assertFalse(rmNode2.getAppCryptoMaterialToUpdate().isEmpty());
+    
+    nmResponse = nm2.nodeHeartbeat(true);
+    assertTrue(nmResponse.getUpdatedCryptoForApps().containsKey(app.getApplicationId()));
+    
+    rm.stop();
+  }
+  
   private RMApp createNewTestApplication(int appId) throws IOException {
     ApplicationId applicationID = MockApps.newAppID(appId);
     String user = MockApps.newUserName();
@@ -565,6 +652,54 @@ public class TestRMAppCertificateManager {
       assertFalse(assertionFailure);
     }
     
+  }
+  
+  private class MyMockRM2 extends MockRM {
+    public MyMockRM2(Configuration conf) {
+      super(conf);
+    }
+  
+    @Override
+    protected RMAppManager createRMAppManager() {
+      return new MyRMAppManager(this.rmContext, this.scheduler, this.masterService, this.applicationACLsManager,
+          this.getConfig());
+    }
+    
+    private class MyRMAppManager extends RMAppManager {
+  
+      public MyRMAppManager(RMContext context, YarnScheduler scheduler,
+          ApplicationMasterService masterService,
+          ApplicationACLsManager applicationACLsManager,
+          Configuration conf) {
+        super(context, scheduler, masterService, applicationACLsManager, conf);
+      }
+  
+      @Override
+      protected RMApp createRMApp(ApplicationId applicationId, String user,
+          ApplicationSubmissionContext submissionContext,
+          long submitTime, ResourceRequest amReq) throws IOException {
+        return new MyRMApp(applicationId, rmContext, getConfig(), submissionContext.getApplicationName(),
+            user, submissionContext.getQueue(), submissionContext, scheduler, masterService, submitTime,
+            submissionContext.getApplicationType(), submissionContext.getApplicationTags(), amReq);
+      }
+    }
+    
+    private class MyRMApp extends RMAppImpl {
+  
+      public MyRMApp(ApplicationId applicationId, RMContext rmContext, Configuration config, String name,
+          String user, String queue, ApplicationSubmissionContext submissionContext,
+          YarnScheduler scheduler, ApplicationMasterService masterService, long submitTime, String applicationType,
+          Set<String> applicationTags, ResourceRequest amReq) throws IOException {
+        super(applicationId, rmContext, config, name, user, queue, submissionContext, scheduler, masterService,
+            submitTime,
+            applicationType, applicationTags, amReq);
+      }
+      
+      @Override
+      public void rmNodeHasUpdatedCryptoMaterial(NodeId nodeId) {
+        // Do nothing - RMApp will stay in Crypto Material Rotation phase
+      }
+    }
   }
   
   private class MyMockRM extends MockRM {

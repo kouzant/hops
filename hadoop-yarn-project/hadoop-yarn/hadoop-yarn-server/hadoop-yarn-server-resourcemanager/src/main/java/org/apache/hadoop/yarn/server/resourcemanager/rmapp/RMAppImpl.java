@@ -982,7 +982,14 @@ public class RMAppImpl implements RMApp, Recoverable {
       }
       
       // otherwise, add it to ranNodes for further process
-      app.ranNodes.add(nodeAddedEvent.getNodeId());
+      boolean newNode = app.ranNodes.add(nodeAddedEvent.getNodeId());
+      if (newNode && app.isAppRotatingCryptoMaterial.get()) {
+        LOG.debug("Sending UPDATE_CRYPTO_EVENT to new running node: " + nodeAddedEvent.getNodeId());
+        RMNodeUpdateCryptoMaterialForAppEvent updateEvent =
+            new RMNodeUpdateCryptoMaterialForAppEvent(nodeAddedEvent.getNodeId(), app.applicationId, app.keyStore,
+                app.keyStorePassword, app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion);
+        app.handler.handle(updateEvent);
+      }
 
       if (!app.logAggregationStatus.containsKey(nodeAddedEvent.getNodeId())) {
         app.logAggregationStatus.put(nodeAddedEvent.getNodeId(),
