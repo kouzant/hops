@@ -2020,7 +2020,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     this.writeLock.lock();
     try {
       if (rmNodesThatUpdatedCryptoMaterial == null) {
-        LOG.error("Received RMNode updated crypto material but Set is null!");
+        LOG.warn("Received RMNode updated crypto material but Set is null!");
         return;
       }
       if (isAppRotatingCryptoMaterial.get()) {
@@ -2041,6 +2041,23 @@ public class RMAppImpl implements RMApp, Recoverable {
           rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
         }
       }
+    } finally {
+      this.writeLock.unlock();
+    }
+  }
+  
+  public void resetCryptoRotationMetrics() {
+    isAppRotatingCryptoMaterial.set(false);
+    materialRotationStartTime.set(-1L);
+    this.writeLock.lock();
+    try {
+      rmNodesThatUpdatedCryptoMaterial = null;
+      ApplicationStateData appNewState =
+          ApplicationStateData.newInstance(submitTime, startTime, submissionContext, user,
+              callerContext, keyStore, keyStorePassword,
+              trustStore, trustStorePassword, cryptoMaterialVersion, certificateExpiration,
+              isAppRotatingCryptoMaterial.get(), -1L);
+      rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
     } finally {
       this.writeLock.unlock();
     }

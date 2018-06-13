@@ -23,6 +23,7 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.apache.commons.math3.util.Pair;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
@@ -35,9 +36,11 @@ import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppCertificateGeneratedEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
@@ -99,7 +102,7 @@ public class RMAppCertificateManager extends AbstractService
     CHRONOUNITS.put("H", ChronoUnit.HOURS);
     CHRONOUNITS.put("D", ChronoUnit.DAYS);
   }
-  private static final Pattern DELAY_PATTERN = Pattern.compile("(^[0-9]+)(\\p{Alpha}+)");
+  private static final Pattern CONF_TIME_PATTERN = Pattern.compile("(^[0-9]+)(\\p{Alpha}+)");
   
   private final SecureRandom rng;
   private final String TMP = System.getProperty("java.io.tmpdir");
@@ -118,8 +121,13 @@ public class RMAppCertificateManager extends AbstractService
   private final ScheduledExecutorService scheduler;
   private final Map<ApplicationId, ScheduledFuture> renewalTasks;
   // For certificate renewal
-  private long amountOfTimeToSubtractFromExpiration = 2;
-  private TemporalUnit unitOfTime = ChronoUnit.DAYS;
+  private Long amountOfTimeToSubtractFromExpiration = 2L;
+  private TemporalUnit renewalUnitOfTime = ChronoUnit.DAYS;
+  
+  // For certificate revocation monitor
+  private Long revocationMonitorInterval = 10L;
+  private TemporalUnit revocationUnitOfInterval = ChronoUnit.HOURS;
+  private Thread revocationMonitor;
   
   public RMAppCertificateManager(RMContext rmContext) {
     super(RMAppCertificateManager.class.getName());
@@ -144,24 +152,18 @@ public class RMAppCertificateManager extends AbstractService
     
     String delayConfiguration = conf.get(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY,
         YarnConfiguration.DEFAULT_RM_APP_CERTIFICATE_RENEWER_DELAY);
-    Matcher delayMatcher = DELAY_PATTERN.matcher(delayConfiguration);
-    if (delayMatcher.matches()) {
-      amountOfTimeToSubtractFromExpiration = Long.parseLong(delayMatcher.group(1));
-      String stringChronoUnit = delayMatcher.group(2);
-      unitOfTime = CHRONOUNITS.get(stringChronoUnit.toUpperCase());
-      if (unitOfTime == null) {
-        final StringBuilder validUnits = new StringBuilder();
-        for (String key : CHRONOUNITS.keySet()) {
-          validUnits.append(key).append(", ");
-        }
-        validUnits.append("\b\b");
-        throw new IllegalArgumentException("Could not parse ChronoUnit: " + stringChronoUnit + ". Valid values are "
-            + validUnits.toString());
-      }
-    } else {
-      throw new IllegalArgumentException("Could not parse value " + delayConfiguration + " of "
-          + YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY);
-    }
+    Pair<Long, TemporalUnit> delayIntervalUnit = parseInterval(delayConfiguration,
+        YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY);
+    amountOfTimeToSubtractFromExpiration = delayIntervalUnit.getFirst();
+    renewalUnitOfTime = delayIntervalUnit.getSecond();
+    
+    String confMonitorInterval = conf.get(YarnConfiguration.RM_APP_CERTIFICATE_REVOCATION_MONITOR_INTERVAL,
+        YarnConfiguration.DEFAULT_RM_APP_CERTIFICATE_REVOCATION_MONITOR_INTERVAL);
+    Pair<Long, TemporalUnit> monitorIntervalUnit = parseInterval(confMonitorInterval,
+        YarnConfiguration.RM_APP_CERTIFICATE_REVOCATION_MONITOR_INTERVAL);
+    revocationMonitorInterval = monitorIntervalUnit.getFirst();
+    revocationUnitOfInterval = monitorIntervalUnit.getSecond();
+    
     rmAppCertificateActions = RMAppCertificateActionsFactory.getInstance().getActor(conf);
     keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
     keyPairGenerator.initialize(KEY_SIZE);
@@ -170,19 +172,51 @@ public class RMAppCertificateManager extends AbstractService
     super.serviceInit(conf);
   }
   
+  private Pair<Long, TemporalUnit> parseInterval(String intervalFromConf, String confKey) {
+    Matcher matcher = CONF_TIME_PATTERN.matcher(intervalFromConf);
+    if (matcher.matches()) {
+      Long interval = Long.parseLong(matcher.group(1));
+      String unitStr = matcher.group(2);
+      TemporalUnit unit = CHRONOUNITS.get(unitStr.toUpperCase());
+      if (unit == null) {
+        final StringBuilder validUnits = new StringBuilder();
+        for (String key : CHRONOUNITS.keySet()) {
+          validUnits.append(key).append(", ");
+        }
+        validUnits.append("\b\b");
+        throw new IllegalArgumentException("Could not parse ChronoUnit: " + unitStr + ". Valid values are "
+            + validUnits.toString());
+      }
+      return new Pair<>(interval, unit);
+    } else {
+      throw new IllegalArgumentException("Could not parse value " + intervalFromConf + " of " + confKey);
+    }
+  }
+  
   @Override
   protected void serviceStart() throws Exception {
     LOG.info("Starting RMAppCertificateManager");
-    revocationEventsHandler = new RevocationEventsHandler();
-    revocationEventsHandler.setDaemon(false);
-    revocationEventsHandler.setName("RevocationEventsHandler");
-    revocationEventsHandler.start();
+    if (isRPCTLSEnabled()) {
+      revocationEventsHandler = new RevocationEventsHandler();
+      revocationEventsHandler.setDaemon(false);
+      revocationEventsHandler.setName("RevocationEventsHandler");
+      revocationEventsHandler.start();
+  
+      revocationMonitor = new CertificateRevocationMonitor();
+      revocationMonitor.setDaemon(true);
+      revocationMonitor.setName("CertificateRevocationMonitor");
+      revocationMonitor.start();
+    }
+    
     super.serviceStart();
   }
   
   @Override
   protected void serviceStop() throws Exception {
     LOG.info("Stopping RMAppCertificateManager");
+    if (revocationMonitor != null) {
+      revocationMonitor.interrupt();
+    }
     if (revocationEventsHandler != null) {
       revocationEventsHandler.interrupt();
     }
@@ -232,7 +266,7 @@ public class RMAppCertificateManager extends AbstractService
       Instant now = Instant.now();
       Instant expirationInstant = Instant.ofEpochMilli(expiration);
       Instant delay = expirationInstant.minus(now.toEpochMilli(), ChronoUnit.MILLIS)
-          .minus(amountOfTimeToSubtractFromExpiration, unitOfTime);
+          .minus(amountOfTimeToSubtractFromExpiration, renewalUnitOfTime);
       ScheduledFuture renewTask = scheduler.schedule(
           createCertificateRenewerTask(appId, appUser, currentCryptoVersion), delay.toEpochMilli(), TimeUnit.MILLISECONDS);
       renewalTasks.put(appId, renewTask);
@@ -538,7 +572,7 @@ public class RMAppCertificateManager extends AbstractService
     return true;
   }
   
-  private String getCertificateIdentifier(ApplicationId appId, String user, Integer cryptoMaterialVersion) {
+  public static String getCertificateIdentifier(ApplicationId appId, String user, Integer cryptoMaterialVersion) {
     return user + "__" + appId.toString() + "__" + cryptoMaterialVersion;
   }
   
@@ -632,6 +666,46 @@ public class RMAppCertificateManager extends AbstractService
         } catch (InterruptedException ex) {
           LOG.info("RevocationEventsHandler interrupted. Exiting...");
           drain();
+          Thread.currentThread().interrupt();
+        }
+      }
+    }
+  }
+  
+  private class CertificateRevocationMonitor extends Thread {
+    private final Map<ChronoUnit, TimeUnit> CHRONO_MAPPING = new HashMap<>();
+    private final TimeUnit intervalForSleep;
+    
+    private CertificateRevocationMonitor() {
+      CHRONO_MAPPING.put(ChronoUnit.MILLIS, TimeUnit.MILLISECONDS);
+      CHRONO_MAPPING.put(ChronoUnit.SECONDS, TimeUnit.SECONDS);
+      CHRONO_MAPPING.put(ChronoUnit.MINUTES, TimeUnit.MINUTES);
+      CHRONO_MAPPING.put(ChronoUnit.HOURS, TimeUnit.HOURS);
+      CHRONO_MAPPING.put(ChronoUnit.DAYS, TimeUnit.DAYS);
+      intervalForSleep = CHRONO_MAPPING.get(revocationUnitOfInterval);
+    }
+    
+    @Override
+    public void run() {
+      while (!Thread.currentThread().isInterrupted()) {
+        try {
+          Instant now = Instant.now();
+          for (Map.Entry<ApplicationId, RMApp> entry : rmContext.getRMApps().entrySet()) {
+            RMApp app = entry.getValue();
+            if (app.isAppRotatingCryptoMaterial()) {
+              if (Instant.ofEpochMilli(app.getMaterialRotationStartTime())
+                  .minus(revocationMonitorInterval, revocationUnitOfInterval).isBefore(now)) {
+                Integer versionToRevoke = app.getCryptoMaterialVersion() - 1;
+                LOG.debug("Revoking certificate for app " + entry.getKey() + " with version " + versionToRevoke);
+                putToQueue(app.getApplicationId(), app.getUser(), versionToRevoke);
+                ((RMAppImpl) app).resetCryptoRotationMetrics();
+              }
+            }
+          }
+          
+          intervalForSleep.sleep(revocationMonitorInterval);
+        } catch (InterruptedException ex) {
+          LOG.info("Certificate revocation monitor stopping");
           Thread.currentThread().interrupt();
         }
       }

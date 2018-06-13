@@ -63,7 +63,6 @@ import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 
 import static org.junit.Assert.assertEquals;
@@ -365,6 +364,50 @@ public class TestRMAppCertificateManager {
     manager.stop();
   }
   
+  @Test(timeout = 20000)
+  public void testCertificateRevocationMonitor() throws Exception {
+    RMAppCertificateActions actor = Mockito.spy(new TestingRMAppCertificateActions());
+    actor.init();
+    RMAppCertificateActionsFactory.getInstance().register(actor);
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_RENEWER_DELAY, "40s");
+    conf.set(YarnConfiguration.RM_APP_CERTIFICATE_REVOCATION_MONITOR_INTERVAL, "3s");
+    conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
+    
+    MockRM rm = new MyMockRM(conf);
+    rm.start();
+  
+    MockNM nm = new MockNM("127.0.0.1:8032", 15 * 1024, rm.getResourceTrackerService());
+    nm.registerNode();
+    
+    RMApp application = rm.submitApp(1024, "application1", "Phil",
+        new HashMap<ApplicationAccessType, String>(), false, "default", 2, null,
+        "MAPREDUCE", true, false);
+    nm.nodeHeartbeat(true);
+    
+    // Wait for the renewal to happen
+    while (!application.isAppRotatingCryptoMaterial()) {
+      TimeUnit.MILLISECONDS.sleep(500);
+    }
+    
+    assertTrue(application.isAppRotatingCryptoMaterial());
+    assertNotEquals(-1L, application.getMaterialRotationStartTime());
+    
+    // No NM heartbeat. NM will not inform about the updated crypto material
+    // Wait for the monitor to kick in
+    TimeUnit.SECONDS.sleep(6);
+    assertFalse(application.isAppRotatingCryptoMaterial());
+    assertEquals(-1L, application.getMaterialRotationStartTime());
+    String certId = RMAppCertificateManager.getCertificateIdentifier(application.getApplicationId(),
+        application.getUser(), application.getCryptoMaterialVersion() - 1);
+    Mockito.verify(actor).revoke(Mockito.eq(certId));
+    
+    // Since NM didn't respond acknowledging the crypto update, revokeCertificate on RMAppCertificateManager
+    // should not have been called. The revocation has been handled by the the revocation monitor
+    Mockito.verify(rm.getRMContext().getRMAppCertificateManager(), Mockito.never())
+        .revokeCertificate(Mockito.any(ApplicationId.class), Mockito.anyString(), Mockito.anyInt(), Mockito.anyBoolean());
+    rm.stop();
+  }
+  
   @Test
   public void testApplicationSubmission() throws Exception {
     conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
@@ -449,6 +492,8 @@ public class TestRMAppCertificateManager {
     // By now material rotation should have stopped
     assertFalse(appState.isDuringMaterialRotation());
     assertEquals(-1L, appState.getMaterialRotationStartTime());
+    // Application should still be registered with the certificate renewer
+    assertTrue(rm.getRMContext().getRMAppCertificateManager().getRenewalTasks().containsKey(application.getApplicationId()));
     
     TimeUnit.MILLISECONDS.sleep(100);
     
@@ -469,6 +514,8 @@ public class TestRMAppCertificateManager {
     // RMApp should not recover in material rotation phase
     assertFalse(appState.isDuringMaterialRotation());
     assertEquals(-1L, appState.getMaterialRotationStartTime());
+    assertTrue(rm2.getRMContext().getRMAppCertificateManager().getRenewalTasks()
+        .containsKey(application.getApplicationId()));
     
     rm2.killApp(application.getApplicationId());
     rm2.waitForState(application.getApplicationId(), RMAppState.KILLED);
