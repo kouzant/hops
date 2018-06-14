@@ -625,8 +625,8 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     
     // new NM to represent re-registration
     nm = new MockNM("127.0.0.1:1337", 20 * 1024, rm2.getResourceTrackerService());
-    List<ApplicationId> runningApps = new ArrayList<>();
-    runningApps.add(app.getApplicationId());
+    Map<ApplicationId, Integer> runningApps = new HashMap<>();
+    runningApps.put(app.getApplicationId(), app.getCryptoMaterialVersion());
     nm.registerNode(runningApps);
     nmHeartbeatResponse = nm.nodeHeartbeat(true);
     Assert.assertEquals(1, nmHeartbeatResponse.getUpdatedCryptoForApps().size());

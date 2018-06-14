@@ -35,6 +35,7 @@ import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
 import org.apache.hadoop.yarn.api.records.Container;
+import org.apache.hadoop.yarn.api.records.ContainerId;
 import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
@@ -554,16 +555,16 @@ public class TestRMAppCertificateManager {
     am.registerAppAttempt(true);
     
     // Allocate one container
-    am.allocate("127.0.0.1", 512, 1, Collections.emptyList());
+    am.allocate("127.0.0.1", 512, 1, Collections.<ContainerId>emptyList());
     
     // Trigger scheduler
     nm1.nodeHeartbeat(true);
-    List<Container> allocatedContainers = am.allocate(Collections.emptyList(), Collections.emptyList())
+    List<Container> allocatedContainers = am.allocate(Collections.<ResourceRequest>emptyList(), Collections.<ContainerId>emptyList())
         .getAllocatedContainers();
     while (allocatedContainers.size() < 1) {
       nm1.nodeHeartbeat(true);
       TimeUnit.MILLISECONDS.sleep(200);
-      allocatedContainers = am.allocate(Collections.emptyList(), Collections.emptyList()).getAllocatedContainers();
+      allocatedContainers = am.allocate(Collections.<ResourceRequest>emptyList(), Collections.<ContainerId>emptyList()).getAllocatedContainers();
     }
     
     // Wait for the renewal to happen
@@ -578,16 +579,16 @@ public class TestRMAppCertificateManager {
     assertTrue(app.isAppRotatingCryptoMaterial());
     
     // Allocate second container while app is in Crypto Material rotation phase (see MyMockRM2)
-    am.allocate("127.0.0.2", 512, 1, Collections.emptyList());
+    am.allocate("127.0.0.2", 512, 1, Collections.<ContainerId>emptyList());
     NodeHeartbeatResponse nmResponse = nm2.nodeHeartbeat(true);
     assertTrue(nmResponse.getUpdatedCryptoForApps().isEmpty());
     
-    allocatedContainers = am.allocate(Collections.emptyList(), Collections.emptyList()).getAllocatedContainers();
+    allocatedContainers = am.allocate(Collections.<ResourceRequest>emptyList(), Collections.<ContainerId>emptyList()).getAllocatedContainers();
     while (allocatedContainers.size() < 1) {
       nmResponse = nm2.nodeHeartbeat(true);
       assertTrue(nmResponse.getUpdatedCryptoForApps().isEmpty());
       TimeUnit.MILLISECONDS.sleep(200);
-      allocatedContainers = am.allocate(Collections.emptyList(), Collections.emptyList()).getAllocatedContainers();
+      allocatedContainers = am.allocate(Collections.<ResourceRequest>emptyList(), Collections.<ContainerId>emptyList()).getAllocatedContainers();
     }
     assertEquals(1, allocatedContainers.size());
     assertEquals(nm2.getNodeId(), allocatedContainers.get(0).getNodeId());

@@ -562,9 +562,12 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     return containerStatuses;
   }
   
-  private List<ApplicationId> getRunningApplications() {
-    List<ApplicationId> runningApplications = new ArrayList<ApplicationId>();
-    runningApplications.addAll(this.context.getApplications().keySet());
+  private Map<ApplicationId, Integer> getRunningApplications() {
+    Map<ApplicationId, Application> runningApps = this.context.getApplications();
+    Map<ApplicationId, Integer> runningApplications = new HashMap<>(runningApps.size());
+    for (Map.Entry<ApplicationId, Application> entry : runningApps.entrySet()) {
+      runningApplications.put(entry.getKey(), entry.getValue().getCryptoMaterialVersion());
+    }
     return runningApplications;
   }
 

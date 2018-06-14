@@ -132,13 +132,13 @@ public class MockNM {
   }
   
   public RegisterNodeManagerResponse registerNode(
-      List<ApplicationId> runningApplications) throws Exception {
+      Map<ApplicationId, Integer> runningApplications) throws Exception {
     return registerNode(null, runningApplications);
   }
 
   public RegisterNodeManagerResponse registerNode(
       List<NMContainerStatus> containerReports,
-      List<ApplicationId> runningApplications) throws Exception {
+      Map<ApplicationId, Integer> runningApplications) throws Exception {
     RegisterNodeManagerRequest req = Records.newRecord(
         RegisterNodeManagerRequest.class);
     req.setNodeId(nodeId);

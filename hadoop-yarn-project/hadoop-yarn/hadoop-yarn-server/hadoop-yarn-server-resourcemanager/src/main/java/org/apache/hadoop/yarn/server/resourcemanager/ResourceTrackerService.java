@@ -21,7 +21,9 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -402,11 +404,13 @@ public class ResourceTrackerService extends AbstractService implements
               resolve(host), capability, nodeManagerVersion);
     }
     RMNode oldNode = this.rmContext.getRMNodes().putIfAbsent(nodeId, rmNode);
+    Map<ApplicationId, Integer> runningsAppsWithCryptoVersion = request.getRunningApplications();
+    List<ApplicationId> runningApplications = new ArrayList<>(runningsAppsWithCryptoVersion.size());
+    runningApplications.addAll(runningsAppsWithCryptoVersion.keySet());
     if (oldNode == null) {
       this.rmContext.getDispatcher().getEventHandler().handle(
-              new RMNodeStartedEvent(nodeId, request.getNMContainerStatuses(),
-                  request.getRunningApplications()));
-      pushCryptoUpdatedEventsForRunningApps(request.getRunningApplications(), rmNode);
+              new RMNodeStartedEvent(nodeId, request.getNMContainerStatuses(), runningApplications));
+      pushCryptoUpdatedEventsForRunningApps(runningsAppsWithCryptoVersion, rmNode);
     } else {
       LOG.info("Reconnect from the node at: " + host);
       this.nmLivelinessMonitor.unregister(nodeId);
@@ -421,9 +425,8 @@ public class ResourceTrackerService extends AbstractService implements
           .getDispatcher()
           .getEventHandler()
           .handle(
-              new RMNodeReconnectEvent(nodeId, rmNode, request
-                  .getRunningApplications(), request.getNMContainerStatuses()));
-      pushCryptoUpdatedEventsForRunningApps(request.getRunningApplications(), oldNode);
+              new RMNodeReconnectEvent(nodeId, rmNode, runningApplications, request.getNMContainerStatuses()));
+      pushCryptoUpdatedEventsForRunningApps(runningsAppsWithCryptoVersion, oldNode);
     }
     // On every node manager register we will be clearing NMToken keys if
     // present for any running application.
@@ -480,26 +483,30 @@ public class ResourceTrackerService extends AbstractService implements
     return response;
   }
 
-  private void pushCryptoUpdatedEventsForRunningApps(List<ApplicationId> runningApps, RMNode rmNode) {
+  private void pushCryptoUpdatedEventsForRunningApps(Map<ApplicationId, Integer> runningApps, RMNode rmNode) {
     if (!getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, CommonConfigurationKeys
         .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
       return;
     }
-    for (ApplicationId appId : runningApps) {
+    for (Map.Entry<ApplicationId, Integer> entry : runningApps.entrySet()) {
+      ApplicationId appId = entry.getKey();
       RMApp rmApp = rmContext.getRMApps().get(appId);
       if (rmApp != null) {
-        ByteBuffer keyStore = ByteBuffer.wrap(rmApp.getKeyStore());
-        char[] keyStorePassword = rmApp.getKeyStorePassword();
-        ByteBuffer trustStore = ByteBuffer.wrap(rmApp.getTrustStore());
-        char[] trustStorePassword = rmApp.getTrustStorePassword();
-        int cryptoVersion = rmApp.getCryptoMaterialVersion();
-        UpdatedCryptoForApp updatedCrypto = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
-        updatedCrypto.setKeyStore(keyStore);
-        updatedCrypto.setKeyStorePassword(keyStorePassword);
-        updatedCrypto.setTrustStore(trustStore);
-        updatedCrypto.setTrustStorePassword(trustStorePassword);
-        updatedCrypto.setVersion(cryptoVersion);
-        rmNode.getAppCryptoMaterialToUpdate().putIfAbsent(appId, updatedCrypto);
+        Integer nmCryptoMaterialVersion = entry.getValue();
+        if (rmApp.getCryptoMaterialVersion() > nmCryptoMaterialVersion) {
+          ByteBuffer keyStore = ByteBuffer.wrap(rmApp.getKeyStore());
+          char[] keyStorePassword = rmApp.getKeyStorePassword();
+          ByteBuffer trustStore = ByteBuffer.wrap(rmApp.getTrustStore());
+          char[] trustStorePassword = rmApp.getTrustStorePassword();
+          int cryptoVersion = rmApp.getCryptoMaterialVersion();
+          UpdatedCryptoForApp updatedCrypto = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
+          updatedCrypto.setKeyStore(keyStore);
+          updatedCrypto.setKeyStorePassword(keyStorePassword);
+          updatedCrypto.setTrustStore(trustStore);
+          updatedCrypto.setTrustStorePassword(trustStorePassword);
+          updatedCrypto.setVersion(cryptoVersion);
+          rmNode.getAppCryptoMaterialToUpdate().putIfAbsent(appId, updatedCrypto);
+        }
       }
     }
   }
