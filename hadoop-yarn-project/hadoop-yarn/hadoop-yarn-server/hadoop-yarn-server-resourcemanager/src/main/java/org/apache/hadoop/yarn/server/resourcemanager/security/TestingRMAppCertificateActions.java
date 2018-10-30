@@ -105,7 +105,7 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions, 
   }
   
   @Override
-  public RMAppCertificateManager.CertificateBundle sign(PKCS10CertificationRequest csr)
+  public RMAppSecurityManager.CertificateBundle sign(PKCS10CertificationRequest csr)
       throws URISyntaxException, IOException, GeneralSecurityException {
     JcaPKCS10CertificationRequest jcaRequest = new JcaPKCS10CertificationRequest(csr);
     X509v3CertificateBuilder certBuilder = new JcaX509v3CertificateBuilder(caCert,
@@ -123,7 +123,7 @@ public class TestingRMAppCertificateActions implements RMAppCertificateActions, 
         .addExtension(Extension.keyUsage, true, new KeyUsage(KeyUsage.digitalSignature | KeyUsage.keyEncipherment));
     X509Certificate certificate = new JcaX509CertificateConverter().setProvider("BC")
         .getCertificate(certBuilder.build(sigGen));
-    return new RMAppCertificateManager.CertificateBundle(certificate, caCert);
+    return new RMAppSecurityManager.CertificateBundle(certificate, caCert);
   }
   
   @Override

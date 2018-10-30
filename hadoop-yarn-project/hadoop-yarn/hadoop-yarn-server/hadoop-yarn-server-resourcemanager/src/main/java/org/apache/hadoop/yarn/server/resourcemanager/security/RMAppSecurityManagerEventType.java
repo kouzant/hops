@@ -17,7 +17,7 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
-public enum RMAppCertificateManagerEventType {
+public enum RMAppSecurityManagerEventType {
   GENERATE_CERTIFICATE,
   REVOKE_CERTIFICATE,
   REVOKE_GENERATE_CERTIFICATE,

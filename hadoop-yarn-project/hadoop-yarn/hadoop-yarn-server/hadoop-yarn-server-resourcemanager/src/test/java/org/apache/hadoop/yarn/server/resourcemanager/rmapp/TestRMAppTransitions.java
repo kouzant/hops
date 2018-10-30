@@ -87,8 +87,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSec
 import org.apache.hadoop.yarn.server.resourcemanager.security.DelegationTokenRenewer;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateActionsFactory;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
@@ -119,7 +119,7 @@ public class TestRMAppTransitions {
   private SystemMetricsPublisher publisher;
   private YarnScheduler scheduler;
   private TestSchedulerEventDispatcher schedulerDispatcher;
-  private RMAppCertificateManager rmAppCertificateManager;
+  private RMAppSecurityManager rmAppCertificateManager;
   private CertificateLocalizationService certificateLocalizationService;
   private final char[] cryptoPassword = "password".toCharArray();
 
@@ -263,7 +263,7 @@ public class TestRMAppTransitions {
     RMAppCertificateActionsFactory.getInstance().clear();
     conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
         "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
-    rmAppCertificateManager = spy(new RMAppCertificateManager(rmContext));
+    rmAppCertificateManager = spy(new RMAppSecurityManager(rmContext));
     rmAppCertificateManager.init(conf);
     rmAppCertificateManager.start();
     
@@ -271,7 +271,7 @@ public class TestRMAppTransitions {
     when(rmAppCertificateManager.generateRandomPassword()).thenReturn(cryptoPassword);
     doReturn(loadMockTrustStore()).when(rmAppCertificateManager).loadSystemTrustStore(any(Configuration.class));
     
-    rmDispatcher.register(RMAppCertificateManagerEventType.class, rmAppCertificateManager);
+    rmDispatcher.register(RMAppSecurityManagerEventType.class, rmAppCertificateManager);
     
     rmDispatcher.init(conf);
     rmDispatcher.start();
@@ -433,15 +433,15 @@ public class TestRMAppTransitions {
 
   protected RMApp testCreateAppGeneratingCerts(ApplicationSubmissionContext submissionContext) throws IOException {
     RMApp application = testCreateAppNewSaving(submissionContext);
-    // NEW_SAVING => GENERATING_CERTS event RMAppEventType.APP_NEW_SAVED
+    // NEW_SAVING => GENERATING_SECURITY_MATERIAL event RMAppEventType.APP_NEW_SAVED
     RMAppEvent event =
         new RMAppEvent(application.getApplicationId(),
             RMAppEventType.APP_NEW_SAVED);
     application.handle(event);
-    // Application State here should be GENERATING_CERTS
+    // Application State here should be GENERATING_SECURITY_MATERIAL
     // Since the state is changed by an external event, from RMAppCertificateManager,
     // we might run into timing issues and the test will fail for no real reason
-    // assertAppState(RMAppState.GENERATING_CERTS, application);
+    // assertAppState(RMAppState.GENERATING_SECURITY_MATERIAL, application);
     assertStartTimeSet(application);
     return application;
   }
@@ -449,7 +449,7 @@ public class TestRMAppTransitions {
   protected RMApp testCreateAppSubmittedNoRecovery(
       ApplicationSubmissionContext submissionContext) throws IOException {
     RMApp application = testCreateAppGeneratingCerts(submissionContext);
-    // GENERATING_CERTS => SUBMITTED event RMAppEventType.CERTS_GENERATED will be sent by RMAppCertificateManager
+    // GENERATING_SECURITY_MATERIAL => SUBMITTED event RMAppEventType.CERTS_GENERATED will be sent by RMAppCertificateManager
     rmDispatcher.await();
     // Crypto material version has been incremented as soon as RMApp received CERTS_GENERATED event
     // Verify generateCertificates has been invoked with current version - 1
@@ -483,7 +483,7 @@ public class TestRMAppTransitions {
   protected RMApp testCreateAppSubmittedRecovery(
       ApplicationSubmissionContext submissionContext, boolean cryptoRecovered) throws IOException {
     RMApp application = createNewTestApp(submissionContext);
-    // NEW => GENERATING_CERTS event RMAppEventType.RECOVER
+    // NEW => GENERATING_SECURITY_MATERIAL event RMAppEventType.RECOVER
     RMState state = new RMState();
     ApplicationStateData appState =
         ApplicationStateData.newInstance(123, 123, null, "user", null);
@@ -514,11 +514,11 @@ public class TestRMAppTransitions {
       verify(rmAppCertificateManager, never())
           .generateCertificate(any(ApplicationId.class), any(String.class), any(Integer.class));
     } else {
-      // No crypto material stored in state store, so recovered state should be GENERATING_CERTS
-      // Application State here should be GENERATING_CERTS
+      // No crypto material stored in state store, so recovered state should be GENERATING_SECURITY_MATERIAL
+      // Application State here should be GENERATING_SECURITY_MATERIAL
       // Since the state is changed by an external event, from RMAppCertificateManager,
       // we might run into timing issues and the test will fail for no real reason
-      // assertAppState(RMAppState.GENERATING_CERTS, application);
+      // assertAppState(RMAppState.GENERATING_SECURITY_MATERIAL, application);
       rmDispatcher.await();
       // While waiting for the event dispatcher to drain, RMApp has received CERTS_GENERATED event
       // and updated the crypto material version
@@ -1275,9 +1275,9 @@ public class TestRMAppTransitions {
   public void testAppGeneratingCertsKill() throws IOException {
     LOG.info("--- START: testAppGeneratingCertsKill ---");
   
-    rmDispatcher.unregisterHandlerForEvent(RMAppCertificateManagerEventType.class, true);
+    rmDispatcher.unregisterHandlerForEvent(RMAppSecurityManagerEventType.class, true);
     RMApp app = testCreateAppGeneratingCerts(null);
-    assertAppState(RMAppState.GENERATING_CERTS, app);
+    assertAppState(RMAppState.GENERATING_SECURITY_MATERIAL, app);
     RMAppEvent event = new RMAppKillByClientEvent(app.getApplicationId(),
         "Application killed by user.",
         UserGroupInformation.getCurrentUser(), Server.getRemoteIp());

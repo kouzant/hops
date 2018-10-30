@@ -86,9 +86,9 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-public class RMAppCertificateManager extends AbstractService
-    implements EventHandler<RMAppCertificateManagerEvent> {
-  private final static Log LOG = LogFactory.getLog(RMAppCertificateManager.class);
+public class RMAppSecurityManager extends AbstractService
+    implements EventHandler<RMAppSecurityManagerEvent> {
+  private final static Log LOG = LogFactory.getLog(RMAppSecurityManager.class);
   private final static String SECURITY_PROVIDER = "BC";
   private final static String KEY_ALGORITHM = "RSA";
   private final static String SIGNATURE_ALGORITHM = "SHA256withRSA";
@@ -129,8 +129,8 @@ public class RMAppCertificateManager extends AbstractService
   private TemporalUnit revocationUnitOfInterval = ChronoUnit.HOURS;
   private Thread revocationMonitor;
   
-  public RMAppCertificateManager(RMContext rmContext) {
-    super(RMAppCertificateManager.class.getName());
+  public RMAppSecurityManager(RMContext rmContext) {
+    super(RMAppSecurityManager.class.getName());
     Security.addProvider(new BouncyCastleProvider());
     this.rmContext = rmContext;
     rng = new SecureRandom();
@@ -226,16 +226,16 @@ public class RMAppCertificateManager extends AbstractService
   }
   
   @Override
-  public void handle(RMAppCertificateManagerEvent event) {
+  public void handle(RMAppSecurityManagerEvent event) {
     ApplicationId applicationId = event.getApplicationId();
     LOG.info("Processing event type: " + event.getType() + " for application: " + applicationId);
-    if (event.getType().equals(RMAppCertificateManagerEventType.GENERATE_CERTIFICATE)) {
+    if (event.getType().equals(RMAppSecurityManagerEventType.GENERATE_CERTIFICATE)) {
       generateCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
-    } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE)) {
+    } else if (event.getType().equals(RMAppSecurityManagerEventType.REVOKE_CERTIFICATE)) {
       revokeCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
-    } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_CERTIFICATE_AFTER_ROTATION)) {
+    } else if (event.getType().equals(RMAppSecurityManagerEventType.REVOKE_CERTIFICATE_AFTER_ROTATION)) {
       revokeCertificate(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion(), true);
-    } else if (event.getType().equals(RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE)) {
+    } else if (event.getType().equals(RMAppSecurityManagerEventType.REVOKE_GENERATE_CERTIFICATE)) {
       revokeAndGenerateCertificates(applicationId, event.getApplicationUser(), event.getCryptoMaterialVersion());
     } else {
       LOG.warn("Unknown event type " + event.getType());

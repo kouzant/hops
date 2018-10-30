@@ -102,8 +102,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptAddedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.AppAttemptRemovedSchedulerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEventType;
 import org.apache.hadoop.yarn.server.webproxy.ProxyUriUtils;
 import org.apache.hadoop.yarn.state.InvalidStateTransitionException;
 import org.apache.hadoop.yarn.state.MultipleArcTransition;
@@ -1723,8 +1723,8 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     RMApp application = rmContext.getRMApps().get(applicationId);
     String user = application.getUser();
     Integer cryptoMaterialVersion = application.getCryptoMaterialVersion();
-    eventHandler.handle(new RMAppCertificateManagerEvent(
-        applicationId, user, cryptoMaterialVersion, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+    eventHandler.handle(new RMAppSecurityManagerEvent(
+        applicationId, user, cryptoMaterialVersion, RMAppSecurityManagerEventType.REVOKE_CERTIFICATE));
   }
   
   private static class ExpiredTransition extends FinalTransition {

@@ -96,9 +96,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateActionsFactory;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
-import org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions;
 import org.apache.hadoop.yarn.util.Records;
 import org.apache.hadoop.yarn.util.YarnVersionInfo;
 import org.apache.log4j.Level;
@@ -168,7 +167,7 @@ public class MockRM extends ResourceManager {
   }
   
   @Override
-  protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
+  protected RMAppSecurityManager createRMAppCertificateManager() throws Exception {
     getConfig().set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
         "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
     RMAppCertificateActionsFactory.getInstance().clear();
@@ -1042,7 +1041,7 @@ public class MockRM extends ResourceManager {
     LOG.info("app is removed from scheduler, " + appId);
   }
   
-  private class TestingRMAppCertificateManager extends RMAppCertificateManager {
+  private class TestingRMAppCertificateManager extends RMAppSecurityManager {
     
     private TestingRMAppCertificateManager() {
       super(rmContext);

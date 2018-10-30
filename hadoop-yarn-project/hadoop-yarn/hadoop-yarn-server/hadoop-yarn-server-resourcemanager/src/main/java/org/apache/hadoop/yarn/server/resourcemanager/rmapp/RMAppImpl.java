@@ -78,8 +78,8 @@ import org.apache.hadoop.yarn.security.client.ClientToAMTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.protocolrecords.LogAggregationReport;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeUpdateCryptoMaterialForAppEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEvent;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAppManagerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAppManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAuditLogger;
@@ -217,7 +217,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     .addTransition(RMAppState.NEW, RMAppState.NEW_SAVING,
         RMAppEventType.START, new RMAppNewlySavingTransition())
      
-    .addTransition(RMAppState.NEW, EnumSet.of(RMAppState.GENERATING_CERTS, RMAppState.SUBMITTED,
+    .addTransition(RMAppState.NEW, EnumSet.of(RMAppState.GENERATING_SECURITY_MATERIAL, RMAppState.SUBMITTED,
             RMAppState.ACCEPTED, RMAppState.FINISHED, RMAppState.FAILED,
             RMAppState.KILLED, RMAppState.FINAL_SAVING),
         RMAppEventType.RECOVER, new RMAppRecoveredTransition())
@@ -232,7 +232,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     .addTransition(RMAppState.NEW_SAVING, RMAppState.NEW_SAVING,
         RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
       
-    .addTransition(RMAppState.NEW_SAVING, RMAppState.GENERATING_CERTS,
+    .addTransition(RMAppState.NEW_SAVING, RMAppState.GENERATING_SECURITY_MATERIAL,
         RMAppEventType.APP_NEW_SAVED, new RMAppGeneratingCertsTransition())
       
     .addTransition(RMAppState.NEW_SAVING, RMAppState.FINAL_SAVING,
@@ -248,12 +248,12 @@ public class RMAppImpl implements RMApp, Recoverable {
     .addTransition(RMAppState.NEW_SAVING, RMAppState.NEW_SAVING,
         RMAppEventType.MOVE, new RMAppMoveTransition())
       
-     // Transitions from GENERATING_CERTS state
-     .addTransition(RMAppState.GENERATING_CERTS, RMAppState.GENERATING_CERTS,
+     // Transitions from GENERATING_SECURITY_MATERIAL state
+     .addTransition(RMAppState.GENERATING_SECURITY_MATERIAL, RMAppState.GENERATING_SECURITY_MATERIAL,
          RMAppEventType.NODE_UPDATE, new RMAppNodeUpdateTransition())
-     .addTransition(RMAppState.GENERATING_CERTS, RMAppState.SUBMITTED,
+     .addTransition(RMAppState.GENERATING_SECURITY_MATERIAL, RMAppState.SUBMITTED,
          RMAppEventType.CERTS_GENERATED, new AddApplicationToSchedulerTransition())
-     .addTransition(RMAppState.GENERATING_CERTS, RMAppState.FINAL_SAVING,
+     .addTransition(RMAppState.GENERATING_SECURITY_MATERIAL, RMAppState.FINAL_SAVING,
          RMAppEventType.KILL, new FinalSavingTransition(
              new AppKilledTransition(), RMAppState.KILLED))
       
@@ -628,7 +628,7 @@ public class RMAppImpl implements RMApp, Recoverable {
   private FinalApplicationStatus createFinalApplicationStatus(RMAppState state) {
     switch(state) {
     case NEW:
-    case GENERATING_CERTS:
+    case GENERATING_SECURITY_MATERIAL:
     case NEW_SAVING:
     case SUBMITTED:
     case ACCEPTED:
@@ -1090,13 +1090,13 @@ public class RMAppImpl implements RMApp, Recoverable {
               app.submissionContext, false));
           return RMAppState.SUBMITTED;
         } else {
-          RMAppCertificateManagerEvent revokeAndGenerateEvent = new RMAppCertificateManagerEvent(
+          RMAppSecurityManagerEvent revokeAndGenerateEvent = new RMAppSecurityManagerEvent(
               app.applicationId, app.user, app.cryptoMaterialVersion,
-              RMAppCertificateManagerEventType.REVOKE_GENERATE_CERTIFICATE);
+              RMAppSecurityManagerEventType.REVOKE_GENERATE_CERTIFICATE);
           app.handler.handle(revokeAndGenerateEvent);
           // RMApp should not register with the certificate renewer here as it will register
-          // when it receives CERTS_GENERATED event in GENERATING_CERTS state
-          return RMAppState.GENERATING_CERTS;
+          // when it receives CERTS_GENERATED event in GENERATING_SECURITY_MATERIAL state
+          return RMAppState.GENERATING_SECURITY_MATERIAL;
         }
       }
   
@@ -1299,8 +1299,8 @@ public class RMAppImpl implements RMApp, Recoverable {
     @Override
     public void transition(RMAppImpl app, RMAppEvent event) {
       LOG.info("Generating certificates for application " + app.applicationId);
-      RMAppCertificateManagerEvent genCertsEvent = new RMAppCertificateManagerEvent(app.applicationId,
-          app.user, app.cryptoMaterialVersion, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE);
+      RMAppSecurityManagerEvent genCertsEvent = new RMAppSecurityManagerEvent(app.applicationId,
+          app.user, app.cryptoMaterialVersion, RMAppSecurityManagerEventType.GENERATE_CERTIFICATE);
       app.handler.handle(genCertsEvent);
     }
   }
@@ -1367,7 +1367,7 @@ public class RMAppImpl implements RMApp, Recoverable {
     @Override
     public void transition(RMAppImpl app, RMAppEvent event) {
       if ((transitionToDo instanceof AppKilledTransition) &&
-          (app.getState().equals(RMAppState.GENERATING_CERTS) || app.getState().equals(RMAppState.ACCEPTED))) {
+          (app.getState().equals(RMAppState.GENERATING_SECURITY_MATERIAL) || app.getState().equals(RMAppState.ACCEPTED))) {
         app.sendCertificateRevocationEvent();
       }
       // In any other state later than SUBMITTED, the revocation will be done be the RMAppAttempt
@@ -1599,8 +1599,8 @@ public class RMAppImpl implements RMApp, Recoverable {
   }
 
   private void sendCertificateRevocationEvent() {
-    handler.handle(new RMAppCertificateManagerEvent(applicationId, user, cryptoMaterialVersion,
-        RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+    handler.handle(new RMAppSecurityManagerEvent(applicationId, user, cryptoMaterialVersion,
+        RMAppSecurityManagerEventType.REVOKE_CERTIFICATE));
   }
   
   @Override
@@ -2065,8 +2065,8 @@ public class RMAppImpl implements RMApp, Recoverable {
         rmNodesThatUpdatedCryptoMaterial.add(nodeId);
         if (rmNodesThatUpdatedCryptoMaterial.containsAll(ranNodes)) {
           int cryptoVersionToRevoke = cryptoMaterialVersion - 1;
-          RMAppCertificateManagerEvent event = new RMAppCertificateManagerEvent(applicationId, user,
-              cryptoVersionToRevoke, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE_AFTER_ROTATION);
+          RMAppSecurityManagerEvent event = new RMAppSecurityManagerEvent(applicationId, user,
+              cryptoVersionToRevoke, RMAppSecurityManagerEventType.REVOKE_CERTIFICATE_AFTER_ROTATION);
           handler.handle(event);
           rmNodesThatUpdatedCryptoMaterial = null;
           isAppRotatingCryptoMaterial.compareAndSet(true, false);

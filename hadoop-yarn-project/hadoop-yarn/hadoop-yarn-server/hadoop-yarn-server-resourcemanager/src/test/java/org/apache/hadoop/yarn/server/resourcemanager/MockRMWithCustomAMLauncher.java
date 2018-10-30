@@ -29,7 +29,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.amlauncher.AMLauncher;
 import org.apache.hadoop.yarn.server.resourcemanager.amlauncher.AMLauncherEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.amlauncher.ApplicationMasterLauncher;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManager;
 import org.mockito.Mockito;
 
 import java.net.InetSocketAddress;
@@ -57,8 +57,8 @@ public class MockRMWithCustomAMLauncher extends MockRM {
   
   
   @Override
-  protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
-    return mockRMAppCertificateManager ? Mockito.spy(new RMAppCertificateManager(rmContext)) :
+  protected RMAppSecurityManager createRMAppCertificateManager() throws Exception {
+    return mockRMAppCertificateManager ? Mockito.spy(new RMAppSecurityManager(rmContext)) :
         super.createRMAppCertificateManager();
   }
   

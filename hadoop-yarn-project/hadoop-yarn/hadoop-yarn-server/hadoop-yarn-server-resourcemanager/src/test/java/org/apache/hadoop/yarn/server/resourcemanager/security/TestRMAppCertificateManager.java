@@ -203,10 +203,10 @@ public class TestRMAppCertificateManager {
       MockRMAppCertificateManager manager = new MockRMAppCertificateManager(true, rmContext);
       manager.init(conf);
       manager.start();
-      manager.handle(new RMAppCertificateManagerEvent(
+      manager.handle(new RMAppSecurityManagerEvent(
           ApplicationId.newInstance(System.currentTimeMillis(), 1),
           "userA", 1,
-          RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
+          RMAppSecurityManagerEventType.GENERATE_CERTIFICATE));
   
       dispatcher.await();
       eventHandler.verifyEvent();
@@ -302,10 +302,10 @@ public class TestRMAppCertificateManager {
     MockRMAppCertificateManager manager = new MockRMAppCertificateManager(false, rmContext);
     manager.init(conf);
     manager.start();
-    manager.handle(new RMAppCertificateManagerEvent(
+    manager.handle(new RMAppSecurityManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA", 1,
-        RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
+        RMAppSecurityManagerEventType.GENERATE_CERTIFICATE));
     
     dispatcher.await();
     manager.stop();
@@ -329,14 +329,14 @@ public class TestRMAppCertificateManager {
     String username = "Alice";
     Integer cryptoMaterialVersion = 1;
     ApplicationId appId = ApplicationId.newInstance(System.currentTimeMillis(), 1);
-    manager.handle(new RMAppCertificateManagerEvent(
-        appId, username, cryptoMaterialVersion, RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
+    manager.handle(new RMAppSecurityManagerEvent(
+        appId, username, cryptoMaterialVersion, RMAppSecurityManagerEventType.GENERATE_CERTIFICATE));
   
     dispatcher.await();
     Mockito.verify(mockRemoteActions).sign(Mockito.any(PKCS10CertificationRequest.class));
     
-    manager.handle(new RMAppCertificateManagerEvent(
-        appId, username, cryptoMaterialVersion, RMAppCertificateManagerEventType.REVOKE_CERTIFICATE));
+    manager.handle(new RMAppSecurityManagerEvent(
+        appId, username, cryptoMaterialVersion, RMAppSecurityManagerEventType.REVOKE_CERTIFICATE));
     
     dispatcher.await();
     
@@ -365,10 +365,10 @@ public class TestRMAppCertificateManager {
     MockFailingRMAppCertificateManager manager = new MockFailingRMAppCertificateManager(Integer.MAX_VALUE);
     manager.init(conf);
     manager.start();
-    manager.handle(new RMAppCertificateManagerEvent(
+    manager.handle(new RMAppSecurityManagerEvent(
         ApplicationId.newInstance(System.currentTimeMillis(), 1),
         "userA", 1,
-        RMAppCertificateManagerEventType.GENERATE_CERTIFICATE));
+        RMAppSecurityManagerEventType.GENERATE_CERTIFICATE));
     dispatcher.await();
     eventHandler.verifyEvent();
     manager.stop();
@@ -407,7 +407,7 @@ public class TestRMAppCertificateManager {
     TimeUnit.SECONDS.sleep(6);
     assertFalse(application.isAppRotatingCryptoMaterial());
     assertEquals(-1L, application.getMaterialRotationStartTime());
-    String certId = RMAppCertificateManager.getCertificateIdentifier(application.getApplicationId(),
+    String certId = RMAppSecurityManager.getCertificateIdentifier(application.getApplicationId(),
         application.getUser(), application.getCryptoMaterialVersion() - 1);
     Mockito.verify(actor).revoke(Mockito.eq(certId));
     
@@ -711,13 +711,13 @@ public class TestRMAppCertificateManager {
     }
   
     @Override
-    protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
+    protected RMAppSecurityManager createRMAppCertificateManager() throws Exception {
       MockRMAppCertificateManager spyCertManager = Mockito.spy(new MockRMAppCertificateManager(false, rmContext));
       return spyCertManager;
     }
   }
   
-  private class MockRMAppCertificateManager extends RMAppCertificateManager {
+  private class MockRMAppCertificateManager extends RMAppSecurityManager {
     private final boolean loadTrustStore;
     private final String systemTMP;
     private long oldCertificateExpiration;
@@ -933,7 +933,7 @@ public class TestRMAppCertificateManager {
     }
   }
   
-  private class MockFailingRMAppCertificateManager extends RMAppCertificateManager {
+  private class MockFailingRMAppCertificateManager extends RMAppSecurityManager {
     private int numberOfRenewalFailures = 0;
     private boolean renewalFailed = false;
     private final Integer succeedAfterRetries;

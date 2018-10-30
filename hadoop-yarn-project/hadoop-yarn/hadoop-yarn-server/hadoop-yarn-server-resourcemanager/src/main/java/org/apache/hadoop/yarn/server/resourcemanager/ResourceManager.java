@@ -43,8 +43,8 @@ import org.apache.hadoop.security.authentication.server.KerberosAuthenticationHa
 import org.apache.hadoop.security.authorize.ProxyUsers;
 import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
 import org.apache.hadoop.security.ssl.RevocationListFetcherService;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManager;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateManagerEventType;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManager;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEventType;
 import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.service.CompositeService;
@@ -184,7 +184,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
   protected NMLivelinessMonitor nmLivelinessMonitor;
   protected NodesListManager nodesListManager;
   protected RMAppManager rmAppManager;
-  protected RMAppCertificateManager rmAppCertificateManager;
+  protected RMAppSecurityManager rmAppCertificateManager;
   protected ApplicationACLsManager applicationACLsManager;
   protected QueueACLsManager queueACLsManager;
   private WebApp webApp;
@@ -513,8 +513,8 @@ public class ResourceManager extends CompositeService implements Recoverable {
       this.applicationACLsManager, this.conf);
   }
   
-  protected RMAppCertificateManager createRMAppCertificateManager() throws Exception {
-    return new RMAppCertificateManager(this.rmContext);
+  protected RMAppSecurityManager createRMAppCertificateManager() throws Exception {
+    return new RMAppSecurityManager(this.rmContext);
   }
 
   protected RMApplicationHistoryWriter createRMApplicationHistoryWriter() {
@@ -792,7 +792,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       rmDispatcher.register(RMAppManagerEventType.class, rmAppManager);
 
       rmAppCertificateManager = createRMAppCertificateManager();
-      rmDispatcher.register(RMAppCertificateManagerEventType.class, rmAppCertificateManager);
+      rmDispatcher.register(RMAppSecurityManagerEventType.class, rmAppCertificateManager);
       addService(rmAppCertificateManager);
       rmContext.setRMAppCertificateManager(rmAppCertificateManager);
       

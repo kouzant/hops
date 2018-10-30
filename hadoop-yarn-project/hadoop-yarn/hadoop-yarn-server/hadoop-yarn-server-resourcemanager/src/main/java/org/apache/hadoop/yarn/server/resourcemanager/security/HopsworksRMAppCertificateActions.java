@@ -115,7 +115,7 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
   }
   
   @Override
-  public RMAppCertificateManager.CertificateBundle sign(PKCS10CertificationRequest csr)
+  public RMAppSecurityManager.CertificateBundle sign(PKCS10CertificationRequest csr)
       throws URISyntaxException, IOException, GeneralSecurityException {
     CloseableHttpClient httpClient = null;
     try {
@@ -135,7 +135,7 @@ public class HopsworksRMAppCertificateActions implements RMAppCertificateActions
       X509Certificate certificate = parseCertificate(signedCert);
       String intermediateCaCert = jsonResponse.get("intermediateCaCert").getAsString();
       X509Certificate issuer = parseCertificate(intermediateCaCert);
-      return new RMAppCertificateManager.CertificateBundle(certificate, issuer);
+      return new RMAppSecurityManager.CertificateBundle(certificate, issuer);
     } finally {
       if (httpClient != null) {
         httpClient.close();
