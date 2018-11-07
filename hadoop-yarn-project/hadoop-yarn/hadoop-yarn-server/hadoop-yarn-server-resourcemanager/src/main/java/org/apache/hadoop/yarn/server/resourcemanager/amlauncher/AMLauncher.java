@@ -66,6 +66,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptImpl;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityMaterial;
+import org.apache.hadoop.yarn.server.resourcemanager.security.X509SecurityHandler;
 import org.apache.hadoop.yarn.util.ConverterUtils;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -172,8 +174,12 @@ public class AMLauncher implements Runnable {
     } finally {
       RMApp application = rmContext.getRMApps().get(
           this.application.getAppAttemptId().getApplicationId());
-      RMAppSecurityManagerEvent certsCleanup = new RMAppSecurityManagerEvent(
-          application.getApplicationId(), application.getUser(), application.getCryptoMaterialVersion(),
+      X509SecurityHandler.X509MaterialParameter x509Param =
+          new X509SecurityHandler.X509MaterialParameter(application.getApplicationId(), application.getUser(),
+              application.getCryptoMaterialVersion());
+      RMAppSecurityMaterial securityMaterial = new RMAppSecurityMaterial();
+      securityMaterial.addMaterial(x509Param);
+      RMAppSecurityManagerEvent certsCleanup = new RMAppSecurityManagerEvent(application.getApplicationId(),securityMaterial,
           RMAppSecurityManagerEventType.REVOKE_SECURITY_MATERIAL);
       handler.handle(certsCleanup);
     }

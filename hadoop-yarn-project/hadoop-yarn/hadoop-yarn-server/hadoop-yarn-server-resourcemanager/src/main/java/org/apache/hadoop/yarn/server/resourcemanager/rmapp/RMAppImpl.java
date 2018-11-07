@@ -1316,8 +1316,12 @@ public class RMAppImpl implements RMApp, Recoverable {
     @Override
     public void transition(RMAppImpl app, RMAppEvent event) {
       LOG.info("Generating certificates for application " + app.applicationId);
+      X509SecurityHandler.X509MaterialParameter x509Param =
+          new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
+      RMAppSecurityMaterial securityMaterial = new RMAppSecurityMaterial();
+      securityMaterial.addMaterial(x509Param);
       RMAppSecurityManagerEvent genSecurityMaterialEvent = new RMAppSecurityManagerEvent(app.applicationId,
-          app.user, app.cryptoMaterialVersion, RMAppSecurityManagerEventType.GENERATE_SECURITY_MATERIAL);
+          securityMaterial, RMAppSecurityManagerEventType.GENERATE_SECURITY_MATERIAL);
       app.handler.handle(genSecurityMaterialEvent);
     }
   }
@@ -1385,11 +1389,11 @@ public class RMAppImpl implements RMApp, Recoverable {
     public void transition(RMAppImpl app, RMAppEvent event) {
       if ((transitionToDo instanceof AppKilledTransition) &&
           (app.getState().equals(RMAppState.GENERATING_SECURITY_MATERIAL) || app.getState().equals(RMAppState.ACCEPTED))) {
-        app.sendCertificateRevocationEvent();
+        app.sendSecurityMaterialRevocationEvent();
       }
       // In any other state later than SUBMITTED, the revocation will be done be the RMAppAttempt
       if (app.getState().equals(RMAppState.SUBMITTED)) {
-        app.sendCertificateRevocationEvent();
+        app.sendSecurityMaterialRevocationEvent();
       }
       app.rememberTargetTransitionsAndStoreState(event, transitionToDo,
         targetedFinalState, stateToBeStored);
@@ -1605,7 +1609,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (numberOfFailure >= app.maxAppAttempts) {
           app.isNumAttemptsBeyondThreshold = true;
         }
-        app.sendCertificateRevocationEvent();
+        app.sendSecurityMaterialRevocationEvent();
         
         app.rememberTargetTransitionsAndStoreState(event,
           new AttemptFailedFinalStateSavedTransition(), RMAppState.FAILED,
@@ -1615,8 +1619,12 @@ public class RMAppImpl implements RMApp, Recoverable {
     }
   }
 
-  private void sendCertificateRevocationEvent() {
-    handler.handle(new RMAppSecurityManagerEvent(applicationId, user, cryptoMaterialVersion,
+  private void sendSecurityMaterialRevocationEvent() {
+    X509SecurityHandler.X509MaterialParameter x509params =
+        new X509SecurityHandler.X509MaterialParameter(applicationId, user, cryptoMaterialVersion);
+    RMAppSecurityMaterial securityMaterial = new RMAppSecurityMaterial();
+    securityMaterial.addMaterial(x509params);
+    handler.handle(new RMAppSecurityManagerEvent(applicationId, securityMaterial,
         RMAppSecurityManagerEventType.REVOKE_SECURITY_MATERIAL));
   }
   
