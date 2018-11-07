@@ -22,27 +22,20 @@ import org.apache.hadoop.yarn.event.AbstractEvent;
 
 public class RMAppSecurityManagerEvent extends AbstractEvent<RMAppSecurityManagerEventType> {
   private final ApplicationId applicationId;
-  private final String applicationUser;
-  private final Integer cryptoMaterialVersion;
+  private final RMAppSecurityMaterial securityMaterial;
   
-  public RMAppSecurityManagerEvent(
-      ApplicationId applicationId, String applicationUser, Integer cryptoMaterialVersion,
+  public RMAppSecurityManagerEvent(ApplicationId applicationId, RMAppSecurityMaterial securityMaterial,
       RMAppSecurityManagerEventType rmAppCertificateManagerEventType) {
     super(rmAppCertificateManagerEventType);
     this.applicationId = applicationId;
-    this.applicationUser = applicationUser;
-    this.cryptoMaterialVersion = cryptoMaterialVersion;
+    this.securityMaterial = securityMaterial;
   }
   
   public ApplicationId getApplicationId() {
     return applicationId;
   }
   
-  public String getApplicationUser() {
-    return applicationUser;
-  }
-  
-  public Integer getCryptoMaterialVersion() {
-    return cryptoMaterialVersion;
+  public RMAppSecurityMaterial getSecurityMaterial() {
+    return securityMaterial;
   }
 }

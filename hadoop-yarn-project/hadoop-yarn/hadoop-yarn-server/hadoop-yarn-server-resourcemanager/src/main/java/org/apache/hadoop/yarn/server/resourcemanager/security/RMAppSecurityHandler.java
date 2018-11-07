@@ -17,9 +17,13 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
-public enum RMAppSecurityManagerEventType {
-  GENERATE_SECURITY_MATERIAL,
-  REVOKE_SECURITY_MATERIAL,
-  REVOKE_GENERATE_MATERIAL,
-  REVOKE_CERTIFICATE_AFTER_ROTATION
+import org.apache.hadoop.conf.Configuration;
+
+public interface RMAppSecurityHandler<R extends RMAppSecurityManager.SecurityManagerMaterial, P> {
+  void init(Configuration config) throws Exception;
+  void stop() throws Exception;
+  R generateMaterial(P parameter) throws Exception;
+  void registerRenewer(P parameter);
+  boolean revokeMaterial(P parameter, boolean blocking);
+  int getPriority();
 }

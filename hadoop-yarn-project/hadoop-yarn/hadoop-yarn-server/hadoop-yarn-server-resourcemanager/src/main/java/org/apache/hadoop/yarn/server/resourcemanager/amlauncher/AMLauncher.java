@@ -174,7 +174,7 @@ public class AMLauncher implements Runnable {
           this.application.getAppAttemptId().getApplicationId());
       RMAppSecurityManagerEvent certsCleanup = new RMAppSecurityManagerEvent(
           application.getApplicationId(), application.getUser(), application.getCryptoMaterialVersion(),
-          RMAppSecurityManagerEventType.REVOKE_CERTIFICATE);
+          RMAppSecurityManagerEventType.REVOKE_SECURITY_MATERIAL);
       handler.handle(certsCleanup);
     }
   }

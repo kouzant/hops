@@ -17,9 +17,15 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
-public enum RMAppSecurityManagerEventType {
-  GENERATE_SECURITY_MATERIAL,
-  REVOKE_SECURITY_MATERIAL,
-  REVOKE_GENERATE_MATERIAL,
-  REVOKE_CERTIFICATE_AFTER_ROTATION
+import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+
+import java.io.IOException;
+import java.net.MalformedURLException;
+import java.net.URISyntaxException;
+import java.security.GeneralSecurityException;
+
+public interface RMAppSecurityActions {
+  void init() throws MalformedURLException, GeneralSecurityException;
+  X509SecurityHandler.CertificateBundle sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException, GeneralSecurityException;
+  int revoke(String certificateIdentifier) throws URISyntaxException, IOException, GeneralSecurityException;
 }

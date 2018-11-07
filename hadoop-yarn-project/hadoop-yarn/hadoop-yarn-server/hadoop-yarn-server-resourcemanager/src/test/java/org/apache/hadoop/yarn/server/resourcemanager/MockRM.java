@@ -95,7 +95,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicat
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateActionsFactory;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityActionsFactory;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
 import org.apache.hadoop.yarn.util.Records;
@@ -168,9 +168,9 @@ public class MockRM extends ResourceManager {
   
   @Override
   protected RMAppSecurityManager createRMAppCertificateManager() throws Exception {
-    getConfig().set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
-        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
-    RMAppCertificateActionsFactory.getInstance().clear();
+    getConfig().set(YarnConfiguration.HOPS_RM_SECURITY_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppSecurityActions");
+    RMAppSecurityActionsFactory.getInstance().clear();
     return new TestingRMAppCertificateManager();
   }
   

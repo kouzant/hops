@@ -86,7 +86,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.security.AMRMTokenSecretMan
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.DelegationTokenRenewer;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
-import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppCertificateActionsFactory;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityActionsFactory;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMContainerTokenSecretManager;
@@ -260,9 +260,9 @@ public class TestRMAppTransitions {
     rmDispatcher.register(SchedulerEventType.class,
         schedulerDispatcher);
     
-    RMAppCertificateActionsFactory.getInstance().clear();
-    conf.set(YarnConfiguration.HOPS_RM_CERTIFICATE_ACTOR_KEY,
-        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
+    RMAppSecurityActionsFactory.getInstance().clear();
+    conf.set(YarnConfiguration.HOPS_RM_SECURITY_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppSecurityActions");
     rmAppCertificateManager = spy(new RMAppSecurityManager(rmContext));
     rmAppCertificateManager.init(conf);
     rmAppCertificateManager.start();
@@ -283,7 +283,7 @@ public class TestRMAppTransitions {
     if (certificateLocalizationService != null) {
       certificateLocalizationService.stop();
     }
-    RMAppCertificateActionsFactory.getInstance().clear();
+    RMAppSecurityActionsFactory.getInstance().clear();
   }
   
   private KeyStore loadMockTrustStore() throws IOException, GeneralSecurityException {

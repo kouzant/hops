@@ -1724,7 +1724,7 @@ public class RMAppAttemptImpl implements RMAppAttempt, Recoverable {
     String user = application.getUser();
     Integer cryptoMaterialVersion = application.getCryptoMaterialVersion();
     eventHandler.handle(new RMAppSecurityManagerEvent(
-        applicationId, user, cryptoMaterialVersion, RMAppSecurityManagerEventType.REVOKE_CERTIFICATE));
+        applicationId, user, cryptoMaterialVersion, RMAppSecurityManagerEventType.REVOKE_SECURITY_MATERIAL));
   }
   
   private static class ExpiredTransition extends FinalTransition {

@@ -15,11 +15,20 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.yarn.server.resourcemanager.security;
+package org.apache.hadoop.yarn.server.resourcemanager.rmapp;
 
-public enum RMAppSecurityManagerEventType {
-  GENERATE_SECURITY_MATERIAL,
-  REVOKE_SECURITY_MATERIAL,
-  REVOKE_GENERATE_MATERIAL,
-  REVOKE_CERTIFICATE_AFTER_ROTATION
+import org.apache.hadoop.yarn.api.records.ApplicationId;
+import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityMaterial;
+
+public class RMAppSecurityMaterialGeneratedEvent extends RMAppEvent {
+  private final RMAppSecurityMaterial material;
+  
+  public RMAppSecurityMaterialGeneratedEvent(ApplicationId appId, RMAppSecurityMaterial material, RMAppEventType type) {
+    super(appId, type);
+    this.material = material;
+  }
+  
+  public RMAppSecurityMaterial getMaterial() {
+    return material;
+  }
 }

@@ -17,15 +17,23 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
-import org.bouncycastle.pkcs.PKCS10CertificationRequest;
+import java.util.HashMap;
+import java.util.Map;
 
-import java.io.IOException;
-import java.net.MalformedURLException;
-import java.net.URISyntaxException;
-import java.security.GeneralSecurityException;
-
-public interface RMAppCertificateActions {
-  void init() throws MalformedURLException, GeneralSecurityException;
-  RMAppSecurityManager.CertificateBundle sign(PKCS10CertificationRequest csr) throws URISyntaxException, IOException, GeneralSecurityException;
-  int revoke(String certificateIdentifier) throws URISyntaxException, IOException, GeneralSecurityException;
+public class RMAppSecurityMaterial<T extends RMAppSecurityManager.SecurityManagerMaterial> {
+  private final Map<Class, T> securityMaterial;
+  
+  public RMAppSecurityMaterial() {
+    securityMaterial = new HashMap<>();
+  }
+  
+  public void addMaterial(T material) {
+    if (!securityMaterial.containsKey(material.getClass())) {
+      securityMaterial.put(material.getClass(), material);
+    }
+  }
+  
+  public T getMaterial(Class type) {
+    return securityMaterial.<T>get(type);
+  }
 }
