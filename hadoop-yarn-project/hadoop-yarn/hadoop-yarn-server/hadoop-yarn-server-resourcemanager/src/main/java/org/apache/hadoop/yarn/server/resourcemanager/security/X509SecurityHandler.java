@@ -130,6 +130,11 @@ public class X509SecurityHandler
             .build());
   }
   
+  @VisibleForTesting
+  public RMContext getRmContext() {
+    return rmContext;
+  }
+  
   @Override
   public int getPriority() {
     return SECURITY_HANDLER_PRIORITY;
@@ -188,6 +193,16 @@ public class X509SecurityHandler
     }
   }
   
+  @VisibleForTesting
+  protected RMAppSecurityActions getRmAppSecurityActions() {
+    return rmAppSecurityActions;
+  }
+  
+  @VisibleForTesting
+  protected Configuration getConfig() {
+    return config;
+  }
+  
   @Override
   public X509SecurityManagerMaterial generateMaterial(X509MaterialParameter materialParameter) throws Exception {
     if (!isHopsTLSEnabled()) {
@@ -242,7 +257,7 @@ public class X509SecurityHandler
   
   @VisibleForTesting
   protected Runnable createCertificateRenewerTask(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
-    return new CertificateRenewer(appId, appUser, currentCryptoVersion);
+    return new X509Renewer(appId, appUser, currentCryptoVersion);
   }
   
   @Override
@@ -411,7 +426,9 @@ public class X509SecurityHandler
     }
   }
   
-  private boolean isHopsTLSEnabled() {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  public boolean isHopsTLSEnabled() {
     return hopsTLSEnabled;
   }
   
@@ -556,15 +573,20 @@ public class X509SecurityHandler
   }
   
   @VisibleForTesting
+  public Map<ApplicationId, ScheduledFuture> getRenewalTasks() {
+    return renewalTasks;
+  }
+  
+  @VisibleForTesting
   @InterfaceAudience.Private
-  public class CertificateRenewer implements Runnable {
+  protected class X509Renewer implements Runnable {
     protected final ApplicationId appId;
     protected final String appUser;
     protected final BackOff backOff;
     protected Integer currentCryptoVersion;
     protected long backOffTime = 0L;
     
-    public CertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
+    public X509Renewer(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
       this.appId = appId;
       this.appUser = appUser;
       this.currentCryptoVersion = currentCryptoVersion;

@@ -17,7 +17,6 @@
  */
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
-import io.hops.security.HopsUtil;
 import io.hops.util.DBUtility;
 import io.hops.util.RMStorageFactory;
 import io.hops.util.YarnAPIStorageFactory;
@@ -25,65 +24,36 @@ import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.KeyStoreTestUtil;
 import org.apache.hadoop.security.ssl.SSLFactory;
-import org.apache.hadoop.util.ExponentialBackOff;
-import org.apache.hadoop.yarn.MockApps;
-import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ApplicationSubmissionContext;
-import org.apache.hadoop.yarn.api.records.Container;
-import org.apache.hadoop.yarn.api.records.ContainerId;
-import org.apache.hadoop.yarn.api.records.ContainerStatus;
 import org.apache.hadoop.yarn.api.records.NodeId;
 import org.apache.hadoop.yarn.api.records.ResourceRequest;
-import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.event.EventHandler;
-import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
-import org.apache.hadoop.yarn.server.resourcemanager.MockAM;
-import org.apache.hadoop.yarn.server.resourcemanager.MockNM;
 import org.apache.hadoop.yarn.server.resourcemanager.MockRM;
 import org.apache.hadoop.yarn.server.resourcemanager.RMAppManager;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.DBRMStateStore;
-import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationStateData;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppSecurityMaterialGeneratedEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
-import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.YarnScheduler;
 import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
-import org.bouncycastle.pkcs.PKCS10CertificationRequest;
 import org.junit.After;
 import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
-import org.junit.Ignore;
 import org.junit.Test;
-import org.mockito.Mockito;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertNull;
-import static org.junit.Assert.assertTrue;
-import static org.junit.Assert.fail;
-
-import java.io.ByteArrayInputStream;
 import java.io.File;
-import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileWriter;
 import java.io.IOException;
@@ -91,26 +61,16 @@ import java.io.Writer;
 import java.net.URL;
 import java.nio.file.Paths;
 import java.security.GeneralSecurityException;
-import java.security.KeyPair;
 import java.security.KeyStore;
 import java.security.Security;
 import java.security.cert.Certificate;
 import java.security.cert.X509Certificate;
-import java.time.Instant;
-import java.time.temporal.ChronoUnit;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.Enumeration;
-import java.util.HashMap;
-import java.util.HashSet;
-import java.util.List;
-import java.util.Map;
 import java.util.Set;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+
+import static org.junit.Assert.assertFalse;
 
 public class TestRMAppSecurityManager {
-  /*private static final Log LOG = LogFactory.getLog(TestRMAppSecurityManager.class);
+  private static final Log LOG = LogFactory.getLog(TestRMAppSecurityManager.class);
   private static final String BASE_DIR = Paths.get(System.getProperty("test.build.dir",
       Paths.get("target", "test-dir").toString()),
       TestRMAppSecurityManager.class.getSimpleName()).toString();
@@ -188,8 +148,7 @@ public class TestRMAppSecurityManager {
       String password = "password";
   
       String sslServer = TestRMAppSecurityManager.class.getSimpleName() + "-testSuccessfulCertificateCreationTesting.ssl-server.xml";
-      testSpecificSSLServerFile = Paths.get(classPath, sslServer)
-          .toFile();
+      testSpecificSSLServerFile = Paths.get(classPath, sslServer).toFile();
   
       conf.set(SSLFactory.SSL_SERVER_CONF_KEY, sslServer);
   
@@ -199,18 +158,26 @@ public class TestRMAppSecurityManager {
   
       MockRMAppEventHandler eventHandler = new MockRMAppEventHandler(RMAppEventType.SECURITY_MATERIAL_GENERATED);
       rmContext.getDispatcher().register(RMAppEventType.class, eventHandler);
-  
-      MockRMAppCertificateManager manager = new MockRMAppCertificateManager(true, rmContext);
-      manager.init(conf);
-      manager.start();
-      manager.handle(new RMAppSecurityManagerEvent(
-          ApplicationId.newInstance(System.currentTimeMillis(), 1),
-          "userA", 1,
-          RMAppSecurityManagerEventType.GENERATE_SECURITY_MATERIAL));
+      
+      RMAppSecurityManager rmAppSecurityManager = new RMAppSecurityManager(rmContext);
+      X509SecurityHandler x509SecurityHandler = new MockX509SecurityHandler(rmContext, rmAppSecurityManager, true);
+      rmAppSecurityManager.registerRMAppSecurityHandler(x509SecurityHandler);
+      rmAppSecurityManager.init(conf);
+      rmAppSecurityManager.start();
+      ApplicationId appId = ApplicationId.newInstance(System.currentTimeMillis(), 1);
+      X509SecurityHandler.X509MaterialParameter x509Param =
+          new X509SecurityHandler.X509MaterialParameter(
+              appId,"Dorothy", 1);
+      RMAppSecurityMaterial securityMaterial = new RMAppSecurityMaterial();
+      securityMaterial.addMaterial(x509Param);
+      RMAppSecurityManagerEvent genSecurityMaterialEvent = new RMAppSecurityManagerEvent(appId,
+          securityMaterial, RMAppSecurityManagerEventType.GENERATE_SECURITY_MATERIAL);
+      
+      rmAppSecurityManager.handle(genSecurityMaterialEvent);
   
       dispatcher.await();
       eventHandler.verifyEvent();
-      manager.stop();
+      rmAppSecurityManager.stop();
     } finally {
       if (testSpecificSSLServerFile != null) {
         testSpecificSSLServerFile.delete();
@@ -218,7 +185,7 @@ public class TestRMAppSecurityManager {
     }
   }
   
-  @Test
+  /*@Test
   public void testCertificateRenewal() throws Exception {
     conf.set(YarnConfiguration.HOPS_RM_SECURITY_ACTOR_KEY,
         "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppSecurityActions");
@@ -625,7 +592,7 @@ public class TestRMAppSecurityManager {
         scheduler, appMasterService, System.currentTimeMillis(), "YARN", null, Mockito.mock(ResourceRequest.class));
     rmContext.getRMApps().put(applicationID, app);
     return app;
-  }
+  }*/
   
   private class MockRMAppEventHandler implements EventHandler<RMAppEvent> {
   
@@ -704,7 +671,7 @@ public class TestRMAppSecurityManager {
     }
   }
   
-  private class MyMockRM extends MockRM {
+  /*private class MyMockRM extends MockRM {
   
     public MyMockRM(Configuration conf) {
       super(conf);
@@ -714,222 +681,6 @@ public class TestRMAppSecurityManager {
     protected RMAppSecurityManager createRMAppSecurityManager() throws Exception {
       MockRMAppCertificateManager spyCertManager = Mockito.spy(new MockRMAppCertificateManager(false, rmContext));
       return spyCertManager;
-    }
-  }
-  
-  private class MockRMAppCertificateManager extends RMAppSecurityManager {
-    private final boolean loadTrustStore;
-    private final String systemTMP;
-    private long oldCertificateExpiration;
-  
-    public MockRMAppCertificateManager(boolean loadTrustStore, RMContext rmContext) throws Exception {
-      super(rmContext);
-      this.loadTrustStore = loadTrustStore;
-      systemTMP = System.getProperty("java.io.tmpdir");
-    }
-  
-    @Override
-    public KeyStore loadSystemTrustStore(Configuration conf) throws GeneralSecurityException, IOException {
-      if (loadTrustStore) {
-        return super.loadSystemTrustStore(conf);
-      }
-      KeyStore emptyTrustStore = KeyStore.getInstance("JKS");
-      emptyTrustStore.load(null, null);
-      return emptyTrustStore;
-    }
-  
-    @Override
-    public void generateCertificate(ApplicationId applicationId, String appUser, Integer cryptoMaterialVersion) {
-      boolean exceptionThrown = false;
-      ByteArrayInputStream bio = null;
-      try {
-        KeyPair keyPair = generateKeyPair();
-        // Generate CSR
-        PKCS10CertificationRequest csr = generateCSR(applicationId, appUser, keyPair, cryptoMaterialVersion);
-        
-        assertEquals(appUser, HopsUtil.extractCNFromSubject(csr.getSubject().toString()));
-        assertEquals(applicationId.toString(), HopsUtil.extractOFromSubject(csr.getSubject().toString()));
-        assertEquals(String.valueOf(cryptoMaterialVersion), HopsUtil.extractOUFromSubject(csr.getSubject().toString()));
-        
-        // Sign CSR
-        CertificateBundle certificateBundle = sendCSRAndGetSigned(csr);
-        certificateBundle.getCertificate().checkValidity();
-        long expiration = certificateBundle.getCertificate().getNotAfter().getTime();
-        long epochNow = Instant.now().toEpochMilli();
-        assertTrue(expiration >= epochNow);
-        assertNotNull(certificateBundle.getIssuer());
-        
-        RMAppSecurityActions actor = getRmAppCertificateActions();
-        
-        if (actor instanceof TestingRMAppSecurityActions) {
-          X509Certificate caCert = ((TestingRMAppSecurityActions) actor).getCaCert();
-          certificateBundle.getCertificate().verify(caCert.getPublicKey(), "BC");
-        }
-        certificateBundle.getCertificate().verify(certificateBundle.getIssuer().getPublicKey(), "BC");
-        
-        KeyStoresWrapper appKeystoreWrapper = createApplicationStores(certificateBundle, keyPair.getPrivate(),
-            appUser, applicationId);
-        X509Certificate extractedCert = (X509Certificate) appKeystoreWrapper.getKeystore().getCertificate(appUser);
-        byte[] rawKeystore = appKeystoreWrapper.getRawKeyStore(TYPE.KEYSTORE);
-        assertNotNull(rawKeystore);
-        assertNotEquals(0, rawKeystore.length);
-        
-        File keystoreFile = Paths.get(systemTMP, appUser + "-" + applicationId.toString() + "_kstore.jks").toFile();
-        // Keystore should have been deleted
-        assertFalse(keystoreFile.exists());
-        char[] keyStorePassword = appKeystoreWrapper.getKeyStorePassword();
-        assertNotNull(keyStorePassword);
-        assertNotEquals(0, keyStorePassword.length);
-        
-        byte[] rawTrustStore = appKeystoreWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
-        File trustStoreFile = Paths.get(systemTMP, appUser + "-" + applicationId.toString() + "_tstore.jks").toFile();
-        // Truststore should have been deleted
-        assertFalse(trustStoreFile.exists());
-        char[] trustStorePassword = appKeystoreWrapper.getTrustStorePassword();
-        assertNotNull(trustStorePassword);
-        assertNotEquals(0, trustStorePassword.length);
-        
-        verifyContentOfAppTrustStore(rawTrustStore, trustStorePassword, appUser, applicationId);
-        
-        if (actor instanceof TestingRMAppSecurityActions) {
-          X509Certificate caCert = ((TestingRMAppSecurityActions) actor).getCaCert();
-          extractedCert.verify(caCert.getPublicKey(), "BC");
-        }
-        assertEquals(appUser, HopsUtil.extractCNFromSubject(extractedCert.getSubjectX500Principal().getName()));
-        assertEquals(applicationId.toString(), HopsUtil.extractOFromSubject(
-            extractedCert.getSubjectX500Principal().getName()));
-        assertEquals(String.valueOf(cryptoMaterialVersion),
-            HopsUtil.extractOUFromSubject(extractedCert.getSubjectX500Principal().getName()));
-  
-        RMAppSecurityMaterialGeneratedEvent startEvent = new RMAppSecurityMaterialGeneratedEvent(applicationId,
-            rawKeystore, keyStorePassword, rawTrustStore, trustStorePassword, expiration, RMAppEventType.SECURITY_MATERIAL_GENERATED);
-        getRmContext().getDispatcher().getEventHandler().handle(startEvent);
-      } catch (Exception ex) {
-        LOG.error(ex, ex);
-        exceptionThrown = true;
-      } finally {
-        if (bio != null) {
-          try {
-            bio.close();
-          } catch (IOException ex) {
-            // Ignore
-          }
-        }
-      }
-      assertFalse(exceptionThrown);
-    }
-    
-    @Override
-    public void revokeCertificate(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
-      try {
-        deregisterFromCertificateRenewer(appId);
-        putToQueue(appId, applicationUser, cryptoMaterialVersion);
-        waitForQueueToDrain();
-      } catch (InterruptedException ex) {
-        LOG.error(ex, ex);
-        fail("Exception should not be thrown here");
-      }
-    }
-    
-    @Override
-    public boolean isRPCTLSEnabled() {
-      return true;
-    }
-    
-    private void verifyContentOfAppTrustStore(byte[] appTrustStore, char[] password, String appUser,
-        ApplicationId appId)
-        throws GeneralSecurityException, IOException {
-      File trustStoreFile = Paths.get(systemTMP, appUser + "-" + appId.toString() + "_tstore.jks").toFile();
-      boolean certificateMissing = false;
-      
-      try {
-        KeyStore systemTrustStore = loadSystemTrustStore(conf);
-        FileUtils.writeByteArrayToFile(trustStoreFile, appTrustStore, false);
-        KeyStore ts = KeyStore.getInstance("JKS");
-        try (FileInputStream fis = new FileInputStream(trustStoreFile)) {
-          ts.load(fis, password);
-        }
-  
-        Enumeration<String> sysAliases = systemTrustStore.aliases();
-        while (sysAliases.hasMoreElements()) {
-          String alias = sysAliases.nextElement();
-          
-          X509Certificate appCert = (X509Certificate) ts.getCertificate(alias);
-          if (appCert == null) {
-            certificateMissing = true;
-            break;
-          }
-          
-          X509Certificate sysCert = (X509Certificate) systemTrustStore.getCertificate(alias);
-          if (!Arrays.equals(sysCert.getSignature(), appCert.getSignature())) {
-            certificateMissing = true;
-            break;
-          }
-        }
-      } finally {
-        FileUtils.deleteQuietly(trustStoreFile);
-        assertFalse(certificateMissing);
-      }
-    }
-  
-    public void setOldCertificateExpiration(long oldCertificateExpiration) {
-      this.oldCertificateExpiration = oldCertificateExpiration;
-    }
-  
-    @Override
-    public Runnable createCertificateRenewerTask(ApplicationId appId, String appuser, Integer currentCryptoVersion) {
-      return new MockCertificateRenewer(appId, appuser, currentCryptoVersion, 1);
-    }
-  
-    private boolean renewalException = false;
-    
-    public boolean getRenewalException() {
-      return renewalException;
-    }
-    
-    public class MockCertificateRenewer extends CertificateRenewer {
-      private final long oldCertificateExpiration;
-      
-      public MockCertificateRenewer(ApplicationId appId, String appUser, Integer currentCryptoVersion, long oldCertificateExpiration) {
-        super(appId, appUser, currentCryptoVersion);
-        this.oldCertificateExpiration = oldCertificateExpiration;
-      }
-      
-      @Override
-      public void run() {
-        try {
-          LOG.info("Renewing certificate for application " + appId);
-          KeyPair keyPair = generateKeyPair();
-          int oldCryptoVersion = currentCryptoVersion;
-          PKCS10CertificationRequest csr = generateCSR(appId, appUser, keyPair, ++currentCryptoVersion);
-          int newCryptoVersion = Integer.parseInt(HopsUtil.extractOUFromSubject(csr.getSubject().toString()));
-          if (++oldCryptoVersion != newCryptoVersion) {
-            LOG.error("Crypto version of new certificate is wrong: " + newCryptoVersion);
-            renewalException = true;
-          }
-          CertificateBundle certificateBundle = sendCSRAndGetSigned(csr);
-          long newCertificateExpiration = certificateBundle.getCertificate().getNotAfter().getTime();
-          if (newCertificateExpiration <= oldCertificateExpiration) {
-            LOG.error("New certificate expiration time is older than old certificate");
-            renewalException = true;
-          }
-  
-          KeyStoresWrapper keyStoresWrapper = createApplicationStores(certificateBundle, keyPair.getPrivate(), appUser,
-              appId);
-          byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
-          byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
-  
-          getRenewalTasks().remove(appId);
-          
-          getRmContext().getDispatcher().getEventHandler().handle(new RMAppSecurityMaterialGeneratedEvent(appId,
-              rawProtectedKeyStore, keyStoresWrapper.getKeyStorePassword(), rawTrustStore, keyStoresWrapper
-              .getTrustStorePassword(), newCertificateExpiration, RMAppEventType.CERTS_RENEWED));
-          LOG.info("Renewed certificate for application " + appId);
-        } catch (Exception ex) {
-          LOG.error("Exception while renewing certificate. This should not have happened here", ex);
-          renewalException = true;
-        }
-      }
     }
   }
   
@@ -998,7 +749,7 @@ public class TestRMAppSecurityManager {
         }
       }
     }
-  }
+  }*/
   
   
   // These methods were taken from KeyStoreTestUtil
@@ -1077,5 +828,5 @@ public class TestRMAppSecurityManager {
     } finally {
       writer.close();
     }
-  }*/
+  }
 }
