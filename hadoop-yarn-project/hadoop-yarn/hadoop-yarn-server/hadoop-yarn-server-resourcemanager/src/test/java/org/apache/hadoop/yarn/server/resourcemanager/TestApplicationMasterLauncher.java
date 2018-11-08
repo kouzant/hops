@@ -72,6 +72,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.amlauncher.ApplicationMaste
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttemptState;
+import org.apache.hadoop.yarn.server.resourcemanager.security.X509SecurityHandler;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.log4j.Level;
 import org.apache.log4j.LogManager;
@@ -235,9 +236,13 @@ public class TestApplicationMasterLauncher {
     Assert.assertTrue(containerManager.cleanedup);
 
     am.waitForState(RMAppAttemptState.FINISHED);
+  
+    X509SecurityHandler.X509MaterialParameter x509Param =
+        new X509SecurityHandler.X509MaterialParameter(app.getApplicationId(), app.getUser(),
+            app.getCryptoMaterialVersion());
+    verify(rm.rmAppSecurityManager.getSecurityHandler(X509SecurityHandler.class))
+        .revokeMaterial(Mockito.eq(x509Param), Mockito.eq(false));
     
-/*    verify(rm.rmAppSecurityManager)
-        .revokeCertificate(Mockito.eq(app.getApplicationId()), Mockito.eq(app.getUser()), Mockito.eq(app.getCryptoMaterialVersion()));*/
     rm.stop();
   }
 

@@ -176,8 +176,8 @@ public class RMAppSecurityManager extends AbstractService
   }
   
   @VisibleForTesting
-  public X509SecurityHandler getX509SecurityHandler() {
-    return (X509SecurityHandler) securityHanndlersMap.get(X509SecurityHandler.class);
+  public RMAppSecurityHandler getSecurityHandler(Class type) {
+    return securityHanndlersMap.get(type);
   }
   
   @VisibleForTesting
