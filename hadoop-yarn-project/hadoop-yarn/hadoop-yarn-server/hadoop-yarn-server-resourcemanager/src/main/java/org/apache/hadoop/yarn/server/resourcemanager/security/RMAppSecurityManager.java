@@ -91,16 +91,19 @@ public class RMAppSecurityManager extends AbstractService
     rmAppCertificateActions = RMAppSecurityActionsFactory.getInstance().getActor(conf);
     isRPCTLSEnabled = conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT);
-    RMAppSecurityHandler<X509SecurityHandler.X509SecurityManagerMaterial, X509SecurityHandler.X509MaterialParameter>
-        x509Handler = new X509SecurityHandler(rmContext, this);
-    registerRMAppSecurityHandler(x509Handler);
     super.serviceInit(conf);
   }
   
   public void registerRMAppSecurityHandler(RMAppSecurityHandler securityHandler) {
+    registerRMAppSecurityHandlerWithType(securityHandler, securityHandler.getClass());
+  }
+  
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  public void registerRMAppSecurityHandlerWithType(RMAppSecurityHandler securityHandler, Class type) {
     if (securityHandler != null) {
       securityHandlers.add(securityHandler);
-      securityHanndlersMap.put(securityHandler.getClass(), securityHandler);
+      securityHanndlersMap.put(type, securityHandler);
     }
   }
   
@@ -173,6 +176,11 @@ public class RMAppSecurityManager extends AbstractService
   }
   
   @VisibleForTesting
+  public X509SecurityHandler getX509SecurityHandler() {
+    return (X509SecurityHandler) securityHanndlersMap.get(X509SecurityHandler.class);
+  }
+  
+  @VisibleForTesting
   protected RMContext getRmContext() {
     return rmContext;
   }
@@ -182,7 +190,7 @@ public class RMAppSecurityManager extends AbstractService
     RMAppSecurityMaterial rmAppMaterial = new RMAppSecurityMaterial();
     try {
       for (RMAppSecurityHandler handler : securityHandlers) {
-        if (handler instanceof X509SecurityHandler && isRPCTLSEnabled()) {
+        if (handler instanceof X509SecurityHandler) {
           X509SecurityHandler.X509MaterialParameter x509Param =
               (X509SecurityHandler.X509MaterialParameter) event.getSecurityMaterial()
                   .getMaterial(X509SecurityHandler.X509MaterialParameter.class);
@@ -190,11 +198,18 @@ public class RMAppSecurityManager extends AbstractService
             throw new NullPointerException("Hops TLS is enabled but X.509 parameter is null for " + appId);
           }
           SecurityManagerMaterial material = handler.generateMaterial(x509Param);
-          rmAppMaterial.addMaterial(material);
+          if (material != null) {
+            rmAppMaterial.addMaterial(material);
+          }
         }
         // This could be a little bit more elegant
       }
-      handler.handle(new RMAppSecurityMaterialGeneratedEvent(appId, rmAppMaterial, RMAppEventType.SECURITY_MATERIAL_GENERATED));
+      if (rmAppMaterial.isEmpty()) {
+        handler.handle(new RMAppEvent(appId, RMAppEventType.SECURITY_MATERIAL_GENERATED));
+      } else {
+        handler.handle(
+            new RMAppSecurityMaterialGeneratedEvent(appId, rmAppMaterial, RMAppEventType.SECURITY_MATERIAL_GENERATED));
+      }
     } catch (Exception ex) {
       LOG.error("Error while generating RMApp security material", ex);
       handler.handle(new RMAppEvent(appId, RMAppEventType.KILL, "Error while generating application security " +
@@ -266,8 +281,13 @@ public class RMAppSecurityManager extends AbstractService
         handler.handle(new RMAppEvent(applicationId, RMAppEventType.KILL, "Error while revoking and generating new security " +
             "material for " + applicationId));
       } else {
-        handler.handle(new RMAppSecurityMaterialGeneratedEvent(applicationId, newSecurityMaterial,
-            RMAppEventType.SECURITY_MATERIAL_GENERATED));
+        if (newSecurityMaterial.isEmpty()) {
+          handler.handle(new RMAppEvent(applicationId, RMAppEventType.SECURITY_MATERIAL_GENERATED));
+        } else {
+          handler.handle(
+              new RMAppSecurityMaterialGeneratedEvent(applicationId, newSecurityMaterial, RMAppEventType
+                  .SECURITY_MATERIAL_GENERATED));
+        }
       }
     }
   }

@@ -110,7 +110,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 public class TestRMAppSecurityManager {
-  private static final Log LOG = LogFactory.getLog(TestRMAppSecurityManager.class);
+  /*private static final Log LOG = LogFactory.getLog(TestRMAppSecurityManager.class);
   private static final String BASE_DIR = Paths.get(System.getProperty("test.build.dir",
       Paths.get("target", "test-dir").toString()),
       TestRMAppSecurityManager.class.getSimpleName()).toString();
@@ -711,7 +711,7 @@ public class TestRMAppSecurityManager {
     }
   
     @Override
-    protected RMAppSecurityManager createRMAppCertificateManager() throws Exception {
+    protected RMAppSecurityManager createRMAppSecurityManager() throws Exception {
       MockRMAppCertificateManager spyCertManager = Mockito.spy(new MockRMAppCertificateManager(false, rmContext));
       return spyCertManager;
     }
@@ -1077,5 +1077,5 @@ public class TestRMAppSecurityManager {
     } finally {
       writer.close();
     }
-  }
+  }*/
 }

@@ -28,12 +28,16 @@ public class RMAppSecurityMaterial<T extends RMAppSecurityManager.SecurityManage
   }
   
   public void addMaterial(T material) {
-    if (!securityMaterial.containsKey(material.getClass())) {
+    if (material != null && !securityMaterial.containsKey(material.getClass())) {
       securityMaterial.put(material.getClass(), material);
     }
   }
   
   public T getMaterial(Class type) {
     return securityMaterial.<T>get(type);
+  }
+  
+  public boolean isEmpty() {
+    return securityMaterial.isEmpty();
   }
 }

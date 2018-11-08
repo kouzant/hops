@@ -246,10 +246,9 @@ public class X509SecurityHandler
   }
   
   @Override
-  public boolean revokeMaterial(X509MaterialParameter materialParameter, boolean blocking) {
+  public boolean revokeMaterial(X509MaterialParameter materialParameter, Boolean blocking) {
     if (!isHopsTLSEnabled()) {
-      // Return value here doesn't really matter
-      return false;
+      return true;
     }
     ApplicationId appId = materialParameter.getApplicationId();
     String appUser = materialParameter.appUser;
@@ -490,6 +489,29 @@ public class X509SecurityHandler
   
     public void setExpiration(Long expiration) {
       this.expiration = expiration;
+    }
+    
+    @Override
+    public boolean equals(Object other) {
+      if (this == other) {
+        return true;
+      }
+      if (other instanceof X509MaterialParameter) {
+        X509MaterialParameter x509Param = (X509MaterialParameter) other;
+        return this.getApplicationId().equals(x509Param.getApplicationId())
+            && this.appUser.equals(x509Param.appUser)
+            && this.cryptoMaterialVersion.equals(x509Param.cryptoMaterialVersion);
+      }
+      return false;
+    }
+    
+    @Override
+    public int hashCode() {
+      int result = 17;
+      result = 31 * result + getApplicationId().hashCode();
+      result = 31 * result + appUser.hashCode();
+      result = 31 * result + cryptoMaterialVersion.hashCode();
+      return result;
     }
   }
   

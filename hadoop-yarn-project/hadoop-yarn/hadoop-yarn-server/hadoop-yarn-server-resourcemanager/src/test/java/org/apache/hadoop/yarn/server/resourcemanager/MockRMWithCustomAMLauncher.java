@@ -57,9 +57,9 @@ public class MockRMWithCustomAMLauncher extends MockRM {
   
   
   @Override
-  protected RMAppSecurityManager createRMAppCertificateManager() throws Exception {
+  protected RMAppSecurityManager createRMAppSecurityManager() throws Exception {
     return mockRMAppCertificateManager ? Mockito.spy(new RMAppSecurityManager(rmContext)) :
-        super.createRMAppCertificateManager();
+        super.createRMAppSecurityManager();
   }
   
   @Override
