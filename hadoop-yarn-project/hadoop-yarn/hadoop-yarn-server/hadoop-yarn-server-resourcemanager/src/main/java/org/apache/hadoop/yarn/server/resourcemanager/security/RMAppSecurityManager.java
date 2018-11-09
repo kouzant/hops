@@ -91,6 +91,11 @@ public class RMAppSecurityManager extends AbstractService
     rmAppCertificateActions = RMAppSecurityActionsFactory.getInstance().getActor(conf);
     isRPCTLSEnabled = conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT);
+  
+    for (RMAppSecurityHandler handler : securityHandlers) {
+      handler.init(conf);
+    }
+    
     super.serviceInit(conf);
   }
   
@@ -132,7 +137,7 @@ public class RMAppSecurityManager extends AbstractService
   protected void serviceStart() throws Exception {
     LOG.info("Starting RMAppCertificateManager");
     for (RMAppSecurityHandler handler : securityHandlers) {
-      handler.init(conf);
+      handler.start();
     }
     
     super.serviceStart();
@@ -226,7 +231,9 @@ public class RMAppSecurityManager extends AbstractService
     }
   }
   
-  private void revokeSecurityMaterial(RMAppSecurityManagerEvent event) {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  public void revokeSecurityMaterial(RMAppSecurityManagerEvent event) {
     for (RMAppSecurityHandler handler : securityHandlers) {
       if (handler instanceof X509SecurityHandler) {
         revokeX509(event, handler);

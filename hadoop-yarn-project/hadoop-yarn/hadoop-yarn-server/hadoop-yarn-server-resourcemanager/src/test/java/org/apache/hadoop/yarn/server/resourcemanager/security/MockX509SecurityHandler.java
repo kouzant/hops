@@ -20,6 +20,7 @@ package org.apache.hadoop.yarn.server.resourcemanager.security;
 import io.hops.security.HopsUtil;
 import org.apache.commons.io.FileUtils;
 import org.apache.hadoop.conf.Configuration;
+import org.apache.hadoop.util.ExponentialBackOff;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
@@ -39,6 +40,8 @@ import java.security.cert.X509Certificate;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Enumeration;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -147,7 +150,9 @@ public class MockX509SecurityHandler extends X509SecurityHandler {
     Integer cryptoMaterialVersion = materialParameter.getCryptoMaterialVersion();
     
     try {
-      deregisterFromCertificateRenewer(appId);
+      if (!materialParameter.isFromRenewal()) {
+        deregisterFromCertificateRenewer(appId);
+      }
       putToQueue(appId, appUser, cryptoMaterialVersion);
       waitForQueueToDrain();
       return true;
@@ -240,7 +245,7 @@ public class MockX509SecurityHandler extends X509SecurityHandler {
         byte[] rawKeystore = appKeystores.getRawKeyStore(TYPE.KEYSTORE);
         byte[] rawTrustStore = appKeystores.getRawKeyStore(TYPE.TRUSTSTORE);
         getRenewalTasks().remove(appId);
-  
+        
         X509SecurityManagerMaterial x509Material = new X509SecurityManagerMaterial(
             appId, rawKeystore, appKeystores.getKeyStorePassword(),
             rawTrustStore, appKeystores.getTrustStorePassword(), newCertificateExpiration);
@@ -252,6 +257,75 @@ public class MockX509SecurityHandler extends X509SecurityHandler {
       } catch (Exception ex) {
         LOG.error("Exception while renewing certificate. THis should not have happened here :(", ex);
         renewalException = true;
+      }
+    }
+  }
+  
+  public static class MockFailingX509SecurityHandler extends X509SecurityHandler {
+    private final Integer succeedAfterRetries;
+    private int numberOfRenewalFailures = 0;
+    private boolean renewalFailed = false;
+    
+    public MockFailingX509SecurityHandler(RMContext rmContext, RMAppSecurityManager rmAppSecurityManager,
+        Integer succeedAfterRetries) {
+      super(rmContext, rmAppSecurityManager);
+      this.succeedAfterRetries = succeedAfterRetries;
+    }
+    
+    public int getNumberOfRenewalFailures() {
+      return numberOfRenewalFailures;
+    }
+    
+    public boolean hasRenewalFailed() {
+      return renewalFailed;
+    }
+    
+    @Override
+    public boolean isHopsTLSEnabled() {
+      return true;
+    }
+  
+    @Override
+    protected Runnable createCertificateRenewerTask(ApplicationId appId, String appUser, Integer currentCryptoVersion) {
+      return new MockFailingX509Renewer(appId, appUser, currentCryptoVersion, succeedAfterRetries);
+    }
+    
+    @Override
+    public X509SecurityManagerMaterial generateMaterial(
+        X509MaterialParameter materialParameter) throws Exception {
+      throw new IOException("Exception is intended here");
+    }
+    
+    public class MockFailingX509Renewer extends X509Renewer {
+      private final Integer succeedAfterRetries;
+      
+      public MockFailingX509Renewer(ApplicationId appId, String appUser, Integer currentCryptoVersion,
+          Integer succeedAfterRetries) {
+        super(appId, appUser, currentCryptoVersion);
+        this.succeedAfterRetries = succeedAfterRetries;
+      }
+      
+      @Override
+      public void run() {
+        try {
+          if (((ExponentialBackOff) backOff).getNumberOfRetries() < succeedAfterRetries) {
+            throw new Exception("Ooops something went wrong");
+          }
+          getRenewalTasks().remove(appId);
+          LOG.info("Renewed certificate for applicaiton " + appId);
+        } catch (Exception ex) {
+          getRenewalTasks().remove(appId);
+          backOffTime = backOff.getBackOffInMillis();
+          if (backOffTime != -1) {
+            numberOfRenewalFailures++;
+            LOG.warn("Failed to renew certificates for application " + appId + ". Retrying in " + backOffTime);;
+            ScheduledFuture task = getRenewerScheduler().schedule(this, backOffTime, TimeUnit.MILLISECONDS);
+            getRenewalTasks().put(appId, task);
+          } else {
+            LOG.error("Failed to renew certificate for application " + appId + " Failed more than 4 times, giving up");
+            renewalFailed = true;
+          }
+        }
       }
     }
   }

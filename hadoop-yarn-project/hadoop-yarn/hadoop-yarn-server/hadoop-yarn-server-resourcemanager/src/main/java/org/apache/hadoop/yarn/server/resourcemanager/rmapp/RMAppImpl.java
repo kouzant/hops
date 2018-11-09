@@ -1189,8 +1189,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         X509SecurityHandler.X509MaterialParameter param =
             new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
         param.setExpiration(app.certificateExpiration);
-        app.rmContext.getRMAppCertificateManager()
-            .registerWithMaterialRenewers(param);
+        app.rmContext.getRMAppCertificateManager().registerWithMaterialRenewers(param);
       }
       
       app.handler.handle(new AppAddedSchedulerEvent(app.user,
@@ -2091,7 +2090,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         if (rmNodesThatUpdatedCryptoMaterial.containsAll(ranNodes)) {
           int cryptoVersionToRevoke = cryptoMaterialVersion - 1;
           X509SecurityHandler.X509MaterialParameter x509Param = new X509SecurityHandler.X509MaterialParameter
-              (applicationId, user, cryptoVersionToRevoke);
+              (applicationId, user, cryptoVersionToRevoke, true);
           RMAppSecurityMaterial securityMaterial = new RMAppSecurityMaterial();
           securityMaterial.addMaterial(x509Param);
           RMAppSecurityManagerEvent event = new RMAppSecurityManagerEvent(applicationId, securityMaterial,

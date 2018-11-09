@@ -131,8 +131,13 @@ public class X509SecurityHandler
   }
   
   @VisibleForTesting
-  public RMContext getRmContext() {
+  protected RMContext getRmContext() {
     return rmContext;
+  }
+  
+  @VisibleForTesting
+  protected ScheduledExecutorService getRenewerScheduler() {
+    return renewerScheduler;
   }
   
   @Override
@@ -166,12 +171,17 @@ public class X509SecurityHandler
       rmAppSecurityActions = RMAppSecurityActionsFactory.getInstance().getActor(config);
       keyPairGenerator = KeyPairGenerator.getInstance(KEY_ALGORITHM, SECURITY_PROVIDER);
       keyPairGenerator.initialize(KEY_SIZE);
-      
+    }
+  }
+  
+  @Override
+  public void start() throws Exception {
+    if (isHopsTLSEnabled()) {
       revocationEventsHandler = new RevocationEventsHandler();
       revocationEventsHandler.setDaemon(false);
       revocationEventsHandler.setName("X509-RevocationEventsHandler");
       revocationEventsHandler.start();
-      
+    
       revocationMonitor = new CertificateRevocationMonitor();
       revocationMonitor.setDaemon(true);
       revocationMonitor.setName("X.509-RevocationMonitor");
@@ -421,8 +431,11 @@ public class X509SecurityHandler
   // Used only for testing
   @VisibleForTesting
   protected void waitForQueueToDrain() throws InterruptedException {
+    if (revocationEventsHandler == null || !revocationEventsHandler.isAlive()) {
+      return;
+    }
     while (revocationEvents.peek() != null) {
-      TimeUnit.MILLISECONDS.sleep(10);
+      TimeUnit.MILLISECONDS.sleep(30);
     }
   }
   
@@ -517,7 +530,8 @@ public class X509SecurityHandler
         X509MaterialParameter x509Param = (X509MaterialParameter) other;
         return this.getApplicationId().equals(x509Param.getApplicationId())
             && this.appUser.equals(x509Param.appUser)
-            && this.cryptoMaterialVersion.equals(x509Param.cryptoMaterialVersion);
+            && this.cryptoMaterialVersion.equals(x509Param.cryptoMaterialVersion)
+            && this.isFromRenewal == x509Param.isFromRenewal;
       }
       return false;
     }
@@ -528,10 +542,18 @@ public class X509SecurityHandler
       result = 31 * result + getApplicationId().hashCode();
       result = 31 * result + appUser.hashCode();
       result = 31 * result + cryptoMaterialVersion.hashCode();
+      result = 31 * result + (isFromRenewal ? 1 : 0);
       return result;
     }
   }
   
+  /**
+   * Revocation of certificate should normally happen when all NM running the application
+   * have confirmed that they have updated their X509 material with the new one.
+   * In case a NM crashes, we can't wait for ever to revoke the previous certificate. This thread
+   * goes through all the applications. If there is an application in *X509 rotating phase* and
+   * sufficient time has passed since the rotation phase has started, it triggers a revocation event.
+   */
   private class CertificateRevocationMonitor extends Thread {
     private final Map<ChronoUnit, TimeUnit> CHRONO_MAPPING = new HashMap<>();
     private final TimeUnit intervalForSleep;

@@ -21,6 +21,7 @@ import org.apache.hadoop.conf.Configuration;
 
 public interface RMAppSecurityHandler<R extends RMAppSecurityManager.SecurityManagerMaterial, P> {
   void init(Configuration config) throws Exception;
+  void start() throws Exception;
   void stop() throws Exception;
   R generateMaterial(P parameter) throws Exception;
   void registerRenewer(P parameter);
