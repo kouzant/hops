@@ -67,7 +67,6 @@ import org.junit.AfterClass;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
-import org.mockito.Mock;
 import org.mockito.Mockito;
 
 import java.io.File;
@@ -439,7 +438,7 @@ public class TestX509SecurityHandler {
     
     // Since NM didn't respond acknowledging the crypto update, revokeSecurityMaterial on RMAppSecurityManager
     // should not have been called. The revocation has been handled by the the revocation monitor
-    Mockito.verify(rm.getRMContext().getRMAppCertificateManager(), Mockito.never())
+    Mockito.verify(rm.getRMContext().getRMAppSecurityManager(), Mockito.never())
         .revokeSecurityMaterial(Mockito.any(RMAppSecurityManagerEvent.class));
     rm.stop();
   }
@@ -529,7 +528,7 @@ public class TestX509SecurityHandler {
     assertFalse(appState.isDuringMaterialRotation());
     assertEquals(-1L, appState.getMaterialRotationStartTime());
     // Application should still be registered with the certificate renewer
-    X509SecurityHandler x509SecurityHandler = (X509SecurityHandler) rm.getRMContext().getRMAppCertificateManager()
+    X509SecurityHandler x509SecurityHandler = (X509SecurityHandler) rm.getRMContext().getRMAppSecurityManager()
         .getSecurityHandler(X509SecurityHandler.class);
     assertTrue(x509SecurityHandler.getRenewalTasks().containsKey(application.getApplicationId()));
     
@@ -555,7 +554,7 @@ public class TestX509SecurityHandler {
     // RMApp should not recover in material rotation phase
     assertFalse(appState.isDuringMaterialRotation());
     assertEquals(-1L, appState.getMaterialRotationStartTime());
-    x509SecurityHandler = (X509SecurityHandler) rm2.getRMContext().getRMAppCertificateManager()
+    x509SecurityHandler = (X509SecurityHandler) rm2.getRMContext().getRMAppSecurityManager()
         .getSecurityHandler(X509SecurityHandler.class);
     assertTrue(x509SecurityHandler.getRenewalTasks().containsKey(application.getApplicationId()));
     

@@ -163,7 +163,7 @@ public interface RMContext {
   
   public String getUserFolderHashAlgo();
   
-  RMAppSecurityManager getRMAppCertificateManager();
+  RMAppSecurityManager getRMAppSecurityManager();
   
-  void setRMAppCertificateManager(RMAppSecurityManager rmAppCertificateManager);
+  void setRMAppSecurityManager(RMAppSecurityManager rmAppSecurityManager);
 }

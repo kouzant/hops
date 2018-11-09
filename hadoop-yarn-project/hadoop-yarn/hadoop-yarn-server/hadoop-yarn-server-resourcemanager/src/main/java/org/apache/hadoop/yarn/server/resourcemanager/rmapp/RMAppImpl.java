@@ -1079,11 +1079,11 @@ public class RMAppImpl implements RMApp, Recoverable {
           // RMApp state, so revoke the current version plus 1 to be sure no missed certificate is valid
           X509SecurityHandler.X509MaterialParameter param =
               new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, cryptoMaterialVersionToRevoke);
-          app.rmContext.getRMAppCertificateManager().revokeSecurityMaterialSync(param);
+          app.rmContext.getRMAppSecurityManager().revokeSecurityMaterialSync(param);
           
           param = new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
           param.setExpiration(app.certificateExpiration);
-          app.rmContext.getRMAppCertificateManager().registerWithMaterialRenewers(param);
+          app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(param);
           try {
             app.materializeCertificates();
           } catch (InterruptedException ex) {
@@ -1112,11 +1112,11 @@ public class RMAppImpl implements RMApp, Recoverable {
       // RMApp state, so revoke the current version plus 1 to be sure no missed certificate is valid
       X509SecurityHandler.X509MaterialParameter x509Param =
           new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, cryptoMaterialVersionToRevoke);
-      app.rmContext.getRMAppCertificateManager()
+      app.rmContext.getRMAppSecurityManager()
           .revokeSecurityMaterialSync(x509Param);
       x509Param = new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
       x509Param.setExpiration(app.certificateExpiration);
-      app.rmContext.getRMAppCertificateManager().registerWithMaterialRenewers(x509Param);
+      app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(x509Param);
   
       try {
         app.materializeCertificates();
@@ -1189,7 +1189,7 @@ public class RMAppImpl implements RMApp, Recoverable {
         X509SecurityHandler.X509MaterialParameter param =
             new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
         param.setExpiration(app.certificateExpiration);
-        app.rmContext.getRMAppCertificateManager().registerWithMaterialRenewers(param);
+        app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(param);
       }
       
       app.handler.handle(new AppAddedSchedulerEvent(app.user,
@@ -1228,7 +1228,7 @@ public class RMAppImpl implements RMApp, Recoverable {
       X509SecurityHandler.X509MaterialParameter param =
           new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
       param.setExpiration(app.certificateExpiration);
-      app.rmContext.getRMAppCertificateManager().registerWithMaterialRenewers(param);
+      app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(param);
     }
   }
 

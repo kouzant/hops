@@ -83,7 +83,6 @@ import java.util.concurrent.TimeUnit;
 public class X509SecurityHandler
     implements RMAppSecurityHandler<X509SecurityHandler.X509SecurityManagerMaterial, X509SecurityHandler.X509MaterialParameter> {
   private final static Log LOG = LogFactory.getLog(X509SecurityHandler.class);
-  private final static int SECURITY_HANDLER_PRIORITY = 100;
   private final static String SECURITY_PROVIDER = "BC";
   private final static String KEY_ALGORITHM = "RSA";
   private final static String SIGNATURE_ALGORITHM = "SHA256withRSA";
@@ -141,13 +140,8 @@ public class X509SecurityHandler
   }
   
   @Override
-  public int getPriority() {
-    return SECURITY_HANDLER_PRIORITY;
-  }
-  
-  @Override
   public void init(Configuration config) throws Exception {
-    LOG.info("Initializing X509 Security Handler");
+    LOG.info("Initializing X.509 Security Handler");
     this.config = config;
     hopsTLSEnabled = config.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT);
@@ -176,6 +170,7 @@ public class X509SecurityHandler
   
   @Override
   public void start() throws Exception {
+    LOG.info("Starting X.509 Security Handler");
     if (isHopsTLSEnabled()) {
       revocationEventsHandler = new RevocationEventsHandler();
       revocationEventsHandler.setDaemon(false);

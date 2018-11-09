@@ -26,5 +26,4 @@ public interface RMAppSecurityHandler<R extends RMAppSecurityManager.SecurityMan
   R generateMaterial(P parameter) throws Exception;
   void registerRenewer(P parameter);
   boolean revokeMaterial(P parameter, Boolean blocking);
-  int getPriority();
 }

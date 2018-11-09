@@ -804,7 +804,7 @@ public class ResourceManager extends CompositeService implements Recoverable {
       rmAppSecurityManager = createRMAppSecurityManager();
       rmDispatcher.register(RMAppSecurityManagerEventType.class, rmAppSecurityManager);
       addService(rmAppSecurityManager);
-      rmContext.setRMAppCertificateManager(rmAppSecurityManager);
+      rmContext.setRMAppSecurityManager(rmAppSecurityManager);
       
       clientRM = createClientRMService();
       addService(clientRM);

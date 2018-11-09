@@ -271,7 +271,7 @@ public class TestRMAppTransitions {
     rmAppSecurityManager.init(conf);
     rmAppSecurityManager.start();
     
-    rmContext.setRMAppCertificateManager(rmAppSecurityManager);
+    rmContext.setRMAppSecurityManager(rmAppSecurityManager);
     when(x509SecurityHandler.generateRandomPassword()).thenReturn(cryptoPassword);
     doReturn(loadMockTrustStore()).when(x509SecurityHandler).loadSystemTrustStore(any(Configuration.class));
     

@@ -36,11 +36,8 @@ import org.bouncycastle.jce.provider.BouncyCastleProvider;
 import java.security.Security;
 import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalUnit;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
-import java.util.TreeSet;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -62,25 +59,13 @@ public class RMAppSecurityManager extends AbstractService
   private EventHandler handler;
   private RMAppSecurityActions rmAppCertificateActions;
   private boolean isRPCTLSEnabled = false;
-  private Set<RMAppSecurityHandler> securityHandlers;
-  private Map<Class, RMAppSecurityHandler> securityHanndlersMap;
+  private Map<Class, RMAppSecurityHandler> securityHandlersMap;
   
   public RMAppSecurityManager(RMContext rmContext) {
     super(RMAppSecurityManager.class.getName());
     Security.addProvider(new BouncyCastleProvider());
     this.rmContext = rmContext;
-    securityHandlers = new TreeSet<>(new Comparator<RMAppSecurityHandler>() {
-      @Override
-      public int compare(RMAppSecurityHandler sh0, RMAppSecurityHandler sh1) {
-        if (sh0.getPriority() == sh1.getPriority()) {
-          return 0;
-        }
-        if (sh0.getPriority() > sh1.getPriority()) {
-          return 1;
-        }
-        return -1;
-      }});
-    securityHanndlersMap = new HashMap();
+    securityHandlersMap = new HashMap();
   }
   
   @Override
@@ -92,7 +77,7 @@ public class RMAppSecurityManager extends AbstractService
     isRPCTLSEnabled = conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT);
   
-    for (RMAppSecurityHandler handler : securityHandlers) {
+    for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
       handler.init(conf);
     }
     
@@ -107,8 +92,7 @@ public class RMAppSecurityManager extends AbstractService
   @VisibleForTesting
   public void registerRMAppSecurityHandlerWithType(RMAppSecurityHandler securityHandler, Class type) {
     if (securityHandler != null) {
-      securityHandlers.add(securityHandler);
-      securityHanndlersMap.put(type, securityHandler);
+      securityHandlersMap.put(type, securityHandler);
     }
   }
   
@@ -136,7 +120,7 @@ public class RMAppSecurityManager extends AbstractService
   @Override
   protected void serviceStart() throws Exception {
     LOG.info("Starting RMAppCertificateManager");
-    for (RMAppSecurityHandler handler : securityHandlers) {
+    for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
       handler.start();
     }
     
@@ -146,7 +130,7 @@ public class RMAppSecurityManager extends AbstractService
   @Override
   protected void serviceStop() throws Exception {
     LOG.info("Stopping RMAppCertificateManager");
-    for (RMAppSecurityHandler handler : securityHandlers) {
+    for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
       handler.stop();
     }
   }
@@ -170,7 +154,7 @@ public class RMAppSecurityManager extends AbstractService
   
   public <P extends SecurityManagerMaterial> void registerWithMaterialRenewers(P parameter) {
     if (parameter instanceof X509SecurityHandler.X509MaterialParameter) {
-      X509SecurityHandler handler = (X509SecurityHandler) securityHanndlersMap.get(X509SecurityHandler.class);
+      X509SecurityHandler handler = (X509SecurityHandler) securityHandlersMap.get(X509SecurityHandler.class);
       handler.registerRenewer((X509SecurityHandler.X509MaterialParameter) parameter);
     }
   }
@@ -182,7 +166,7 @@ public class RMAppSecurityManager extends AbstractService
   
   @VisibleForTesting
   public RMAppSecurityHandler getSecurityHandler(Class type) {
-    return securityHanndlersMap.get(type);
+    return securityHandlersMap.get(type);
   }
   
   @VisibleForTesting
@@ -194,7 +178,7 @@ public class RMAppSecurityManager extends AbstractService
     ApplicationId appId = event.getApplicationId();
     RMAppSecurityMaterial rmAppMaterial = new RMAppSecurityMaterial();
     try {
-      for (RMAppSecurityHandler handler : securityHandlers) {
+      for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
         if (handler instanceof X509SecurityHandler) {
           X509SecurityHandler.X509MaterialParameter x509Param =
               (X509SecurityHandler.X509MaterialParameter) event.getSecurityMaterial()
@@ -223,7 +207,7 @@ public class RMAppSecurityManager extends AbstractService
   }
   
   private void revokeX509Only(RMAppSecurityManagerEvent event) {
-    RMAppSecurityHandler x509Handler = securityHanndlersMap.get(X509SecurityHandler.class);
+    RMAppSecurityHandler x509Handler = securityHandlersMap.get(X509SecurityHandler.class);
     if (x509Handler == null && isRPCTLSEnabled()) {
       LOG.error("Hops TLS is enabled but there is no X509SecurityHandler registered");
     } else {
@@ -234,7 +218,7 @@ public class RMAppSecurityManager extends AbstractService
   @InterfaceAudience.Private
   @VisibleForTesting
   public void revokeSecurityMaterial(RMAppSecurityManagerEvent event) {
-    for (RMAppSecurityHandler handler : securityHandlers) {
+    for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
       if (handler instanceof X509SecurityHandler) {
         revokeX509(event, handler);
       }
@@ -251,7 +235,7 @@ public class RMAppSecurityManager extends AbstractService
   
   public <P extends SecurityManagerMaterial> void revokeSecurityMaterialSync(P parameter) {
     if (parameter instanceof X509SecurityHandler.X509MaterialParameter) {
-      X509SecurityHandler handler = (X509SecurityHandler) securityHanndlersMap.get(X509SecurityHandler.class);
+      X509SecurityHandler handler = (X509SecurityHandler) securityHandlersMap.get(X509SecurityHandler.class);
       handler.revokeMaterial((X509SecurityHandler.X509MaterialParameter) parameter, true);
     }
   }
@@ -265,7 +249,7 @@ public class RMAppSecurityManager extends AbstractService
     RMAppSecurityMaterial newSecurityMaterial = new RMAppSecurityMaterial();
     
     // X.509 material
-    X509SecurityHandler x509Handler = (X509SecurityHandler) securityHanndlersMap.get(X509SecurityHandler.class);
+    X509SecurityHandler x509Handler = (X509SecurityHandler) securityHandlersMap.get(X509SecurityHandler.class);
     if (x509Param != null) {
       applicationId = x509Param.getApplicationId();
       x509Revoked = x509Handler.revokeMaterial(x509Param, true);

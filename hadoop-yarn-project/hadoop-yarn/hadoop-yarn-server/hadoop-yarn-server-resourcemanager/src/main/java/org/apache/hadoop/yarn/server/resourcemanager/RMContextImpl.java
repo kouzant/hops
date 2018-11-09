@@ -88,7 +88,7 @@ public class RMContextImpl implements RMContext {
   
   private byte[] seed;
   private String userFolderHashAlgo = YarnConfiguration.DEFAULT_USER_FOLDER_ALGO;
-  private RMAppSecurityManager rmAppCertificateManager;
+  private RMAppSecurityManager rmAppSecurityManager;
   
   /**
    * Default constructor. To be used in conjunction with setter methods for
@@ -572,12 +572,12 @@ public class RMContextImpl implements RMContext {
   }
   
   @Override
-  public RMAppSecurityManager getRMAppCertificateManager() {
-    return rmAppCertificateManager;
+  public RMAppSecurityManager getRMAppSecurityManager() {
+    return rmAppSecurityManager;
   }
   
   @Override
-  public void setRMAppCertificateManager(RMAppSecurityManager rmAppCertificateManager) {
-    this.rmAppCertificateManager = rmAppCertificateManager;
+  public void setRMAppSecurityManager(RMAppSecurityManager rmAppSecurityManager) {
+    this.rmAppSecurityManager = rmAppSecurityManager;
   }
 }
