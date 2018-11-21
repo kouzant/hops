@@ -193,10 +193,21 @@ public class RMAppSecurityManager extends AbstractService
   public <P extends SecurityManagerMaterial> void registerWithMaterialRenewers(P parameter) {
     if (parameter instanceof X509SecurityHandler.X509MaterialParameter) {
       X509SecurityHandler handler = (X509SecurityHandler) securityHandlersMap.get(X509SecurityHandler.class);
-      handler.registerRenewer((X509SecurityHandler.X509MaterialParameter) parameter);
+      if (handler != null) {
+        handler.registerRenewer((X509SecurityHandler.X509MaterialParameter) parameter);
+      } else {
+        String errorMsg = "Tried to register with X.509 renewer but there is no handler";
+        LOG.error(errorMsg);
+        throw new NullPointerException(errorMsg);
+      }
     } else if (parameter instanceof JWTSecurityHandler.JWTMaterialParameter) {
       JWTSecurityHandler handler = (JWTSecurityHandler) securityHandlersMap.get(JWTSecurityHandler.class);
-      handler.registerRenewer((JWTSecurityHandler.JWTMaterialParameter) parameter);
+      if (handler != null) {
+        handler.registerRenewer((JWTSecurityHandler.JWTMaterialParameter) parameter);
+      } else {
+        String errorMsg = "Tried to register with JWT renewer but there is no handler";
+        throw new NullPointerException(errorMsg);
+      }
     }
   }
   

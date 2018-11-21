@@ -746,6 +746,7 @@ public class TestX509SecurityHandler {
       RMAppSecurityManager rmAppSecurityManager = Mockito.spy(new RMAppSecurityManager(rmContext));
       rmAppSecurityManager.registerRMAppSecurityHandlerWithType(createX509SecurityHandler(rmAppSecurityManager),
           X509SecurityHandler.class);
+      rmAppSecurityManager.registerRMAppSecurityHandler(createJWTSecurityHandler(rmAppSecurityManager));
       return rmAppSecurityManager;
     }
   
@@ -754,6 +755,13 @@ public class TestX509SecurityHandler {
       RMAppSecurityHandler<X509SecurityHandler.X509SecurityManagerMaterial, X509SecurityHandler.X509MaterialParameter>
           x509SecurityHandler = Mockito.spy(new MockX509SecurityHandler(rmContext, rmAppSecurityManager, false));
       return x509SecurityHandler;
+    }
+  
+    @Override
+    protected RMAppSecurityHandler createJWTSecurityHandler(RMAppSecurityManager rmAppSecurityManager) {
+      RMAppSecurityHandler<JWTSecurityHandler.JWTSecurityManagerMaterial, JWTSecurityHandler.JWTMaterialParameter>
+          jwtSecurityHandler = new JWTSecurityHandler(rmContext, rmAppSecurityManager);
+      return jwtSecurityHandler;
     }
   }
   

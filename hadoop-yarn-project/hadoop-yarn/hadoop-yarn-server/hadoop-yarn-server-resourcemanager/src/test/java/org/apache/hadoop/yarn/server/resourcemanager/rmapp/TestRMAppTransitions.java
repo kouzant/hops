@@ -85,6 +85,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.event.SchedulerEv
 import org.apache.hadoop.yarn.server.resourcemanager.security.AMRMTokenSecretManager;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.DelegationTokenRenewer;
+import org.apache.hadoop.yarn.server.resourcemanager.security.JWTSecurityHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityActionsFactory;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManager;
@@ -122,6 +123,7 @@ public class TestRMAppTransitions {
   private TestSchedulerEventDispatcher schedulerDispatcher;
   private RMAppSecurityManager rmAppSecurityManager;
   private X509SecurityHandler x509SecurityHandler;
+  private JWTSecurityHandler jwtSecurityHandler;
   private CertificateLocalizationService certificateLocalizationService;
   private final char[] cryptoPassword = "password".toCharArray();
 
@@ -268,6 +270,10 @@ public class TestRMAppTransitions {
     rmAppSecurityManager = spy(new RMAppSecurityManager(rmContext));
     x509SecurityHandler = spy(new X509SecurityHandler(rmContext, rmAppSecurityManager));
     rmAppSecurityManager.registerRMAppSecurityHandlerWithType(x509SecurityHandler, X509SecurityHandler.class);
+    
+    jwtSecurityHandler = spy(new JWTSecurityHandler(rmContext, rmAppSecurityManager));
+    rmAppSecurityManager.registerRMAppSecurityHandlerWithType(jwtSecurityHandler, JWTSecurityHandler.class);
+    
     rmAppSecurityManager.init(conf);
     rmAppSecurityManager.start();
     

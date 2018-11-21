@@ -94,6 +94,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicat
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerApplicationAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.scheduler.SchedulerNode;
 import org.apache.hadoop.yarn.server.resourcemanager.security.ClientToAMTokenSecretManagerInRM;
+import org.apache.hadoop.yarn.server.resourcemanager.security.JWTSecurityHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.security.NMTokenSecretManagerInRM;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityActionsFactory;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityHandler;
@@ -176,6 +177,8 @@ public class MockRM extends ResourceManager {
     RMAppSecurityManager rmAppSecurityManager = new RMAppSecurityManager(this.rmContext);
     rmAppSecurityManager.registerRMAppSecurityHandlerWithType(createX509SecurityHandler(rmAppSecurityManager),
         X509SecurityHandler.class);
+    rmAppSecurityManager.registerRMAppSecurityHandlerWithType(createJWTSecurityHandler(rmAppSecurityManager),
+        JWTSecurityHandler.class);
     return rmAppSecurityManager;
   }
   
@@ -184,6 +187,13 @@ public class MockRM extends ResourceManager {
     RMAppSecurityHandler<X509SecurityHandler.X509SecurityManagerMaterial, X509SecurityHandler.X509MaterialParameter>
         x509SecurityHandler = new TestingX509SecurityHandler(rmAppSecurityManager);
     return x509SecurityHandler;
+  }
+  
+  @Override
+  protected RMAppSecurityHandler createJWTSecurityHandler(RMAppSecurityManager rmAppSecurityManager) {
+    RMAppSecurityHandler<JWTSecurityHandler.JWTSecurityManagerMaterial, JWTSecurityHandler.JWTMaterialParameter>
+        jwtSecurityHandler = new JWTSecurityHandler(this.rmContext, rmAppSecurityManager);
+    return jwtSecurityHandler;
   }
   
   @Override
