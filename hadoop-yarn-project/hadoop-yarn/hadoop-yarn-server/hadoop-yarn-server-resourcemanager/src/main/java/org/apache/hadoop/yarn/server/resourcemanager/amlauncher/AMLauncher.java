@@ -36,6 +36,7 @@ import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.net.NetUtils;
 import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.UserGroupInformation;
+import org.apache.hadoop.yarn.server.resourcemanager.security.JWTSecurityHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.security.RMAppSecurityManagerEventType;
 import org.apache.hadoop.security.token.Token;
@@ -177,11 +178,15 @@ public class AMLauncher implements Runnable {
       X509SecurityHandler.X509MaterialParameter x509Param =
           new X509SecurityHandler.X509MaterialParameter(application.getApplicationId(), application.getUser(),
               application.getCryptoMaterialVersion());
+      JWTSecurityHandler.JWTMaterialParameter jwtParam =
+          new JWTSecurityHandler.JWTMaterialParameter(application.getApplicationId(), application.getUser());
+      
       RMAppSecurityMaterial securityMaterial = new RMAppSecurityMaterial();
       securityMaterial.addMaterial(x509Param);
-      RMAppSecurityManagerEvent certsCleanup = new RMAppSecurityManagerEvent(application.getApplicationId(),securityMaterial,
-          RMAppSecurityManagerEventType.REVOKE_SECURITY_MATERIAL);
-      handler.handle(certsCleanup);
+      securityMaterial.addMaterial(jwtParam);
+      RMAppSecurityManagerEvent securityMaterialCleanup = new RMAppSecurityManagerEvent(application.getApplicationId(),
+          securityMaterial, RMAppSecurityManagerEventType.REVOKE_SECURITY_MATERIAL);
+      handler.handle(securityMaterialCleanup);
     }
   }
   

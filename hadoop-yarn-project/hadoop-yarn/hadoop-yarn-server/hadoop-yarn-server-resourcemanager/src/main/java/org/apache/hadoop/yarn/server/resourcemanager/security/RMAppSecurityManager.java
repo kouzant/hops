@@ -18,6 +18,7 @@
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
 import com.google.common.annotations.VisibleForTesting;
+import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.math3.util.Pair;
@@ -25,6 +26,8 @@ import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.service.AbstractService;
+import org.apache.hadoop.util.BackOff;
+import org.apache.hadoop.util.ExponentialBackOff;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
@@ -38,6 +41,9 @@ import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalUnit;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -61,6 +67,9 @@ public class RMAppSecurityManager extends AbstractService
   private boolean isRPCTLSEnabled = false;
   private Map<Class, RMAppSecurityHandler> securityHandlersMap;
   
+  private static final int RENEWAL_EXECUTOR_SERVICE_POOL_SIZE = 10;
+  private ScheduledExecutorService renewalExecutorService;
+  
   public RMAppSecurityManager(RMContext rmContext) {
     super(RMAppSecurityManager.class.getName());
     Security.addProvider(new BouncyCastleProvider());
@@ -77,6 +86,11 @@ public class RMAppSecurityManager extends AbstractService
     isRPCTLSEnabled = conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT);
   
+    renewalExecutorService = Executors.newScheduledThreadPool(RENEWAL_EXECUTOR_SERVICE_POOL_SIZE,
+        new ThreadFactoryBuilder()
+            .setDaemon(true)
+            .setNameFormat("RMApp Security Material Renewer")
+            .build());
     for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
       handler.init(conf);
     }
@@ -133,6 +147,30 @@ public class RMAppSecurityManager extends AbstractService
     for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
       handler.stop();
     }
+    if (renewalExecutorService != null) {
+      try {
+        renewalExecutorService.shutdown();
+        if (!renewalExecutorService.awaitTermination(20L, TimeUnit.SECONDS)) {
+          renewalExecutorService.shutdownNow();
+        }
+      } catch (InterruptedException ex) {
+        renewalExecutorService.shutdownNow();
+        Thread.currentThread().interrupt();
+      }
+    }
+  }
+  
+  protected ScheduledExecutorService getRenewalExecutorService() {
+    return renewalExecutorService;
+  }
+  
+  protected BackOff createBackOffPolicy() {
+    return new ExponentialBackOff.Builder()
+        .setInitialIntervalMillis(200)
+        .setMaximumIntervalMillis(5000)
+        .setMultiplier(1.5)
+        .setMaximumRetries(4)
+        .build();
   }
   
   @Override
@@ -156,6 +194,9 @@ public class RMAppSecurityManager extends AbstractService
     if (parameter instanceof X509SecurityHandler.X509MaterialParameter) {
       X509SecurityHandler handler = (X509SecurityHandler) securityHandlersMap.get(X509SecurityHandler.class);
       handler.registerRenewer((X509SecurityHandler.X509MaterialParameter) parameter);
+    } else if (parameter instanceof JWTSecurityHandler.JWTMaterialParameter) {
+      JWTSecurityHandler handler = (JWTSecurityHandler) securityHandlersMap.get(JWTSecurityHandler.class);
+      handler.registerRenewer((JWTSecurityHandler.JWTMaterialParameter) parameter);
     }
   }
   
@@ -178,6 +219,7 @@ public class RMAppSecurityManager extends AbstractService
     ApplicationId appId = event.getApplicationId();
     RMAppSecurityMaterial rmAppMaterial = new RMAppSecurityMaterial();
     try {
+      // This could be a little bit more elegant
       for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
         if (handler instanceof X509SecurityHandler) {
           X509SecurityHandler.X509MaterialParameter x509Param =
@@ -190,8 +232,17 @@ public class RMAppSecurityManager extends AbstractService
           if (material != null) {
             rmAppMaterial.addMaterial(material);
           }
+        } else if (handler instanceof JWTSecurityHandler) {
+          JWTSecurityHandler.JWTMaterialParameter jwtParam = (JWTSecurityHandler.JWTMaterialParameter) event
+              .getSecurityMaterial().getMaterial(JWTSecurityHandler.JWTMaterialParameter.class);
+          if (jwtParam == null) {
+            throw new NullPointerException("JWT on Yarn is enabled but JWT parameter is null for " + appId);
+          }
+          SecurityManagerMaterial material = handler.generateMaterial(jwtParam);
+          if (material != null) {
+            rmAppMaterial.addMaterial(material);
+          }
         }
-        // This could be a little bit more elegant
       }
       if (rmAppMaterial.isEmpty()) {
         handler.handle(new RMAppEvent(appId, RMAppEventType.SECURITY_MATERIAL_GENERATED));
@@ -221,6 +272,8 @@ public class RMAppSecurityManager extends AbstractService
     for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
       if (handler instanceof X509SecurityHandler) {
         revokeX509(event, handler);
+      } else if (handler instanceof JWTSecurityHandler) {
+        revokeJWT(event, handler);
       }
     }
   }
@@ -229,8 +282,19 @@ public class RMAppSecurityManager extends AbstractService
     ApplicationId appId = event.getApplicationId();
     X509SecurityHandler.X509MaterialParameter x509Param = (X509SecurityHandler.X509MaterialParameter) event
         .getSecurityMaterial().getMaterial(X509SecurityHandler.X509MaterialParameter.class);
-    securityHandler.revokeMaterial(x509Param, false);
-    LOG.debug("Revoked X.509 material for " + appId);
+    if (x509Param != null) {
+      securityHandler.revokeMaterial(x509Param, false);
+      LOG.debug("Revoked X.509 material for " + appId);
+    }
+  }
+  
+  private void revokeJWT(RMAppSecurityManagerEvent event, RMAppSecurityHandler securityHandler) {
+    JWTSecurityHandler.JWTMaterialParameter jwtParam = (JWTSecurityHandler.JWTMaterialParameter) event
+        .getSecurityMaterial().getMaterial(JWTSecurityHandler.JWTMaterialParameter.class);
+    if (jwtParam != null) {
+      securityHandler.revokeMaterial(jwtParam, false);
+      LOG.debug("Revoked JWT material for " + jwtParam.getApplicationId());
+    }
   }
   
   public <P extends SecurityManagerMaterial> void revokeSecurityMaterialSync(P parameter) {
@@ -307,7 +371,7 @@ public class RMAppSecurityManager extends AbstractService
     }
   }*/
   
-  protected abstract static class SecurityManagerMaterial {
+  public abstract static class SecurityManagerMaterial {
     private final ApplicationId applicationId;
     
     protected SecurityManagerMaterial(ApplicationId applicationId) {

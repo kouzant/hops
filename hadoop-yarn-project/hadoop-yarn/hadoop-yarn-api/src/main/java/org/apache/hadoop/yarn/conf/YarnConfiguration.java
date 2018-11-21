@@ -2652,4 +2652,10 @@ public class YarnConfiguration extends Configuration {
   public static final String RM_APP_CERTIFICATE_REVOCATION_MONITOR_INTERVAL =
       RM_PREFIX + "certificate.revocation-monitor-interval";
   public static String DEFAULT_RM_APP_CERTIFICATE_REVOCATION_MONITOR_INTERVAL = "10h";
+  
+  /**
+   * Application JWT configuration
+   */
+  public static boolean DEFAULT_RM_JWT_ENABLED = false;
+  public static final String RM_JWT_ENABLED = RM_PREFIX + "jwt.enabled";
 }

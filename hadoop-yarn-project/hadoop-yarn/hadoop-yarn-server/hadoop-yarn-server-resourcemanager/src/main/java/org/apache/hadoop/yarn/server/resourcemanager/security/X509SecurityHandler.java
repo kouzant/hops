@@ -18,7 +18,6 @@
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.commons.io.FileUtils;
 import org.apache.commons.lang.RandomStringUtils;
 import org.apache.commons.logging.Log;
@@ -30,7 +29,6 @@ import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.security.ssl.FileBasedKeyStoresFactory;
 import org.apache.hadoop.security.ssl.SSLFactory;
 import org.apache.hadoop.util.BackOff;
-import org.apache.hadoop.util.ExponentialBackOff;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
@@ -39,6 +37,7 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppSecurityMaterialGeneratedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
+import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppSecurityMaterialRenewedEvent;
 import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.bouncycastle.asn1.x500.X500Name;
 import org.bouncycastle.asn1.x500.X500NameBuilder;
@@ -75,7 +74,6 @@ import java.util.Map;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
@@ -105,8 +103,7 @@ public class X509SecurityHandler
   private Long amountOfTimeToSubstractFromExpiration = 2L;
   private TemporalUnit renewalUnitOfTime = ChronoUnit.DAYS;
   private final Map<ApplicationId, ScheduledFuture> renewalTasks;
-  private static final int RENEWER_THREAD_POOL_SIZE = 5;
-  private final ScheduledExecutorService renewerScheduler;
+  private ScheduledExecutorService renewalExecutorService;
   
   // For certificate revocation monitor
   private Long revocationMonitorInterval = 10L;
@@ -122,11 +119,6 @@ public class X509SecurityHandler
     this.eventHandler = rmContext.getDispatcher().getEventHandler();
     revocationEvents = new ArrayBlockingQueue<CertificateRevocationEvent>(REVOCATION_QUEUE_SIZE);
     renewalTasks = new ConcurrentHashMap<>();
-    renewerScheduler = Executors.newScheduledThreadPool(RENEWER_THREAD_POOL_SIZE,
-        new ThreadFactoryBuilder()
-            .setDaemon(true)
-            .setNameFormat("X.509 app certificate renewal thread #%d")
-            .build());
   }
   
   @VisibleForTesting
@@ -136,7 +128,7 @@ public class X509SecurityHandler
   
   @VisibleForTesting
   protected ScheduledExecutorService getRenewerScheduler() {
-    return renewerScheduler;
+    return renewalExecutorService;
   }
   
   @Override
@@ -145,6 +137,7 @@ public class X509SecurityHandler
     this.config = config;
     hopsTLSEnabled = config.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT);
+    renewalExecutorService = rmAppSecurityManager.getRenewalExecutorService();
     
     String delayConfiguration = config.get(YarnConfiguration.RM_APP_CERTIFICATE_EXPIRATION_SAFETY_PERIOD,
         YarnConfiguration.DEFAULT_RM_APP_CERTIFICATE_RENEWER_DELAY);
@@ -193,9 +186,6 @@ public class X509SecurityHandler
     if (revocationEventsHandler != null) {
       revocationEventsHandler.interrupt();
     }
-    if (renewerScheduler != null) {
-      renewerScheduler.shutdownNow();
-    }
   }
   
   @VisibleForTesting
@@ -243,7 +233,8 @@ public class X509SecurityHandler
       Instant expirationInstant = Instant.ofEpochMilli(parameter.getExpiration());
       Instant delay = expirationInstant.minus(now.toEpochMilli(), ChronoUnit.MILLIS)
           .minus(amountOfTimeToSubstractFromExpiration, renewalUnitOfTime);
-      ScheduledFuture renewTask = renewerScheduler.schedule(
+      
+      ScheduledFuture renewTask = renewalExecutorService.schedule(
           createCertificateRenewerTask(parameter.getApplicationId(), parameter.appUser, parameter.cryptoMaterialVersion),
           delay.toEpochMilli(), TimeUnit.MILLISECONDS);
       renewalTasks.put(parameter.getApplicationId(), renewTask);
@@ -287,7 +278,7 @@ public class X509SecurityHandler
       }
       putToQueue(appId, appUser, cryptoMaterialVersion);
     } catch (InterruptedException ex) {
-      LOG.warn("Could not remove material for user " + appUser + " and application " + appId, ex);
+      LOG.warn("Shutting down while putting revocation event for user " + appUser + " and application " + appId, ex);
     }
     // Return value here doesn't really matter
     return false;
@@ -607,16 +598,7 @@ public class X509SecurityHandler
       this.appId = appId;
       this.appUser = appUser;
       this.currentCryptoVersion = currentCryptoVersion;
-      this.backOff = createBackOffPolicy();
-    }
-    
-    private BackOff createBackOffPolicy() {
-      return new ExponentialBackOff.Builder()
-          .setInitialIntervalMillis(200)
-          .setMaximumIntervalMillis(5000)
-          .setMultiplier(1.5)
-          .setMaximumRetries(4)
-          .build();
+      this.backOff = rmAppSecurityManager.createBackOffPolicy();
     }
     
     @Override
@@ -641,9 +623,7 @@ public class X509SecurityHandler
         X509SecurityManagerMaterial x509Material = new X509SecurityManagerMaterial(
             appId, rawProtectedKeyStore, keyStoresWrapper.keyStorePassword,
             rawTrustStore, keyStoresWrapper.trustStorePassword, expiration);
-        RMAppSecurityMaterial<X509SecurityManagerMaterial> securityMaterial = new RMAppSecurityMaterial<>();
-        securityMaterial.addMaterial(x509Material);
-        eventHandler.handle(new RMAppSecurityMaterialGeneratedEvent(appId, securityMaterial, RMAppEventType.CERTS_RENEWED));
+        eventHandler.handle(new RMAppSecurityMaterialRenewedEvent<>(appId, x509Material));
         LOG.debug("Renewed certificate for application " + appId);
       } catch (Exception ex) {
         LOG.error(ex, ex);
@@ -651,7 +631,7 @@ public class X509SecurityHandler
         backOffTime = backOff.getBackOffInMillis();
         if (backOffTime != -1) {
           LOG.warn("Failed to renew certificate for application " + appId + ". Retrying in " + backOffTime + " ms");
-          ScheduledFuture task = renewerScheduler.schedule(this, backOffTime, TimeUnit.MILLISECONDS);
+          ScheduledFuture task = renewalExecutorService.schedule(this, backOffTime, TimeUnit.MILLISECONDS);
           renewalTasks.put(appId, task);
         } else {
           LOG.error("Failed to renew certificate for application " + appId + ". Failed more than 4 times, giving up");
