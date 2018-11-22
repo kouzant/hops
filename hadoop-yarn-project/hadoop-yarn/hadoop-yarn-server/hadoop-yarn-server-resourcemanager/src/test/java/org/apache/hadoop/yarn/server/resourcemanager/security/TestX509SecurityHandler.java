@@ -40,7 +40,6 @@ import org.apache.hadoop.yarn.api.records.ResourceRequest;
 import org.apache.hadoop.yarn.api.records.impl.pb.ApplicationSubmissionContextPBImpl;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.DrainDispatcher;
-import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NodeHeartbeatResponse;
 import org.apache.hadoop.yarn.server.resourcemanager.ApplicationMasterService;
 import org.apache.hadoop.yarn.server.resourcemanager.MockAM;
@@ -52,10 +51,8 @@ import org.apache.hadoop.yarn.server.resourcemanager.RMContextImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.DBRMStateStore;
 import org.apache.hadoop.yarn.server.resourcemanager.recovery.records.ApplicationStateData;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppSecurityMaterialGeneratedEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppState;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.attempt.RMAppAttempt;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImpl;
@@ -100,7 +97,7 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
-public class TestX509SecurityHandler {
+public class TestX509SecurityHandler extends RMSecurityHandlersBaseTest {
   private static final Log LOG = LogFactory.getLog(TestX509SecurityHandler.class);
   private static final String BASE_DIR = Paths.get(System.getProperty("test.build.dir",
       Paths.get("target", "test-dir").toString()),
@@ -657,35 +654,6 @@ public class TestX509SecurityHandler {
         scheduler, appMasterService, System.currentTimeMillis(), "YARN", null, Mockito.mock(ResourceRequest.class));
     rmContext.getRMApps().put(applicationID, app);
     return app;
-  }
-  
-  private class MockRMAppEventHandler implements EventHandler<RMAppEvent> {
-  
-    private final RMAppEventType expectedEventType;
-    private boolean assertionFailure;
-    
-    private MockRMAppEventHandler(RMAppEventType expectedEventType) {
-      this.expectedEventType = expectedEventType;
-      assertionFailure = false;
-    }
-    
-    @Override
-    public void handle(RMAppEvent event) {
-      if (event == null) {
-        assertionFailure = true;
-      } else if (!expectedEventType.equals(event.getType())) {
-        assertionFailure = true;
-      } else if (event.getType().equals(RMAppEventType.SECURITY_MATERIAL_GENERATED)) {
-        if (!(event instanceof RMAppSecurityMaterialGeneratedEvent)) {
-          assertionFailure = true;
-        }
-      }
-    }
-    
-    private void verifyEvent() {
-      assertFalse(assertionFailure);
-    }
-    
   }
   
   private class MyMockRM2 extends MockRM {

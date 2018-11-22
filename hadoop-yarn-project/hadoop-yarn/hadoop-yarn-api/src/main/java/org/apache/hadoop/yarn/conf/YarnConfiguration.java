@@ -2656,6 +2656,10 @@ public class YarnConfiguration extends Configuration {
   /**
    * Application JWT configuration
    */
+  private static String JWT_PREFIX = "jwt.";
   public static boolean DEFAULT_RM_JWT_ENABLED = false;
-  public static final String RM_JWT_ENABLED = RM_PREFIX + "jwt.enabled";
+  public static final String RM_JWT_ENABLED = RM_PREFIX + JWT_PREFIX + "enabled";
+  
+  public static String DEFAULT_RM_JWT_VALIDITY_PERIOD = "30m";
+  public static final String RM_JWT_VALIDITY_PERIOD = RM_PREFIX + JWT_PREFIX + "validity";
 }

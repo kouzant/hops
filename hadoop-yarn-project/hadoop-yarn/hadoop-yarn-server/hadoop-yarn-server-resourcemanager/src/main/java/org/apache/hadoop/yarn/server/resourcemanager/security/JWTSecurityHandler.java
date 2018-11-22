@@ -88,9 +88,9 @@ public class JWTSecurityHandler
         YarnConfiguration.DEFAULT_RM_JWT_ENABLED);
   
     renewalExecutorService = rmAppSecurityManager.getRenewalExecutorService();
-    // TODO(Antonis): Configurable
-    String validity = "30m";
-    validityPeriod = rmAppSecurityManager.parseInterval(validity, "I-have-to-fix-it");
+    String validity = config.get(YarnConfiguration.RM_JWT_VALIDITY_PERIOD,
+        YarnConfiguration.DEFAULT_RM_JWT_VALIDITY_PERIOD);
+    validityPeriod = rmAppSecurityManager.parseInterval(validity, YarnConfiguration.RM_JWT_VALIDITY_PERIOD);
     if (jwtEnabled) {
       rmAppSecurityActions = RMAppSecurityActionsFactory.getInstance().getActor(config);
     }
@@ -100,7 +100,7 @@ public class JWTSecurityHandler
   public void start() throws Exception {
     LOG.info("Starting JWT Security Handler");
     if (isJWTEnabled()) {
-      invalidationEventsHandler = new InvalidationEventsHandler();
+      invalidationEventsHandler = createInvalidationEventsHandler();
       invalidationEventsHandler.setDaemon(false);
       invalidationEventsHandler.setName("JWT-InvalidationEventsHandler");
       invalidationEventsHandler.start();
@@ -115,6 +115,18 @@ public class JWTSecurityHandler
     }
   }
   
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected Thread createInvalidationEventsHandler() {
+    return new InvalidationEventsHandler();
+  }
+  
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  public BlockingQueue<JWTInvalidationEvent> getInvalidationEvents() {
+    return invalidationEvents;
+  }
+  
   @Override
   public JWTSecurityManagerMaterial generateMaterial(JWTMaterialParameter parameter) throws Exception {
     if (!isJWTEnabled()) {
@@ -126,9 +138,11 @@ public class JWTSecurityHandler
     return new JWTSecurityManagerMaterial(appId, jwt, parameter.getExpirationDate());
   }
   
-  private void prepareJWTGenerationParameters(JWTMaterialParameter parameter) {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected void prepareJWTGenerationParameters(JWTMaterialParameter parameter) {
     parameter.setAudiences(JWT_AUDIENCE);
-    Instant now = Instant.now();
+    Instant now = getNow();
     Instant expirationInstant = now.plus(validityPeriod.getFirst(), validityPeriod.getSecond());
     Instant renewNotBefore = expirationInstant.plus(1L, ChronoUnit.HOURS);
     parameter.setExpirationDate(expirationInstant);
@@ -139,8 +153,26 @@ public class JWTSecurityHandler
     parameter.setExpLeeway(-1);
   }
   
-  private String generateInternal(JWTMaterialParameter parameter) throws URISyntaxException, IOException {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected String generateInternal(JWTMaterialParameter parameter) throws URISyntaxException, IOException {
     return rmAppSecurityActions.generateJWT(parameter);
+  }
+  
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected Instant getNow() {
+    return Instant.now();
+  }
+  
+  @VisibleForTesting
+  protected Configuration getConfig() {
+    return config;
+  }
+  
+  @VisibleForTesting
+  protected RMAppSecurityManager getRmAppSecurityManager() {
+    return rmAppSecurityManager;
   }
   
   @Override
@@ -198,7 +230,9 @@ public class JWTSecurityHandler
     invalidationEvents.put(new JWTInvalidationEvent(appId.toString()));
   }
   
-  private void revokeInternal(String signingKeyName) {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected void revokeInternal(String signingKeyName) {
     if (!isJWTEnabled()) {
       return;
     }
@@ -209,7 +243,9 @@ public class JWTSecurityHandler
     }
   }
   
-  private boolean isJWTEnabled() {
+  @VisibleForTesting
+  @InterfaceAudience.Private
+  protected boolean isJWTEnabled() {
     return jwtEnabled;
   }
   
@@ -332,15 +368,38 @@ public class JWTSecurityHandler
     }
   }
   
-  private class JWTInvalidationEvent {
+  protected static class JWTInvalidationEvent {
     private final String signingKeyName;
     
-    private JWTInvalidationEvent(String signingKeyName) {
+    protected JWTInvalidationEvent(String signingKeyName) {
       this.signingKeyName = signingKeyName;
+    }
+  
+    protected String getSigningKeyName() {
+      return signingKeyName;
+    }
+    
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      
+      if (o instanceof JWTInvalidationEvent) {
+        return this.signingKeyName.equals(((JWTInvalidationEvent) o).signingKeyName);
+      }
+      return false;
+    }
+  
+    @Override
+    public int hashCode() {
+      return signingKeyName.hashCode();
     }
   }
   
-  private class InvalidationEventsHandler extends Thread {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected class InvalidationEventsHandler extends Thread {
     
     private void drain() {
       List<JWTInvalidationEvent> events = new ArrayList<>(invalidationEvents.size());
