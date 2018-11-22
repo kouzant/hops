@@ -150,7 +150,7 @@ public class RMAppSecurityManager extends AbstractService
     if (renewalExecutorService != null) {
       try {
         renewalExecutorService.shutdown();
-        if (!renewalExecutorService.awaitTermination(20L, TimeUnit.SECONDS)) {
+        if (!renewalExecutorService.awaitTermination(2L, TimeUnit.SECONDS)) {
           renewalExecutorService.shutdownNow();
         }
       } catch (InterruptedException ex) {

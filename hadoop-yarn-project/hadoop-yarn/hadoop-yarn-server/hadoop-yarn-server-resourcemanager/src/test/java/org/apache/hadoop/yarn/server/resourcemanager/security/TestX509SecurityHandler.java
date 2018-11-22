@@ -424,6 +424,7 @@ public class TestX509SecurityHandler {
       TimeUnit.MILLISECONDS.sleep(500);
     }
     
+    LOG.info(">> Rotation has happened");
     assertTrue(application.isAppRotatingCryptoMaterial());
     assertNotEquals(-1L, application.getMaterialRotationStartTime());
     

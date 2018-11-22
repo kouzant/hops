@@ -2891,4 +2891,10 @@
     <name>yarn.resourcemanager.certificate.revocation-monitor-interval</name>
     <value>10h</value>
   </property>
+
+  <property>
+    <description>Enable JWT management for containers</description>
+    <name>yarn.resourcemanager.jwt.enabled</name>
+    <value>true</value>
+  </property>
 </configuration>
