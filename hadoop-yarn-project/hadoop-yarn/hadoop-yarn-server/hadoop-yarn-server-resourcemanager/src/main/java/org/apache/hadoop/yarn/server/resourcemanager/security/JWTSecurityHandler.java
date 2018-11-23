@@ -18,7 +18,6 @@
 package org.apache.hadoop.yarn.server.resourcemanager.security;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.nimbusds.jwt.JWT;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.math3.util.Pair;
@@ -62,6 +61,7 @@ public class JWTSecurityHandler
   private RMAppSecurityActions rmAppSecurityActions;
   private Pair<Long, TemporalUnit> validityPeriod;
   private final Map<ApplicationId, ScheduledFuture> renewalTasks;
+  private Pair<Long, TemporalUnit> expirationSafetyPeriod;
   private ScheduledExecutorService renewalExecutorService;
   
   private Thread invalidationEventsHandler;
@@ -91,6 +91,10 @@ public class JWTSecurityHandler
     String validity = config.get(YarnConfiguration.RM_JWT_VALIDITY_PERIOD,
         YarnConfiguration.DEFAULT_RM_JWT_VALIDITY_PERIOD);
     validityPeriod = rmAppSecurityManager.parseInterval(validity, YarnConfiguration.RM_JWT_VALIDITY_PERIOD);
+    String safetyExpirationPeriodConf = config.get(YarnConfiguration.RM_JWT_EXPIRATION_SAFETY_PERIOD,
+        YarnConfiguration.DEFAULT_RM_JWT_EXPIRATION_SAFETY_PERIOD);
+    expirationSafetyPeriod = rmAppSecurityManager.parseInterval(safetyExpirationPeriodConf,
+        YarnConfiguration.RM_JWT_EXPIRATION_SAFETY_PERIOD);
     if (jwtEnabled) {
       rmAppSecurityActions = RMAppSecurityActionsFactory.getInstance().getActor(config);
     }
@@ -166,6 +170,11 @@ public class JWTSecurityHandler
   }
   
   @VisibleForTesting
+  protected Map<ApplicationId, ScheduledFuture> getRenewalTasks() {
+    return renewalTasks;
+  }
+  
+  @VisibleForTesting
   protected Configuration getConfig() {
     return config;
   }
@@ -184,8 +193,7 @@ public class JWTSecurityHandler
       Instant now = Instant.now();
       Instant delay = parameter.getExpirationDate()
           .minus(now.toEpochMilli(), ChronoUnit.MILLIS)
-          // TODO(Antonis) This should be configurable
-          .minus(10L, ChronoUnit.MINUTES);
+          .minus(expirationSafetyPeriod.getFirst(), expirationSafetyPeriod.getSecond());
       
       ScheduledFuture task = renewalExecutorService.schedule(
           createJWTRenewalTask(parameter.getApplicationId(), parameter.appUser),
@@ -204,7 +212,9 @@ public class JWTSecurityHandler
     }
   }
   
-  private Runnable createJWTRenewalTask(ApplicationId appId, String appUser) {
+  @InterfaceAudience.Private
+  @VisibleForTesting
+  protected Runnable createJWTRenewalTask(ApplicationId appId, String appUser) {
     return new JWTRenewer(appId, appUser);
   }
   
@@ -324,11 +334,32 @@ public class JWTSecurityHandler
     public void setExpLeeway(int expLeeway) {
       this.expLeeway = expLeeway;
     }
+  
+    @Override
+    public int hashCode() {
+      int result = 17;
+      result = 31 * result + appUser.hashCode();
+      result = 31 * result + getApplicationId().hashCode();
+      result = 31 * result + expirationDate.hashCode();
+      return result;
+    }
+  
+    @Override
+    public boolean equals(Object o) {
+      if (this == o) {
+        return true;
+      }
+      if (o instanceof JWTMaterialParameter) {
+        JWTMaterialParameter otherMaterial = (JWTMaterialParameter) o;
+        return appUser.equals(otherMaterial.appUser)
+            && getApplicationId().equals(otherMaterial.getApplicationId())
+            && expirationDate.equals(otherMaterial.getExpirationDate());
+      }
+      return false;
+    }
   }
   
-  @VisibleForTesting
-  @InterfaceAudience.Private
-  protected class JWTRenewer implements Runnable {
+  private class JWTRenewer implements Runnable {
     private final ApplicationId appId;
     private final String appUser;
     private final BackOff backOff;

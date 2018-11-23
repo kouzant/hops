@@ -29,11 +29,13 @@ import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
+import org.junit.Ignore;
 import org.junit.Test;
 import org.mockito.Mockito;
 
 import java.util.concurrent.TimeUnit;
 
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 public class TestJWTSecurityHandler extends RMSecurityHandlersBaseTest {
@@ -99,9 +101,10 @@ public class TestJWTSecurityHandler extends RMSecurityHandlersBaseTest {
     RMAppSecurityActionsFactory.getInstance().register(actor);
     
     RMAppSecurityManager securityManager = new RMAppSecurityManager(rmContext);
-    JWTSecurityHandler jwtHandler = Mockito.spy(new MockJWTSecurityHandler(rmContext, securityManager));
+    JWTSecurityHandler jwtHandler = Mockito.spy(
+        new MockJWTSecurityHandler.BlockingInvalidator(rmContext, securityManager));
     // Block Invalidation handler thread by acquiring the semaphore
-    ((MockJWTSecurityHandler)jwtHandler).getSemaphore().acquire();
+    ((MockJWTSecurityHandler.BlockingInvalidator)jwtHandler).getSemaphore().acquire();
     
     securityManager.registerRMAppSecurityHandlerWithType(jwtHandler, JWTSecurityHandler.class);
     securityManager.init(config);
@@ -125,15 +128,57 @@ public class TestJWTSecurityHandler extends RMSecurityHandlersBaseTest {
     assertTrue(jwtHandler.getInvalidationEvents().contains(invalidationEvent));
     
     // Unblock invalidation handler thread
-    ((MockJWTSecurityHandler)jwtHandler).getSemaphore().release();
+    ((MockJWTSecurityHandler.BlockingInvalidator)jwtHandler).getSemaphore().release();
     
     // Give some time to Invalidation events handler to acquire the lock
     TimeUnit.MILLISECONDS.sleep(10);
     
     // Wait for the event to be processed
-    ((MockJWTSecurityHandler)jwtHandler).getSemaphore().acquire();
+    ((MockJWTSecurityHandler.BlockingInvalidator)jwtHandler).getSemaphore().acquire();
     
     Mockito.verify(actor).invalidateJWT(Mockito.eq(appId.toString()));
+    securityManager.stop();
+  }
+  
+  @Test
+  public void testJWTRenewal() throws Exception {
+    config.set(YarnConfiguration.HOPS_RM_SECURITY_ACTOR_KEY,
+        "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppSecurityActions");
+    config.set(YarnConfiguration.RM_JWT_VALIDITY_PERIOD, "1m");
+    config.set(YarnConfiguration.RM_JWT_EXPIRATION_SAFETY_PERIOD, "50s");
+    
+    RMAppSecurityActions actor = Mockito.spy(new TestingRMAppSecurityActions());
+    RMAppSecurityActionsFactory.getInstance().register(actor);
+    
+    RMAppSecurityManager securityManager = new RMAppSecurityManager(rmContext);
+    JWTSecurityHandler jwtHandler = Mockito.spy(new MockJWTSecurityHandler(rmContext, securityManager));
+    
+    securityManager.registerRMAppSecurityHandlerWithType(jwtHandler, JWTSecurityHandler.class);
+    securityManager.init(config);
+    securityManager.start();
+    
+    ApplicationId appId = ApplicationId.newInstance(System.currentTimeMillis(), 1);
+    String user = "Dorothy";
+    JWTSecurityHandler.JWTMaterialParameter jwtParam = new JWTSecurityHandler.JWTMaterialParameter(appId, user);
+    JWTSecurityHandler.JWTSecurityManagerMaterial jwt = jwtHandler.generateMaterial(jwtParam);
+    
+    jwtParam = new JWTSecurityHandler.JWTMaterialParameter(appId, user);
+    jwtParam.setExpirationDate(jwt.getExpirationDate());
+    securityManager.registerWithMaterialRenewers(jwtParam);
+    
+    Mockito.verify(jwtHandler).registerRenewer(Mockito.eq(jwtParam));
+    
+    // Renewal should roughly happen after 10s
+    MockJWTSecurityHandler.MockJWTRenewer renewer = null;
+    int sleeped = 5;
+    while ((renewer = ((MockJWTSecurityHandler)jwtHandler).getRenewer()) == null && sleeped > 0) {
+      TimeUnit.MILLISECONDS.sleep(500);
+      sleeped--;
+    }
+    
+    assertTrue(renewer.isExceptionRaised());
+    Mockito.verify(actor).generateJWT(Mockito.eq(jwtParam));
+    
     securityManager.stop();
   }
 }

@@ -20,27 +20,36 @@ package org.apache.hadoop.yarn.server.resourcemanager.security;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.commons.math3.util.Pair;
+import org.apache.hadoop.util.BackOff;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.time.temporal.TemporalUnit;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
 public class MockJWTSecurityHandler extends JWTSecurityHandler {
-  private final Log LOG = LogFactory.getLog(MockJWTSecurityHandler.class);
+  protected final Log LOG = LogFactory.getLog(MockJWTSecurityHandler.class);
   private Instant now;
-  private final Semaphore semaphore;
+  private final Map<ApplicationId, String> app2jwt;
+  private AtomicReference<MockJWTRenewer> mockRenewer;
   
   public MockJWTSecurityHandler(RMContext rmContext, RMAppSecurityManager rmAppSecurityManager) {
     super(rmContext, rmAppSecurityManager);
-    semaphore = new Semaphore(1);
+    app2jwt = new HashMap<>();
   }
   
   @Override
@@ -59,21 +68,13 @@ public class MockJWTSecurityHandler extends JWTSecurityHandler {
     String jwt = generateInternal(parameter);
     assertNotNull(jwt);
     assertFalse(jwt.isEmpty());
+    app2jwt.put(appId, jwt);
     return new JWTSecurityManagerMaterial(appId, jwt, parameter.getExpirationDate());
   }
   
   @Override
   protected Instant getNow() {
     return now;
-  }
-  
-  @Override
-  protected Thread createInvalidationEventsHandler() {
-    return new BlockingInvalidationEventHandler();
-  }
-  
-  public Semaphore getSemaphore() {
-    return semaphore;
   }
   
   private Pair<Long, TemporalUnit> getValidityPeriod() {
@@ -83,18 +84,103 @@ public class MockJWTSecurityHandler extends JWTSecurityHandler {
         YarnConfiguration.RM_JWT_VALIDITY_PERIOD);
   }
   
-  protected class BlockingInvalidationEventHandler extends InvalidationEventsHandler {
+  @Override
+  protected Runnable createJWTRenewalTask(ApplicationId appId, String appUser) {
+    MockJWTRenewer renewer = new MockJWTRenewer(appId, appUser);
+    mockRenewer = new AtomicReference<>(renewer);
+    return renewer;
+  }
+  
+  public MockJWTRenewer getRenewer() {
+    return mockRenewer.get();
+  }
+  
+  protected class MockJWTRenewer implements Runnable {
+    private final ApplicationId appId;
+    private final String appUser;
+    private final BackOff backOff;
+    private long backOffTime = 0L;
+    
+    private boolean exceptionRaised = true;
+    
+    private MockJWTRenewer(ApplicationId appId, String appUser) {
+      this.appId = appId;
+      this.appUser = appUser;
+      this.backOff = getRmAppSecurityManager().createBackOffPolicy();
+    }
+    
     @Override
     public void run() {
       try {
-        // One shot
-        semaphore.acquire();
-        JWTInvalidationEvent event = getInvalidationEvents().take();
-        revokeInternal(event.getSigningKeyName());
-        semaphore.release();
-      } catch (InterruptedException ex) {
-        LOG.error("It should not have blocked here", ex);
-        Thread.currentThread().interrupt();
+        LOG.info("Renewing JWT for " + appId);
+        JWTMaterialParameter jwtParam = new JWTMaterialParameter(appId, appUser);
+        prepareJWTGenerationParameters(jwtParam);
+        String jwt = generateInternal(jwtParam);
+        getRenewalTasks().remove(appId);
+        JWTSecurityManagerMaterial jwtMaterial = new JWTSecurityManagerMaterial(appId, jwt,
+            jwtParam.getExpirationDate());
+        String oldJWT = app2jwt.get(appId);
+        assertNotNull("You should generate JWT first for app " + appId, oldJWT);
+        assertNotEquals(oldJWT, jwtMaterial.getToken());
+        LOG.info("Renewed JWT for " + appId);
+        exceptionRaised = false;
+      } catch (Exception ex) {
+        LOG.error("Exception should not have happened here!");
+        LOG.error(ex, ex);
+        getRenewalTasks().remove(appId);
+        backOffTime = backOff.getBackOffInMillis();
+        if (backOffTime != -1) {
+          LOG.warn("Failed to renew JWT for application " + appId + ". Retrying in " + backOffTime + " ms");
+          ScheduledFuture task = getRmAppSecurityManager().getRenewalExecutorService().schedule(this, backOffTime,
+              TimeUnit.MILLISECONDS);
+          getRenewalTasks().put(appId, task);
+        } else {
+          LOG.error("Failed to renew JWT for application " + appId + ". Failed more than 4 times, giving up");
+        }
+      }
+    }
+    
+    public boolean isExceptionRaised() {
+      return exceptionRaised;
+    }
+  }
+  
+  
+  
+  /**
+   * This class will block during JWT invalidation
+   */
+  public static class BlockingInvalidator extends MockJWTSecurityHandler {
+    private final Semaphore semaphore;
+  
+    public BlockingInvalidator(RMContext rmContext,
+        RMAppSecurityManager rmAppSecurityManager) {
+      super(rmContext, rmAppSecurityManager);
+      semaphore = new Semaphore(1);
+    }
+  
+    public Semaphore getSemaphore() {
+      return semaphore;
+    }
+  
+    @Override
+    protected Thread createInvalidationEventsHandler() {
+      return new BlockingInvalidationEventHandler();
+    }
+  
+    protected class BlockingInvalidationEventHandler extends InvalidationEventsHandler {
+      @Override
+      public void run() {
+        try {
+          // One shot
+          semaphore.acquire();
+          JWTInvalidationEvent event = getInvalidationEvents().take();
+          revokeInternal(event.getSigningKeyName());
+          semaphore.release();
+        } catch (InterruptedException ex) {
+          LOG.error("It should not have blocked here", ex);
+          Thread.currentThread().interrupt();
+        }
       }
     }
   }

@@ -1171,6 +1171,10 @@ public class RMAppImpl implements RMApp, Recoverable {
         && trustStore != null && trustStorePassword != null;
   }
   
+  private boolean isJWTMaterialPresent() {
+    return jwt != null && !jwt.isEmpty() && jwtExpiration != null;
+  }
+  
   private void updateApplicationWithCryptoMaterial(X509SecurityHandler.X509SecurityManagerMaterial x509Material) {
     if (x509Material == null) {
       return;
@@ -1223,15 +1227,19 @@ public class RMAppImpl implements RMApp, Recoverable {
         
         app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
         
-        X509SecurityHandler.X509MaterialParameter x509Param =
-            new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
-        x509Param.setExpiration(app.certificateExpiration);
-        app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(x509Param);
+        if (app.isX509MaterialPresent()) {
+          X509SecurityHandler.X509MaterialParameter x509Param =
+              new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
+          x509Param.setExpiration(app.certificateExpiration);
+          app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(x509Param);
+        }
   
-        JWTSecurityHandler.JWTMaterialParameter jwtParam =
-            new JWTSecurityHandler.JWTMaterialParameter(app.applicationId, app.user);
-        jwtParam.setExpirationDate(app.jwtExpiration);
-        app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(jwtParam);
+        if (app.isJWTMaterialPresent()) {
+          JWTSecurityHandler.JWTMaterialParameter jwtParam =
+              new JWTSecurityHandler.JWTMaterialParameter(app.applicationId, app.user);
+          jwtParam.setExpirationDate(app.jwtExpiration);
+          app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(jwtParam);
+        }
       }
       
       app.handler.handle(new AppAddedSchedulerEvent(app.user, app.submissionContext, false));

@@ -79,7 +79,7 @@ public class RMAppSecurityManager extends AbstractService
   
   @Override
   protected void serviceInit(Configuration conf) throws Exception {
-    LOG.debug("Initializing RMAppCertificateManager");
+    LOG.debug("Initializing RMAppSecurityManager");
     this.conf = conf;
     this.handler = rmContext.getDispatcher().getEventHandler();
     rmAppCertificateActions = RMAppSecurityActionsFactory.getInstance().getActor(conf);
@@ -133,7 +133,7 @@ public class RMAppSecurityManager extends AbstractService
   
   @Override
   protected void serviceStart() throws Exception {
-    LOG.info("Starting RMAppCertificateManager");
+    LOG.info("Starting RMAppSecurityManager");
     for (RMAppSecurityHandler handler : securityHandlersMap.values()) {
       handler.start();
     }
@@ -339,6 +339,8 @@ public class RMAppSecurityManager extends AbstractService
       }
       
       // Add more security materials here
+      
+      // TODO(Antonis) What should I do with JWT???
       
       if (exceptionThrown) {
         /**

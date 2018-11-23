@@ -211,6 +211,7 @@ public class TestRMAppTransitions {
   public void setUp() throws Exception {
     conf = new YarnConfiguration();
     conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, isSecurityEnabled);
+    conf.setBoolean(YarnConfiguration.RM_JWT_ENABLED, true);
     conf.set(YarnConfiguration.RM_APP_CERTIFICATE_EXPIRATION_SAFETY_PERIOD, "1s");
     AuthenticationMethod authMethod = AuthenticationMethod.SIMPLE;
     if (isSecurityEnabled) {
