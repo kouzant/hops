@@ -2138,6 +2138,16 @@ public class RMAppImpl implements RMApp, Recoverable {
     return cryptoMaterialVersion;
   }
   
+  @Override
+  public Instant getJWTExpiration() {
+    return jwtExpiration;
+  }
+  
+  @Override
+  public String getJWT() {
+    return jwt;
+  }
+  
   @VisibleForTesting
   public Set<NodeId> getRMNodesUpdatedCryptoMaterial() {
     return rmNodesThatUpdatedCryptoMaterial;

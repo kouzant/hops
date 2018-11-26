@@ -351,9 +351,13 @@ public class JWTSecurityHandler
       }
       if (o instanceof JWTMaterialParameter) {
         JWTMaterialParameter otherMaterial = (JWTMaterialParameter) o;
+        if (expirationDate != null) {
+          return appUser.equals(otherMaterial.appUser)
+              && getApplicationId().equals(otherMaterial.getApplicationId())
+              && expirationDate.equals(otherMaterial.getExpirationDate());
+        }
         return appUser.equals(otherMaterial.appUser)
-            && getApplicationId().equals(otherMaterial.getApplicationId())
-            && expirationDate.equals(otherMaterial.getExpirationDate());
+            && getApplicationId().equals(otherMaterial.getApplicationId());
       }
       return false;
     }
