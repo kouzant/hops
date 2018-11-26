@@ -351,6 +351,8 @@ public class ContainerManagerImpl extends CompositeService implements
       cryptoMaterialVersion = p.getCryptoVersion();
     }
     
+    // TODO (Antonis): Recover JWT for app
+    
     List<ApplicationACLMapProto> aclProtoList = p.getAclsList();
     Map<ApplicationAccessType, String> acls =
         new HashMap<ApplicationAccessType, String>(aclProtoList.size());
@@ -828,25 +830,31 @@ public class ContainerManagerImpl extends CompositeService implements
     String keyStorePass = requests.getKeyStorePassword();
     ByteBuffer trustStore = requests.getTrustStore();
     String trustStorePass = requests.getTrustStorePassword();
-
-    if (getConfig()!=null && getConfig().getBoolean(CommonConfigurationKeysPublic
+  
+    ApplicationId appId = nmTokenIdentifier.getApplicationAttemptId()
+        .getApplicationId();
+    String user = null, userFolder = null;
+    // When launching AM container there is only one Container request
+    if (!requests.getStartContainerRequests().isEmpty()) {
+      StartContainerRequest request = requests.getStartContainerRequests().get(0);
+      user = BuilderUtils.newContainerTokenIdentifier(request
+          .getContainerToken()).getApplicationSubmitter();
+      userFolder = BuilderUtils.newContainerTokenIdentifier(request
+          .getContainerToken()).getApplicationSubmitterFolder();
+    }
+    if (user == null || userFolder == null) {
+      throw new IOException("Submitter user is null");
+    }
+    
+    if (getConfig() != null && getConfig().getBoolean(CommonConfigurationKeysPublic
         .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
         .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      ApplicationId appId = nmTokenIdentifier.getApplicationAttemptId()
-          .getApplicationId();
-      String user = null, userFolder = null;
-      // When launching AM container there is only one Container request
-      if (!requests.getStartContainerRequests().isEmpty()) {
-        StartContainerRequest request = requests.getStartContainerRequests().get(0);
-        user = BuilderUtils.newContainerTokenIdentifier(request
-            .getContainerToken()).getApplicationSubmitter();
-        userFolder = BuilderUtils.newContainerTokenIdentifier(request
-            .getContainerToken()).getApplicationSubmitterFolder();
-      }
-      if (user == null || userFolder == null) {
-        throw new IOException("Submitter user is null");
-      }
       materializeCertificates(appId, user, userFolder, keyStore, keyStorePass, trustStore, trustStorePass);
+    }
+    
+    if (getConfig() != null && getConfig().getBoolean(YarnConfiguration.RM_JWT_ENABLED,
+        YarnConfiguration.DEFAULT_RM_JWT_ENABLED)) {
+      materializeJWT(appId, user, userFolder, requests.getJWT());
     }
     
     List<ContainerId> succeededContainers = new ArrayList<ContainerId>();
@@ -925,6 +933,24 @@ public class ContainerManagerImpl extends CompositeService implements
         LOG.error(ex, ex);
         throw new IOException(ex);
       }
+    }
+  }
+  
+  private void materializeJWT(ApplicationId appId, String user, String userFolder, String jwt) throws IOException {
+    if (context.getApplications().containsKey(appId)) {
+      LOG.debug("Application reference exists, JWT should have " +
+          "already been materialized");
+      return;
+    }
+    
+    if (jwt == null || jwt.isEmpty()) {
+      throw new IOException("JWT is enabled but it either null or empty for application " + appId);
+    }
+    try {
+      context.getCertificateLocalizationService().materializeJWT(user, appId.toString(), userFolder, jwt);
+    } catch (InterruptedException ex) {
+      LOG.error(ex, ex);
+      throw new IOException(ex);
     }
   }
   
@@ -1026,6 +1052,9 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     
     int cryptoMaterialVersion = -1;
+    
+    // TODO(Antonis) Inject JWT as local resource
+    
     // Inject crypto material when RPC TLS is enabled as LocalResources
     if (getConfig() != null && getConfig().getBoolean(
         CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
