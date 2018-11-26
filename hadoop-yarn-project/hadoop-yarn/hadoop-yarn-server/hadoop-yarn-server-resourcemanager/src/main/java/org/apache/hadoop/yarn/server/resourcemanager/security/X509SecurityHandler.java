@@ -34,8 +34,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.event.EventHandler;
 import org.apache.hadoop.yarn.server.resourcemanager.RMContext;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMApp;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppSecurityMaterialGeneratedEvent;
-import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppEventType;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppImpl;
 import org.apache.hadoop.yarn.server.resourcemanager.rmapp.RMAppSecurityMaterialRenewedEvent;
 import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
@@ -270,7 +268,7 @@ public class X509SecurityHandler
         // Deregister application from certificate renewal, if it exists
         deregisterFromCertificateRenewer(appId);
         if (certificateLocalizationService != null) {
-          certificateLocalizationService.removeMaterial(appUser, appId.toString());
+          certificateLocalizationService.removeX509Material(appUser, appId.toString());
         }
       }
       if (blocking) {

@@ -470,8 +470,8 @@ public class ApplicationImpl implements Application {
       if (isSSLEnabled) {
         try {
           CertificateLocalizationCtx.getInstance().getCertificateLocalization()
-              .removeMaterial(app.getUser(), appId.toString());
-        } catch (InterruptedException | ExecutionException ex) {
+              .removeX509Material(app.getUser(), appId.toString());
+        } catch (InterruptedException ex) {
           LOG.error("Error while deleting cryptographic material for user " +
               app.getUser());
         }

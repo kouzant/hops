@@ -63,7 +63,7 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.PolicyProvider;
-import org.apache.hadoop.security.ssl.CryptoMaterial;
+import org.apache.hadoop.security.ssl.X509SecurityMaterial;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.service.CompositeService;
@@ -1129,8 +1129,8 @@ public class ContainerManagerImpl extends CompositeService implements
       throws YarnException, IOException {
     try {
       String applicationId = containerId.getApplicationAttemptId().getApplicationId().toString();
-      CryptoMaterial cryptoMaterial = context
-          .getCertificateLocalizationService().getMaterialLocation(applicationUser, applicationId);
+      X509SecurityMaterial cryptoMaterial = context
+          .getCertificateLocalizationService().getX509MaterialLocation(applicationUser, applicationId);
       Path keyStoreLocation = cryptoMaterial.getKeyStoreLocation();
       Path trustStoreLocation = cryptoMaterial.getTrustStoreLocation();
       Path passwdLocation = cryptoMaterial.getPasswdLocation();
