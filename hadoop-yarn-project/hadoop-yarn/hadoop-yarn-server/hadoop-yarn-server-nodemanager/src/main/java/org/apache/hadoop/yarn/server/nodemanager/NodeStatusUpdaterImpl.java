@@ -878,6 +878,8 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
               }
             }
             
+            // TODO(Antonis) Update material for JWT too
+            
             if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, CommonConfigurationKeys
                 .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
               Map<ApplicationId, UpdatedCryptoForApp> cryptoMaterialToUpdate = response.getUpdatedCryptoForApps();

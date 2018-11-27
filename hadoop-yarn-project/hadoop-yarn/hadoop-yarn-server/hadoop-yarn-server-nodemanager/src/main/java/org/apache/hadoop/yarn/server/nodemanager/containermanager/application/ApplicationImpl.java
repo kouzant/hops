@@ -469,13 +469,24 @@ public class ApplicationImpl implements Application {
       
       if (isSSLEnabled) {
         try {
-          CertificateLocalizationCtx.getInstance().getCertificateLocalization()
+          app.context.getCertificateLocalizationService()
               .removeX509Material(app.getUser(), appId.toString());
         } catch (InterruptedException ex) {
-          LOG.error("Error while deleting cryptographic material for user " +
-              app.getUser());
+          LOG.error("Error while deleting X.509 for application " + appId);
         }
       }
+      
+      boolean isJWTEnabled = ((NodeManager.NMContext) app.context)
+          .isJWTEnabled();
+      if (isJWTEnabled) {
+        try {
+          app.context.getCertificateLocalizationService()
+              .removeJWTMaterial(app.getUser(), appId.toString());
+        } catch (InterruptedException ex) {
+          LOG.error("Error while deleting JWT for application " + appId);
+        }
+      }
+      
       try {
         app.context.getNMStateStore().removeApplication(appId);
       } catch (IOException e) {

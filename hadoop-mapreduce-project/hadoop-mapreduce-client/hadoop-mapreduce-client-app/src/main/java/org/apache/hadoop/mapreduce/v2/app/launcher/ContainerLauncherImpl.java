@@ -165,6 +165,7 @@ public class ContainerLauncherImpl extends AbstractService implements
         list.add(startRequest);
         StartContainersRequest requestList = StartContainersRequest.newInstance(list);
   
+        // TODO(Antonis) Setup JWT
         if (getConfig().getBoolean(CommonConfigurationKeysPublic
                 .IPC_SERVER_SSL_ENABLED,
             CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {

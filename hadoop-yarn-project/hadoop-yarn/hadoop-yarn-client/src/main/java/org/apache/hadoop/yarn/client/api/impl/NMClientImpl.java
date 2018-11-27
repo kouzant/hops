@@ -209,6 +209,7 @@ public class NMClientImpl extends NMClient {
         StartContainersRequest allRequests =
             StartContainersRequest.newInstance(list);
         
+        // TODO(Antonis) Setup JWT
         if (getConfig().getBoolean(CommonConfigurationKeysPublic
             .IPC_SERVER_SSL_ENABLED,
             CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {

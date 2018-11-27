@@ -60,7 +60,8 @@ import java.util.concurrent.locks.ReentrantLock;
 @InterfaceAudience.LimitedPrivate({"Hive"})
 public class CertificateLocalizationService extends AbstractService
     implements CertificateLocalization, CertificateLocalizationMBean {
-  public static final String JWT_FILE_SUFFIX = "_jwt.token";
+  public static final String JWT_FILE_SUFFIX = "_token.jwt";
+  public static final String JWT_LOCAL_RESOURCE_FILE = "token.jwt";
   
   private final Logger LOG = LogManager.getLogger
       (CertificateLocalizationService.class);

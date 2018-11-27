@@ -63,6 +63,7 @@ import org.apache.hadoop.security.Credentials;
 import org.apache.hadoop.security.SaslRpcServer;
 import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.security.authorize.PolicyProvider;
+import org.apache.hadoop.security.ssl.JWTSecurityMaterial;
 import org.apache.hadoop.security.ssl.X509SecurityMaterial;
 import org.apache.hadoop.security.token.SecretManager.InvalidToken;
 import org.apache.hadoop.security.token.TokenIdentifier;
@@ -166,6 +167,7 @@ import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.Re
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredContainerState;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService.RecoveredContainerStatus;
 import org.apache.hadoop.yarn.server.nodemanager.security.authorize.NMPolicyProvider;
+import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.apache.hadoop.yarn.server.utils.BuilderUtils;
 import org.apache.hadoop.yarn.server.utils.YarnServerSecurityUtils;
 
@@ -1050,21 +1052,14 @@ public class ContainerManagerImpl extends CompositeService implements
         }
       }
     }
-    
-    int cryptoMaterialVersion = -1;
-    
-    // TODO(Antonis) Inject JWT as local resource
-    
-    // Inject crypto material when RPC TLS is enabled as LocalResources
-    if (getConfig() != null && getConfig().getBoolean(
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      injectCryptoMaterialAsLocalResources(user, containerId, launchContext);
-      // Crypto version of this material might be greater than 0, but from the NM's perspective it's
-      // the first time it receives it
-      cryptoMaterialVersion = 0;
-    }
-    
+  
+    injectCryptoMaterialAsLocalResources(user, containerId, launchContext);
+    // Crypto version of this material might be greater than 0, but from the NM's perspective it's
+    // the first time it receives it
+    int cryptoMaterialVersion = getConfig()
+        .getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+            CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT) ? 0 : -1;
+  
     // Sanity check for local resources
     for (Map.Entry<String, LocalResource> rsrc : launchContext
         .getLocalResources().entrySet()) {
@@ -1158,23 +1153,49 @@ public class ContainerManagerImpl extends CompositeService implements
       throws YarnException, IOException {
     try {
       String applicationId = containerId.getApplicationAttemptId().getApplicationId().toString();
-      X509SecurityMaterial cryptoMaterial = context
-          .getCertificateLocalizationService().getX509MaterialLocation(applicationUser, applicationId);
-      Path keyStoreLocation = cryptoMaterial.getKeyStoreLocation();
-      Path trustStoreLocation = cryptoMaterial.getTrustStoreLocation();
-      Path passwdLocation = cryptoMaterial.getPasswdLocation();
+      Map<File, String> resources = null;
       
-      if (keyStoreLocation == null || trustStoreLocation == null || passwdLocation == null) {
-        throw new YarnException("One of the crypto materials for container " + containerId.toString() + " has not " +
-            "been localized correctly and is null");
+      // Inject X.509 material
+      if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+        resources = new HashMap<>();
+        X509SecurityMaterial cryptoMaterial = context
+            .getCertificateLocalizationService()
+            .getX509MaterialLocation(applicationUser, applicationId);
+        Path keyStoreLocation = cryptoMaterial.getKeyStoreLocation();
+        Path trustStoreLocation = cryptoMaterial.getTrustStoreLocation();
+        Path passwdLocation = cryptoMaterial.getPasswdLocation();
+  
+        if (keyStoreLocation == null || trustStoreLocation == null ||
+            passwdLocation == null) {
+          throw new YarnException("One of the crypto materials for container " +
+              containerId.toString() + " has not " +
+              "been localized correctly and is null");
+        }
+  
+        resources.put(keyStoreLocation.toFile(),
+            HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME);
+        resources.put(trustStoreLocation.toFile(),
+            HopsSSLSocketFactory.LOCALIZED_TRUSTSTORE_FILE_NAME);
+        resources.put(passwdLocation.toFile(),
+            HopsSSLSocketFactory.LOCALIZED_PASSWD_FILE_NAME);
       }
       
-      Map<File, String> resources = new HashMap<>(3);
-      resources.put(keyStoreLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_KEYSTORE_FILE_NAME);
-      resources.put(trustStoreLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_TRUSTSTORE_FILE_NAME);
-      resources.put(passwdLocation.toFile(), HopsSSLSocketFactory.LOCALIZED_PASSWD_FILE_NAME);
+      // Inject JWT material
+      if (getConfig().getBoolean(YarnConfiguration.RM_JWT_ENABLED,
+          YarnConfiguration.DEFAULT_RM_JWT_ENABLED)) {
+        JWTSecurityMaterial material = context.getCertificateLocalizationService()
+            .getJWTMaterialLocation(applicationUser, applicationId);
+        if (resources == null) {
+          resources = new HashMap<>(1);
+        }
+        resources.put(material.getTokenLocation().toFile(),
+            CertificateLocalizationService.JWT_LOCAL_RESOURCE_FILE);
+      }
       
-      addAsLocalResource(resources, containerId, containerLaunchContext);
+      if (resources != null) {
+        addAsLocalResource(resources, containerId, containerLaunchContext);
+      }
     } catch (InterruptedException ex) {
       throw new YarnException(ex);
     }

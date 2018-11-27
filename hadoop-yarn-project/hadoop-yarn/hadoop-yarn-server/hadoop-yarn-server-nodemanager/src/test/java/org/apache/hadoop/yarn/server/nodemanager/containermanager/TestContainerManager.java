@@ -263,6 +263,9 @@ public class TestContainerManager extends BaseContainerManagerTest {
     ByteBuffer newKeyStore = ByteBuffer.wrap("newKeyStore".getBytes());
     ByteBuffer newTrustStore = ByteBuffer.wrap("newTrustStore".getBytes());
     char[] newPassword = "newPassword".toCharArray();
+    
+    // TODO(Antonis) JWT update test
+    
     CMgrUpdateCryptoMaterialEvent updateEvent0 = new CMgrUpdateCryptoMaterialEvent(cid0, newKeyStore, newPassword,
         newTrustStore, newPassword, 1);
     CMgrUpdateCryptoMaterialEvent updateEvent1 = new CMgrUpdateCryptoMaterialEvent(cid1, newKeyStore, newPassword,
