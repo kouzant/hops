@@ -1115,6 +1115,10 @@ public class RMAppImpl implements RMApp, Recoverable {
           X509SecurityHandler.X509MaterialParameter x509Param =
               new X509SecurityHandler.X509MaterialParameter(app.applicationId, app.user, app.cryptoMaterialVersion);
           securityMaterial.addMaterial(x509Param);
+  
+          JWTSecurityHandler.JWTMaterialParameter jwtParam =
+              new JWTSecurityHandler.JWTMaterialParameter(app.applicationId, app.user);
+          securityMaterial.addMaterial(jwtParam);
           
           RMAppSecurityManagerEvent revokeAndGenerateEvent = new RMAppSecurityManagerEvent(app.applicationId,
               securityMaterial, RMAppSecurityManagerEventType.REVOKE_GENERATE_MATERIAL);

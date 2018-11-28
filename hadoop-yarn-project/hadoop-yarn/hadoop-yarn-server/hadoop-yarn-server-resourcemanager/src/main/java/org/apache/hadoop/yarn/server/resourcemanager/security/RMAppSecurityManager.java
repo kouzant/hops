@@ -25,6 +25,7 @@ import org.apache.commons.math3.util.Pair;
 import org.apache.hadoop.classification.InterfaceAudience;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.fs.CommonConfigurationKeys;
+import org.apache.hadoop.security.ssl.X509SecurityMaterial;
 import org.apache.hadoop.service.AbstractService;
 import org.apache.hadoop.util.BackOff;
 import org.apache.hadoop.util.ExponentialBackOff;
@@ -315,6 +316,7 @@ public class RMAppSecurityManager extends AbstractService
     }
   }
   
+  // Special case when an RMApp is recovering and crypto material was not recovered for whatever reason
   public void revokeAndGenerateMaterial(RMAppSecurityMaterial securityMaterial) {
     X509SecurityHandler.X509MaterialParameter x509Param = (X509SecurityHandler.X509MaterialParameter) securityMaterial
         .getMaterial(X509SecurityHandler.X509MaterialParameter.class);
@@ -322,9 +324,11 @@ public class RMAppSecurityManager extends AbstractService
     boolean x509Revoked = false;
     ApplicationId applicationId = null;
     RMAppSecurityMaterial newSecurityMaterial = new RMAppSecurityMaterial();
+  
+    X509SecurityHandler x509Handler = (X509SecurityHandler) securityHandlersMap.get(X509SecurityHandler.class);
+    JWTSecurityHandler jwtHandler = (JWTSecurityHandler) securityHandlersMap.get(JWTSecurityHandler.class);
     
     // X.509 material
-    X509SecurityHandler x509Handler = (X509SecurityHandler) securityHandlersMap.get(X509SecurityHandler.class);
     if (x509Param != null) {
       applicationId = x509Param.getApplicationId();
       x509Revoked = x509Handler.revokeMaterial(x509Param, true);
@@ -332,7 +336,9 @@ public class RMAppSecurityManager extends AbstractService
     if (x509Revoked && !exceptionThrown) {
       try {
         X509SecurityHandler.X509SecurityManagerMaterial newX509 = x509Handler.generateMaterial(x509Param);
-        newSecurityMaterial.addMaterial(newX509);
+        if (newX509 != null) {
+          newSecurityMaterial.addMaterial(newX509);
+        }
       } catch (Exception ex) {
         LOG.error("Error when generating X.509 material for " + x509Param.getApplicationId(), ex);
         exceptionThrown = true;
@@ -340,12 +346,47 @@ public class RMAppSecurityManager extends AbstractService
       
       // Add more security materials here
       
-      // TODO(Antonis) What should I do with JWT???
-      
+      // For JWT we do not need to invalidate the previous
+      JWTSecurityHandler.JWTMaterialParameter jwtParam = (JWTSecurityHandler.JWTMaterialParameter) securityMaterial
+          .getMaterial(JWTSecurityHandler.JWTMaterialParameter.class);
+      if (!exceptionThrown) {
+        try {
+          if (jwtParam != null) {
+            if (applicationId == null) {
+              applicationId = jwtParam.getApplicationId();
+            }
+            JWTSecurityHandler.JWTSecurityManagerMaterial newJwt = jwtHandler.generateMaterial(jwtParam);
+            if (newJwt != null) {
+              newSecurityMaterial.addMaterial(newJwt);
+            }
+          }
+        } catch (Exception ex) {
+          LOG.error("Error when generating JWT material for " + applicationId, ex);
+          exceptionThrown = true;
+        }
+      }
       if (exceptionThrown) {
         /**
          * You should revoke all security materials if something goes wrong
          */
+        X509SecurityHandler.X509SecurityManagerMaterial generatedX509 = (X509SecurityHandler.X509SecurityManagerMaterial)
+            newSecurityMaterial.getMaterial(X509SecurityHandler.X509SecurityManagerMaterial.class);
+        if (generatedX509 != null) {
+          // X.509 was generated correctly but something went wrong later
+          // We should revoke it
+          int version2revoke = x509Param.getCryptoMaterialVersion() + 1;
+          X509SecurityHandler.X509MaterialParameter x5092revoke = new X509SecurityHandler.X509MaterialParameter(
+              x509Param.getApplicationId(), x509Param.getAppUser(), version2revoke);
+          x509Handler.revokeMaterial(x5092revoke, false);
+        }
+  
+        // JWT was generated correctly but something else went wrong
+        JWTSecurityHandler.JWTSecurityManagerMaterial generatedJWT = (JWTSecurityHandler.JWTSecurityManagerMaterial)
+            newSecurityMaterial.getMaterial(JWTSecurityHandler.JWTSecurityManagerMaterial.class);
+        if (generatedJWT != null) {
+          jwtHandler.revokeMaterial(jwtParam, false);
+        }
+        
         handler.handle(new RMAppEvent(applicationId, RMAppEventType.KILL, "Error while revoking and generating new security " +
             "material for " + applicationId));
       } else {
@@ -360,29 +401,11 @@ public class RMAppSecurityManager extends AbstractService
     }
   }
   
-  /*@InterfaceAudience.Private
-  @VisibleForTesting
-  public void revokeAndGenerateCertificates(ApplicationId appId, String appUser, Integer cryptoMaterialVersion) {
-    // Certificate revocation here is blocking
-    if (revokeInternal(getCertificateIdentifier(appId, appUser, cryptoMaterialVersion))) {
-      generateCertificate(appId, appUser, cryptoMaterialVersion);
-    } else {
-      handler.handle(new RMAppEvent(appId, RMAppEventType.KILL, "Could not revoke previously generated certificate"));
-    }
-  }*/
-  
   @VisibleForTesting
   @InterfaceAudience.Private
   public boolean isRPCTLSEnabled() {
     return isRPCTLSEnabled;
   }
-  
-  /*public void revokeCertificateSynchronously(ApplicationId appId, String applicationUser, Integer cryptoMaterialVersion) {
-    if (isRPCTLSEnabled()) {
-      LOG.info("Revoking certificate for application: " + appId + " with version " + cryptoMaterialVersion);
-      revokeInternal(getCertificateIdentifier(appId, applicationUser, cryptoMaterialVersion));
-    }
-  }*/
   
   public abstract static class SecurityManagerMaterial {
     private final ApplicationId applicationId;

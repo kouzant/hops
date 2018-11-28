@@ -340,7 +340,9 @@ public class JWTSecurityHandler
       int result = 17;
       result = 31 * result + appUser.hashCode();
       result = 31 * result + getApplicationId().hashCode();
-      result = 31 * result + expirationDate.hashCode();
+      if (expirationDate != null) {
+        result = 31 * result + expirationDate.hashCode();
+      }
       return result;
     }
   
