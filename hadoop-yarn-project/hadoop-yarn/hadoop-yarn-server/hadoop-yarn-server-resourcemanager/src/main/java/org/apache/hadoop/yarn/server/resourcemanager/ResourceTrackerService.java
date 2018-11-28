@@ -23,7 +23,6 @@ import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -505,7 +504,7 @@ public class ResourceTrackerService extends AbstractService implements
           updatedCrypto.setTrustStore(trustStore);
           updatedCrypto.setTrustStorePassword(trustStorePassword);
           updatedCrypto.setVersion(cryptoVersion);
-          rmNode.getAppCryptoMaterialToUpdate().putIfAbsent(appId, updatedCrypto);
+          rmNode.getAppX509ToUpdate().putIfAbsent(appId, updatedCrypto);
         }
       }
     }
@@ -558,7 +557,7 @@ public class ResourceTrackerService extends AbstractService implements
       Set<ApplicationId> updatedApps = request.getUpdatedApplicationsWithNewCryptoMaterial();
       if (updatedApps != null) {
         for (ApplicationId appId : updatedApps) {
-          rmNode.getAppCryptoMaterialToUpdate().remove(appId);
+          rmNode.getAppX509ToUpdate().remove(appId);
           RMApp rmApp = rmContext.getRMApps().get(appId);
           rmApp.rmNodeHasUpdatedCryptoMaterial(rmNode.getNodeID());
         }
@@ -648,7 +647,7 @@ public class ResourceTrackerService extends AbstractService implements
   @InterfaceAudience.Private
   @VisibleForTesting
   protected void setAppsToUpdateWithNewCryptoMaterial(NodeHeartbeatResponse response, RMNode rmNode) {
-    Set<Map.Entry<ApplicationId, UpdatedCryptoForApp>> appsToUpdate = rmNode.getAppCryptoMaterialToUpdate().entrySet();
+    Set<Map.Entry<ApplicationId, UpdatedCryptoForApp>> appsToUpdate = rmNode.getAppX509ToUpdate().entrySet();
     Map<ApplicationId, UpdatedCryptoForApp> payload = new HashMap<>(appsToUpdate.size());
     for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : appsToUpdate) {
       payload.put(entry.getKey(), entry.getValue());

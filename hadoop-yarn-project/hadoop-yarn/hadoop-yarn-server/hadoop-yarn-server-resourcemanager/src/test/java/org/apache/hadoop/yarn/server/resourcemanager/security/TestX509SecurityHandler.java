@@ -628,12 +628,12 @@ public class TestX509SecurityHandler extends RMSecurityHandlersBaseTest {
     assertNotNull(rmNode2);
     
     int wait = 0;
-    while (rmNode2.getAppCryptoMaterialToUpdate().isEmpty() && wait < 10) {
+    while (rmNode2.getAppX509ToUpdate().isEmpty() && wait < 10) {
       TimeUnit.MILLISECONDS.sleep(300);
       wait++;
     }
     
-    assertFalse(rmNode2.getAppCryptoMaterialToUpdate().isEmpty());
+    assertFalse(rmNode2.getAppX509ToUpdate().isEmpty());
     
     nmResponse = nm2.nodeHeartbeat(true);
     assertTrue(nmResponse.getUpdatedCryptoForApps().containsKey(app.getApplicationId()));

@@ -215,7 +215,7 @@ public class NodeInfo {
     }
     
     @Override
-    public Map<ApplicationId, UpdatedCryptoForApp> getAppCryptoMaterialToUpdate() {
+    public Map<ApplicationId, UpdatedCryptoForApp> getAppX509ToUpdate() {
       return appCryptoMaterialToUpdate;
     }
   }

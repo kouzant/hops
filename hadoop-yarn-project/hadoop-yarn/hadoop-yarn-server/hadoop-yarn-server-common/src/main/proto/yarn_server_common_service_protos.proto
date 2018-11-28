@@ -108,11 +108,12 @@ message UpdatedCryptoForAppsProto {
 }
 
 message UpdatedCryptoForAppProto {
-  required bytes key_store = 1;
-  required string key_store_password = 2;
-  required bytes trust_store = 3;
-  required string trust_store_password = 4;
-  required int32 version = 5;
+  optional bytes key_store = 1;
+  optional string key_store_password = 2;
+  optional bytes trust_store = 3;
+  optional string trust_store_password = 4;
+  optional int32 version = 5;
+  optional string jwt = 6;
 }
 
 message NMContainerStatusProto {

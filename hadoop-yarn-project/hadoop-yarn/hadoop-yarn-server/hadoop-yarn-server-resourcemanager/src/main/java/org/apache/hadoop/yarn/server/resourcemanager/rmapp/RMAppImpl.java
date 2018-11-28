@@ -1000,9 +1000,12 @@ public class RMAppImpl implements RMApp, Recoverable {
       boolean newNode = app.ranNodes.add(nodeAddedEvent.getNodeId());
       if (newNode && app.isAppRotatingCryptoMaterial.get()) {
         LOG.debug("Sending UPDATE_CRYPTO_EVENT to new running node: " + nodeAddedEvent.getNodeId());
+        X509SecurityHandler.X509SecurityManagerMaterial x509Material = new X509SecurityHandler.X509SecurityManagerMaterial(
+            app.applicationId, app.keyStore, app.keyStorePassword,
+            app.trustStore, app.trustStorePassword, null);
+        x509Material.setCryptoMaterialVersion(app.cryptoMaterialVersion);
         RMNodeUpdateCryptoMaterialForAppEvent updateEvent =
-            new RMNodeUpdateCryptoMaterialForAppEvent(nodeAddedEvent.getNodeId(), app.applicationId, app.keyStore,
-                app.keyStorePassword, app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion);
+            new RMNodeUpdateCryptoMaterialForAppEvent(nodeAddedEvent.getNodeId(), x509Material);
         app.handler.handle(updateEvent);
       }
 
@@ -1306,10 +1309,10 @@ public class RMAppImpl implements RMApp, Recoverable {
         app.rmNodesThatUpdatedCryptoMaterial = new HashSet<>(app.ranNodes.size());
       }
   
+      x509Material.setCryptoMaterialVersion(app.cryptoMaterialVersion);
       for (NodeId nodeId : app.ranNodes) {
-        RMNodeUpdateCryptoMaterialForAppEvent updateEvent =
-            new RMNodeUpdateCryptoMaterialForAppEvent(nodeId, app.applicationId, app.keyStore, app.keyStorePassword,
-                app.trustStore, app.trustStorePassword, app.cryptoMaterialVersion);
+        RMNodeUpdateCryptoMaterialForAppEvent<X509SecurityHandler.X509SecurityManagerMaterial> updateEvent =
+            new RMNodeUpdateCryptoMaterialForAppEvent(nodeId, x509Material);
         app.handler.handle(updateEvent);
       }
   
@@ -1332,6 +1335,11 @@ public class RMAppImpl implements RMApp, Recoverable {
       app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
       
       // TODO(Antonis) How should I notify NodeManagers???
+      for (NodeId nodeId : app.ranNodes) {
+        RMNodeUpdateCryptoMaterialForAppEvent<JWTSecurityHandler.JWTSecurityManagerMaterial> updateEvent =
+            new RMNodeUpdateCryptoMaterialForAppEvent(nodeId, jwtMaterial);
+        app.handler.handle(updateEvent);
+      }
     }
   }
   

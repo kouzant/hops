@@ -201,7 +201,7 @@ public class RMNodeWrapper implements RMNode {
   }
   
   @Override
-  public Map<ApplicationId, UpdatedCryptoForApp> getAppCryptoMaterialToUpdate() {
-    return node.getAppCryptoMaterialToUpdate();
+  public Map<ApplicationId, UpdatedCryptoForApp> getAppX509ToUpdate() {
+    return node.getAppX509ToUpdate();
   }
 }

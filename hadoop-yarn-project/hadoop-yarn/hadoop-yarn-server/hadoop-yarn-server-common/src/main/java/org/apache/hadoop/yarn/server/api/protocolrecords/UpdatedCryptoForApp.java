@@ -54,4 +54,8 @@ public abstract class UpdatedCryptoForApp {
   public abstract int getVersion();
   
   public abstract void setVersion(int version);
+  
+  public abstract String getJWT();
+  
+  public abstract void setJWT(String jwt);
 }

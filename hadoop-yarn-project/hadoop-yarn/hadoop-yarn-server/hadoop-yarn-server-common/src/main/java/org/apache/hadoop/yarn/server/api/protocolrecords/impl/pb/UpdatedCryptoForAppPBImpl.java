@@ -198,4 +198,23 @@ public class UpdatedCryptoForAppPBImpl extends UpdatedCryptoForApp {
     }
     builder.setVersion(version);
   }
+  
+  @Override
+  public String getJWT() {
+    YarnServerCommonServiceProtos.UpdatedCryptoForAppProtoOrBuilder p = viaProto ? proto : builder;
+    if (!p.hasJwt()) {
+      return null;
+    }
+    return p.getJwt();
+  }
+  
+  @Override
+  public void setJWT(String jwt) {
+    maybeInitBuilder();
+    if (jwt == null) {
+      builder.clearJwt();
+      return;
+    }
+    builder.setJwt(jwt);
+  }
 }

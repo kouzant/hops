@@ -623,7 +623,7 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     RMNode rmNode = rm1.getRMContext().getRMNodes().get(nm.getNodeId());
     
     LOG.info("Sleeping until the renewal is scheduled");
-    while (rmNode.getAppCryptoMaterialToUpdate().isEmpty()) {
+    while (rmNode.getAppX509ToUpdate().isEmpty()) {
       TimeUnit.MILLISECONDS.sleep(100);
     }
     nmHeartbeatResponse = nm.nodeHeartbeat(true);
@@ -650,18 +650,18 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     Assert.assertEquals(0, nmHeartbeatResponse.getUpdatedCryptoForApps().size());
     
     rmNode = rm2.getRMContext().getRMNodes().get(nm.getNodeId());
-    rmNode.getAppCryptoMaterialToUpdate().clear();
+    rmNode.getAppX509ToUpdate().clear();
     
     LOG.info("Sleeping until the renewal triggers again");
-    while (rmNode.getAppCryptoMaterialToUpdate().isEmpty()) {
+    while (rmNode.getAppX509ToUpdate().isEmpty()) {
       TimeUnit.MILLISECONDS.sleep(100);
     }
     
     // New NM to represent re-registration
     nm = new MockNM("127.0.0.1:1337", 20 * 1024, rm2.getResourceTrackerService());
     nm.registerNode(runningApps);
-    Assert.assertEquals(1, rmNode.getAppCryptoMaterialToUpdate().size());
-    Assert.assertTrue(rmNode.getAppCryptoMaterialToUpdate().containsKey(app.getApplicationId()));
+    Assert.assertEquals(1, rmNode.getAppX509ToUpdate().size());
+    Assert.assertTrue(rmNode.getAppX509ToUpdate().containsKey(app.getApplicationId()));
     nmHeartbeatResponse = nm.nodeHeartbeat(true);
     // Crypto material has changed so heartbeat should contain updated crypto material
     Assert.assertEquals(1, nmHeartbeatResponse.getUpdatedCryptoForApps().size());

@@ -365,7 +365,7 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     Assert.assertNotNull(response.getUpdatedCryptoForApps());
     Assert.assertTrue(response.getUpdatedCryptoForApps().isEmpty());
     RMNode rmNode = rm.getRMContext().getRMNodes().get(nm1.getNodeId());
-    Assert.assertTrue(rmNode.getAppCryptoMaterialToUpdate().isEmpty());
+    Assert.assertTrue(rmNode.getAppX509ToUpdate().isEmpty());
     
     rm.stop();
   }

@@ -429,12 +429,13 @@ public class X509SecurityHandler
     return hopsTLSEnabled;
   }
   
-  public class X509SecurityManagerMaterial extends RMAppSecurityManager.SecurityManagerMaterial {
+  public static class X509SecurityManagerMaterial extends RMAppSecurityManager.SecurityManagerMaterial {
     private final byte[] keyStore;
     private final char[] keyStorePassword;
     private final byte[] trustStore;
     private final char[] trustStorePassword;
     private final Long expirationEpoch;
+    private Integer cryptoMaterialVersion;
   
     public X509SecurityManagerMaterial(ApplicationId applicationId, byte[] keyStore, char[] keyStorePassword, byte[] trustStore,
         char[] trustStorePassword, Long expirationEpoch) {
@@ -464,6 +465,14 @@ public class X509SecurityHandler
   
     public Long getExpirationEpoch() {
       return expirationEpoch;
+    }
+    
+    public Integer getCryptoMaterialVersion() {
+      return cryptoMaterialVersion;
+    }
+    
+    public void setCryptoMaterialVersion(Integer cryptoMaterialVersion) {
+      this.cryptoMaterialVersion = cryptoMaterialVersion;
     }
   }
   
