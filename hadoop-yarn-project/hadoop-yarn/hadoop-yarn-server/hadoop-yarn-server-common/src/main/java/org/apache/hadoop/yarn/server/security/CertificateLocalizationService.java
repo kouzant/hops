@@ -60,8 +60,7 @@ import java.util.concurrent.locks.ReentrantLock;
 @InterfaceAudience.LimitedPrivate({"Hive"})
 public class CertificateLocalizationService extends AbstractService
     implements CertificateLocalization, CertificateLocalizationMBean {
-  public static final String JWT_FILE_SUFFIX = "_token.jwt";
-  public static final String JWT_LOCAL_RESOURCE_FILE = "token.jwt";
+  
   
   private final Logger LOG = LogManager.getLogger
       (CertificateLocalizationService.class);
@@ -302,7 +301,8 @@ public class CertificateLocalizationService extends AbstractService
           appDirPath = Paths.get(materializeDir.toString(), userFolder);
         }
         
-        Path jwtPath = Paths.get(appDirPath.toFile().getAbsolutePath(), username + JWT_FILE_SUFFIX);
+        Path jwtPath = Paths.get(appDirPath.toFile().getAbsolutePath(), username + JWTSecurityMaterial
+            .JWT_FILE_SUFFIX);
         material = new JWTSecurityMaterial(appDirPath, jwtPath, jwt);
         materialLocation.put(key, material);
         MaterializeEvent event = new MaterializeEvent(key, material);

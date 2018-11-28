@@ -20,6 +20,9 @@ package org.apache.hadoop.security.ssl;
 import java.nio.file.Path;
 
 public class JWTSecurityMaterial extends SecurityMaterial {
+  public static final String JWT_LOCAL_RESOURCE_FILE = "token.jwt";
+  public static final String JWT_FILE_SUFFIX = "_token.jwt";
+  
   private final Path tokenLocation;
   private final String token;
   

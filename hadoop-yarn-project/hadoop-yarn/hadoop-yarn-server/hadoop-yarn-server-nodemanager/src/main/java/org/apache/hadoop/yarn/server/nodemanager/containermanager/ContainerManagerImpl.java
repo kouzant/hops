@@ -969,7 +969,7 @@ public class ContainerManagerImpl extends CompositeService implements
       String user, String userFolder, Credentials credentials,
       Map<ApplicationAccessType, String> appAcls,
       LogAggregationContext logAggregationContext, ByteBuffer keyStore, String keyStorePass,
-      ByteBuffer trustStore, String trustStorePass, int cryptoVersion) {
+      ByteBuffer trustStore, String trustStorePass, int cryptoVersion, String jwt) {
 
     ContainerManagerApplicationProto.Builder builder =
         ContainerManagerApplicationProto.newBuilder();
@@ -977,16 +977,20 @@ public class ContainerManagerImpl extends CompositeService implements
     builder.setUser(user);
     builder.setUserFolder(userFolder);
 
-    if(keyStore!=null){
+    if (keyStore != null){
       builder.setKeyStore(ProtoUtils.convertToProtoFormat(keyStore));
       builder.setKeyStorePassword(keyStorePass);
     }
-    if(trustStore!=null){
+    if (trustStore != null){
       builder.setTrustStore(ProtoUtils.convertToProtoFormat(trustStore));
       builder.setTrustStorePassword(trustStorePass);
     }
 
     builder.setCryptoVersion(cryptoVersion);
+    
+    if (jwt != null) {
+      builder.setJwt(jwt);
+    }
     
     if (logAggregationContext != null) {
       builder.setLogAggregationContext((
@@ -1105,25 +1109,38 @@ public class ContainerManagerImpl extends CompositeService implements
               containerTokenIdentifier.getLogAggregationContext();
           Map<ApplicationAccessType, String> appAcls =
               container.getLaunchContext().getApplicationACLs();
+          
           ByteBuffer keyStore = null, trustStore = null;
           String keyStorePass = null, trustStorePass = null;
+          String jwt = null;
           CertificateLocalizationService certLocService = context.getCertificateLocalizationService();
           if (certLocService != null) {
-            try {
-              X509SecurityMaterial x509Material = certLocService.getX509MaterialLocation(user,
-                  applicationID.toString());
-              keyStore = x509Material.getKeyStoreMem();
-              trustStore = x509Material.getTrustStoreMem();
-              keyStorePass = x509Material.getKeyStorePass();
-              trustStorePass = x509Material.getTrustStorePass();
-            } catch (InterruptedException ex) {
-              throw new YarnException("Interrupted while waiting to get X.509 material for " + applicationID, ex);
+            if (isHopsTLSEnabled()) {
+              try {
+                X509SecurityMaterial x509Material = certLocService.getX509MaterialLocation(user,
+                    applicationID.toString());
+                keyStore = x509Material.getKeyStoreMem();
+                trustStore = x509Material.getTrustStoreMem();
+                keyStorePass = x509Material.getKeyStorePass();
+                trustStorePass = x509Material.getTrustStorePass();
+              } catch (InterruptedException ex) {
+                throw new YarnException("Interrupted while waiting to get X.509 material for " + applicationID, ex);
+              }
+            }
+            if (isJWTEnabled()) {
+              try {
+                JWTSecurityMaterial jwtMaterial = certLocService.getJWTMaterialLocation(user, applicationID.toString());
+                jwt = jwtMaterial.getToken();
+              } catch (InterruptedException ex) {
+                throw new YarnException("Interrupted while waiting to get JWT material for " + applicationID, ex);
+              }
             }
           }
-          // TODO(Antonis) Store JWT
+          
           context.getNMStateStore().storeApplication(applicationID,
               buildAppProto(applicationID, user, userFolder, credentials, appAcls,
-                  logAggregationContext, keyStore, keyStorePass, trustStore, trustStorePass, cryptoMaterialVersion));
+                  logAggregationContext, keyStore, keyStorePass, trustStore, trustStorePass, cryptoMaterialVersion,
+                  jwt));
           dispatcher.getEventHandler().handle(
             new ApplicationInitEvent(applicationID, appAcls,
               logAggregationContext));
@@ -1209,7 +1226,7 @@ public class ContainerManagerImpl extends CompositeService implements
           resources = new HashMap<>(1);
         }
         resources.put(material.getTokenLocation().toFile(),
-            CertificateLocalizationService.JWT_LOCAL_RESOURCE_FILE);
+            JWTSecurityMaterial.JWT_LOCAL_RESOURCE_FILE);
       }
       
       if (resources != null) {
@@ -1549,6 +1566,7 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     ContainerImpl container = (ContainerImpl) context.getContainers().get(event.getContainerId());
     if (container != null) {
+      // TODO(Antonis) Add JWT
       ContainerCryptoMaterialUpdater updater = new ContainerCryptoMaterialUpdater(container, event.getKeyStore(),
           event.getKeyStorePassword(), event.getTrustStore(), event.getTrustStorePassword(), event.getVersion());
       scheduleUpdaterInternal(updater, container.getContainerId());
@@ -1610,13 +1628,20 @@ public class ContainerManagerImpl extends CompositeService implements
         File trustStorePath = container.getTrustStoreLocalizedPath();
         File passwordFilePath = container.getPasswordFileLocalizedPath();
         if (keyStorePath == null || trustStorePath == null || passwordFilePath == null) {
-          throw new IOException("Could not identify localized cryptographic material location for container " +
+          throw new IOException("Could not identify localized X.509 cryptographic material location for container " +
               container.getContainerId());
         }
         writeByteBufferToFile(keyStorePath, keyStore);
         writeByteBufferToFile(trustStorePath, trustStore);
         // Assume key store password is the same for the trust store and for the key itself
         writeStringToFile(passwordFilePath, String.valueOf(keyStorePassword));
+        
+        /*File jwtFile = container.getJWTLocalizedPath();
+        if (jwtFile == null) {
+          throw new IOException("Could not identify localized JWT  material location for container " +
+              container.getContainerId());
+        }
+        writeStringToFile(jwtFile, jwt);*/
         removeCryptoUpdaterTask(container.getContainerId());
         updateStateStore();
         LOG.debug("Updated crypto material for container: " + container.getContainerId());
@@ -1682,11 +1707,14 @@ public class ContainerManagerImpl extends CompositeService implements
       ApplicationId applicationId = container.getContainerId().getApplicationAttemptId().getApplicationId();
       Application app = context.getApplications().get(applicationId);
       app.setCryptoMaterialVersion(cryptoVersion);
+      
+      // TODO(Antonis) WTF will I do with JWT update???
       context.getNMStateStore().storeApplication(applicationId,
           buildAppProto(applicationId, container.getUser(), container.getUserFolder(), container.getCredentials(),
               container.getLaunchContext().getApplicationACLs(), container.getContainerTokenIdentifier()
                   .getLogAggregationContext(),
-              keyStore, String.valueOf(keyStorePassword), trustStore, String.valueOf(trustStorePassword), cryptoVersion));
+              keyStore, String.valueOf(keyStorePassword), trustStore, String.valueOf(trustStorePassword),
+              cryptoVersion, null));
     }
   }
   
