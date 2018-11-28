@@ -345,9 +345,8 @@ public class ContainerManagerImpl extends CompositeService implements
         new DataInputStream(p.getCredentials().newInput()));
     int cryptoMaterialVersion = -1;
     
-    if (getConfig() != null && getConfig().getBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      materializeCertificates(appId, p.getUser(), p.getUserFolder(),
+    if (isHopsTLSEnabled()) {
+      materializeX509(appId, p.getUser(), p.getUserFolder(),
           ProtoUtils.convertFromProtoFormat(p.getKeyStore()), p.getKeyStorePassword(),
           ProtoUtils.convertFromProtoFormat(p.getTrustStore()), p.getTrustStorePassword());
       cryptoMaterialVersion = p.getCryptoVersion();
@@ -828,36 +827,7 @@ public class ContainerManagerImpl extends CompositeService implements
     NMTokenIdentifier nmTokenIdentifier = selectNMTokenIdentifier(remoteUgi);
     authorizeUser(remoteUgi, nmTokenIdentifier);
     
-    ByteBuffer keyStore = requests.getKeyStore();
-    String keyStorePass = requests.getKeyStorePassword();
-    ByteBuffer trustStore = requests.getTrustStore();
-    String trustStorePass = requests.getTrustStorePassword();
-  
-    ApplicationId appId = nmTokenIdentifier.getApplicationAttemptId()
-        .getApplicationId();
-    String user = null, userFolder = null;
-    // When launching AM container there is only one Container request
-    if (!requests.getStartContainerRequests().isEmpty()) {
-      StartContainerRequest request = requests.getStartContainerRequests().get(0);
-      user = BuilderUtils.newContainerTokenIdentifier(request
-          .getContainerToken()).getApplicationSubmitter();
-      userFolder = BuilderUtils.newContainerTokenIdentifier(request
-          .getContainerToken()).getApplicationSubmitterFolder();
-    }
-    if (user == null || userFolder == null) {
-      throw new IOException("Submitter user is null");
-    }
-    
-    if (getConfig() != null && getConfig().getBoolean(CommonConfigurationKeysPublic
-        .IPC_SERVER_SSL_ENABLED, CommonConfigurationKeysPublic
-        .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      materializeCertificates(appId, user, userFolder, keyStore, keyStorePass, trustStore, trustStorePass);
-    }
-    
-    if (getConfig() != null && getConfig().getBoolean(YarnConfiguration.RM_JWT_ENABLED,
-        YarnConfiguration.DEFAULT_RM_JWT_ENABLED)) {
-      materializeJWT(appId, user, userFolder, requests.getJWT());
-    }
+    materializeSecurityMaterial(requests);
     
     List<ContainerId> succeededContainers = new ArrayList<ContainerId>();
     Map<ContainerId, SerializedException> failedContainers =
@@ -889,8 +859,7 @@ public class ContainerManagerImpl extends CompositeService implements
             this.getAMRMProxyService().processApplicationStartRequest(request);
           }
 
-          startContainerInternal(nmTokenIdentifier, containerTokenIdentifier,
-              request, keyStore, keyStorePass, trustStore, trustStorePass);
+          startContainerInternal(nmTokenIdentifier, containerTokenIdentifier, request);
           succeededContainers.add(containerId);
         } catch (YarnException e) {
           failedContainers.put(containerId, SerializedException.newInstance(e));
@@ -908,7 +877,47 @@ public class ContainerManagerImpl extends CompositeService implements
     }
   }
   
-  private void materializeCertificates(ApplicationId appId, String user, String userFolder,
+  private boolean isHopsTLSEnabled() {
+    return ((NodeManager.NMContext) context).isSSLEnabled();
+  }
+  
+  private boolean isJWTEnabled() {
+    return ((NodeManager.NMContext) context).isJWTEnabled();
+  }
+  
+  private void materializeSecurityMaterial(StartContainersRequest requests) throws YarnException, IOException {
+    if (isHopsTLSEnabled() || isJWTEnabled()) {
+      String user = null, userFolder = null;
+      ApplicationId appId = null;
+      // When launching AM container there is only one Container request
+      if (!requests.getStartContainerRequests().isEmpty()) {
+        StartContainerRequest request = requests.getStartContainerRequests().get(0);
+        ContainerTokenIdentifier containerTokenIdentifier = BuilderUtils.newContainerTokenIdentifier(request
+            .getContainerToken());
+        if (containerTokenIdentifier == null) {
+          throw RPCUtil.getRemoteException(new IOException(INVALID_CONTAINERTOKEN_MSG));
+        }
+        user = containerTokenIdentifier.getApplicationSubmitter();
+        userFolder = containerTokenIdentifier.getApplicationSubmitterFolder();
+        appId = containerTokenIdentifier.getContainerID().getApplicationAttemptId().getApplicationId();
+      }
+      
+      if (user == null || userFolder == null) {
+        throw new IOException("User requested container or user folder is null");
+      }
+      
+      if (isHopsTLSEnabled()) {
+        materializeX509(appId, user, userFolder, requests.getKeyStore(), requests.getKeyStorePassword(),
+            requests.getTrustStore(), requests.getTrustStorePassword());
+      }
+      
+      if (isJWTEnabled()) {
+        materializeJWT(appId, user, userFolder, requests.getJWT());
+      }
+    }
+  }
+  
+  private void materializeX509(ApplicationId appId, String user, String userFolder,
       ByteBuffer keyStore, String keyStorePass,
       ByteBuffer trustStore, String trustStorePass) throws IOException {
     
@@ -1012,9 +1021,8 @@ public class ContainerManagerImpl extends CompositeService implements
   
   @SuppressWarnings("unchecked")
   private void startContainerInternal(NMTokenIdentifier nmTokenIdentifier,
-      ContainerTokenIdentifier containerTokenIdentifier,
-      StartContainerRequest request, ByteBuffer keyStore, String keyStorePass,
-      ByteBuffer trustStore, String trustStorePass) throws YarnException, IOException {
+      ContainerTokenIdentifier containerTokenIdentifier, StartContainerRequest request)
+      throws YarnException, IOException {
 
     /*
      * 1) It should save the NMToken into NMTokenSecretManager. This is done
@@ -1056,9 +1064,7 @@ public class ContainerManagerImpl extends CompositeService implements
     injectCryptoMaterialAsLocalResources(user, containerId, launchContext);
     // Crypto version of this material might be greater than 0, but from the NM's perspective it's
     // the first time it receives it
-    int cryptoMaterialVersion = getConfig()
-        .getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-            CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT) ? 0 : -1;
+    int cryptoMaterialVersion = isHopsTLSEnabled() ? 0 : -1;
   
     // Sanity check for local resources
     for (Map.Entry<String, LocalResource> rsrc : launchContext
@@ -1099,7 +1105,22 @@ public class ContainerManagerImpl extends CompositeService implements
               containerTokenIdentifier.getLogAggregationContext();
           Map<ApplicationAccessType, String> appAcls =
               container.getLaunchContext().getApplicationACLs();
-          
+          ByteBuffer keyStore = null, trustStore = null;
+          String keyStorePass = null, trustStorePass = null;
+          CertificateLocalizationService certLocService = context.getCertificateLocalizationService();
+          if (certLocService != null) {
+            try {
+              X509SecurityMaterial x509Material = certLocService.getX509MaterialLocation(user,
+                  applicationID.toString());
+              keyStore = x509Material.getKeyStoreMem();
+              trustStore = x509Material.getTrustStoreMem();
+              keyStorePass = x509Material.getKeyStorePass();
+              trustStorePass = x509Material.getTrustStorePass();
+            } catch (InterruptedException ex) {
+              throw new YarnException("Interrupted while waiting to get X.509 material for " + applicationID, ex);
+            }
+          }
+          // TODO(Antonis) Store JWT
           context.getNMStateStore().storeApplication(applicationID,
               buildAppProto(applicationID, user, userFolder, credentials, appAcls,
                   logAggregationContext, keyStore, keyStorePass, trustStore, trustStorePass, cryptoMaterialVersion));
@@ -1156,8 +1177,7 @@ public class ContainerManagerImpl extends CompositeService implements
       Map<File, String> resources = null;
       
       // Inject X.509 material
-      if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-          CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      if (isHopsTLSEnabled()) {
         resources = new HashMap<>();
         X509SecurityMaterial cryptoMaterial = context
             .getCertificateLocalizationService()
@@ -1182,8 +1202,7 @@ public class ContainerManagerImpl extends CompositeService implements
       }
       
       // Inject JWT material
-      if (getConfig().getBoolean(YarnConfiguration.RM_JWT_ENABLED,
-          YarnConfiguration.DEFAULT_RM_JWT_ENABLED)) {
+      if (isJWTEnabled()) {
         JWTSecurityMaterial material = context.getCertificateLocalizationService()
             .getJWTMaterialLocation(applicationUser, applicationId);
         if (resources == null) {
