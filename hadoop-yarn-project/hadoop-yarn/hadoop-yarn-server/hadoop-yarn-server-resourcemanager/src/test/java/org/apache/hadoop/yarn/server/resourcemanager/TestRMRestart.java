@@ -206,8 +206,11 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
   @Test
   public void testRMRestartWithCryptoMaterial() throws Exception {
     conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
+    conf.setBoolean(YarnConfiguration.RM_JWT_ENABLED, true);
     // This should not kick off certificate rotation
     conf.set(YarnConfiguration.RM_APP_CERTIFICATE_EXPIRATION_SAFETY_PERIOD, "1ms");
+    // This should not kick off JWT rotation
+    conf.set(YarnConfiguration.RM_JWT_EXPIRATION_SAFETY_PERIOD, "1ms");
     
     // Start RM
     MockRM rm1 = createMockRM(conf);
@@ -243,6 +246,8 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     Assert.assertArrayEquals(app0.getKeyStorePassword(), recoveredApp0.getKeyStorePassword());
     Assert.assertArrayEquals(app0.getTrustStore(), recoveredApp0.getTrustStore());
     Assert.assertArrayEquals(app0.getTrustStorePassword(), recoveredApp0.getTrustStorePassword());
+    Assert.assertEquals(app0.getJWT(), recoveredApp0.getJWT());
+    Assert.assertEquals(app0.getJWTExpiration(), recoveredApp0.getJWTExpiration());
   }
   
   @SuppressWarnings("rawtypes")
@@ -251,6 +256,7 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS,
         YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
     conf.setBoolean(CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED, true);
+    conf.setBoolean(YarnConfiguration.RM_JWT_ENABLED, true);
     // Do not kick off renewer for the duration of the test
     conf.set(YarnConfiguration.RM_APP_CERTIFICATE_EXPIRATION_SAFETY_PERIOD, "1ms");
     
@@ -295,10 +301,9 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     Assert.assertEquals(appState.getApplicationSubmissionContext()
         .getApplicationId(), app1.getApplicationSubmissionContext()
         .getApplicationId());
-    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      assertCryptoMaterialStateNotEmpty(appState);
-    }
+    
+    assertCryptoMaterialStateNotEmpty(appState);
+    
 
     //kick the scheduling to allocate AM container
     nm1.nodeHeartbeat(true);
@@ -422,11 +427,9 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     Assert.assertEquals(1, loadedApp2.getAppAttempts().size());
     
     // Verify crypto material for recovered apps
-    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      assertAppCryptoMaterialNotEmpty(loadedApp1);
-      assertAppCryptoMaterialNotEmpty(loadedApp2);
-    }
+    assertAppCryptoMaterialNotEmpty(loadedApp1);
+    assertAppCryptoMaterialNotEmpty(loadedApp2);
+    
     
     // verify old AM is not accepted
     // change running AM to talk to new RM
@@ -545,25 +548,41 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
   }
   
   private void assertCryptoMaterialStateNotEmpty(ApplicationStateData appState) {
-    Assert.assertNotNull(appState.getKeyStore());
-    Assert.assertNotEquals(0, appState.getKeyStore().length);
-    Assert.assertNotNull(appState.getKeyStorePassword());
-    Assert.assertNotEquals(0, appState.getKeyStorePassword());
-    Assert.assertNotNull(appState.getTrustStore());
-    Assert.assertNotEquals(0, appState.getTrustStore().length);
-    Assert.assertNotNull(appState.getTrustStore());
-    Assert.assertNotEquals(0, appState.getTrustStorePassword().length);
+    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      Assert.assertNotNull(appState.getKeyStore());
+      Assert.assertNotEquals(0, appState.getKeyStore().length);
+      Assert.assertNotNull(appState.getKeyStorePassword());
+      Assert.assertNotEquals(0, appState.getKeyStorePassword());
+      Assert.assertNotNull(appState.getTrustStore());
+      Assert.assertNotEquals(0, appState.getTrustStore().length);
+      Assert.assertNotNull(appState.getTrustStore());
+      Assert.assertNotEquals(0, appState.getTrustStorePassword().length);
+    }
+    if (conf.getBoolean(YarnConfiguration.RM_JWT_ENABLED, YarnConfiguration.DEFAULT_RM_JWT_ENABLED)) {
+      Assert.assertNotNull(appState.getJWT());
+      Assert.assertNotEquals(0, appState.getJWT().length());
+      Assert.assertNotEquals(-1L, appState.getJWTExpiration());
+    }
   }
   
   private void assertAppCryptoMaterialNotEmpty(RMApp app) {
-    Assert.assertNotNull(app.getKeyStore());
-    Assert.assertNotEquals(0, app.getKeyStore().length);
-    Assert.assertNotNull(app.getKeyStorePassword());
-    Assert.assertNotEquals(0, app.getKeyStorePassword());
-    Assert.assertNotNull(app.getTrustStore());
-    Assert.assertNotEquals(0, app.getTrustStore().length);
-    Assert.assertNotNull(app.getTrustStore());
-    Assert.assertNotEquals(0, app.getTrustStorePassword().length);
+    if (conf.getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+      Assert.assertNotNull(app.getKeyStore());
+      Assert.assertNotEquals(0, app.getKeyStore().length);
+      Assert.assertNotNull(app.getKeyStorePassword());
+      Assert.assertNotEquals(0, app.getKeyStorePassword());
+      Assert.assertNotNull(app.getTrustStore());
+      Assert.assertNotEquals(0, app.getTrustStore().length);
+      Assert.assertNotNull(app.getTrustStore());
+      Assert.assertNotEquals(0, app.getTrustStorePassword().length);
+    }
+    if (conf.getBoolean(YarnConfiguration.RM_JWT_ENABLED, YarnConfiguration.DEFAULT_RM_JWT_ENABLED)) {
+      Assert.assertNotNull(app.getJWT());
+      Assert.assertNotEquals(0, app.getJWT());
+      Assert.assertNotNull(app.getJWTExpiration());
+    }
   }
   
   
