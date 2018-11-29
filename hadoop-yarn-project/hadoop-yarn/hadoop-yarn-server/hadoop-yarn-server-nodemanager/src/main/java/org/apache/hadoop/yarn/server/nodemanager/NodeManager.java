@@ -195,14 +195,14 @@ public class NodeManager extends CompositeService
       NMContainerTokenSecretManager containerTokenSecretManager,
       NMTokenSecretManagerInNM nmTokenSecretManager,
       NMStateStoreService stateStore) {
-    boolean isSSLEnabled = getConfig().getBoolean
+    boolean isHopsTLSEnabled = getConfig().getBoolean
         (CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED,
             CommonConfigurationKeysPublic.IPC_SERVER_SSL_ENABLED_DEFAULT);
     boolean isJWTEnabled = getConfig().getBoolean(
         YarnConfiguration.RM_JWT_ENABLED,
         YarnConfiguration.DEFAULT_RM_JWT_ENABLED);
     return new NMContext(containerTokenSecretManager, nmTokenSecretManager,
-        dirsHandler, aclsManager, stateStore, isSSLEnabled, isJWTEnabled);
+        dirsHandler, aclsManager, stateStore, isHopsTLSEnabled, isJWTEnabled);
   }
 
   protected void doSecureLogin() throws IOException {
@@ -502,7 +502,7 @@ public class NodeManager extends CompositeService
     private boolean isDecommissioned = false;
     private final ConcurrentLinkedQueue<LogAggregationReport>
         logAggregationReportForApps;
-    private final boolean isSSLEnabled;
+    private final boolean isHopsTLSEnabled;
     private final boolean isJWTEnabled;
     private NodeStatusUpdater nodeStatusUpdater;
     private CertificateLocalizationService certificateLocalizationService;
@@ -518,7 +518,7 @@ public class NodeManager extends CompositeService
     public NMContext(NMContainerTokenSecretManager containerTokenSecretManager,
         NMTokenSecretManagerInNM nmTokenSecretManager,
         LocalDirsHandlerService dirsHandler, ApplicationACLsManager aclsManager,
-        NMStateStoreService stateStore, boolean isSSLEnabled,
+        NMStateStoreService stateStore, boolean isHopsTLSEnabled,
         boolean isJWTenabled) {
       this.containerTokenSecretManager = containerTokenSecretManager;
       this.nmTokenSecretManager = nmTokenSecretManager;
@@ -530,7 +530,7 @@ public class NodeManager extends CompositeService
       this.stateStore = stateStore;
       this.logAggregationReportForApps = new ConcurrentLinkedQueue<
           LogAggregationReport>();
-      this.isSSLEnabled = isSSLEnabled;
+      this.isHopsTLSEnabled = isHopsTLSEnabled;
       this.isJWTEnabled = isJWTenabled;
     }
 
@@ -663,8 +663,8 @@ public class NodeManager extends CompositeService
       this.nodeStatusUpdater = nodeStatusUpdater;
     }
     
-    public boolean isSSLEnabled() {
-      return isSSLEnabled;
+    public boolean isHopsTLSEnabled() {
+      return isHopsTLSEnabled;
     }
     
     public boolean isJWTEnabled() {

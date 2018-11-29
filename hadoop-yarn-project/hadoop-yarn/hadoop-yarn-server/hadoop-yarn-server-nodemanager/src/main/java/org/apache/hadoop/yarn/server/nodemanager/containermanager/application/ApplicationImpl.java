@@ -22,7 +22,6 @@ import java.io.IOException;
 import java.util.EnumSet;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
@@ -31,7 +30,6 @@ import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.security.Credentials;
-import org.apache.hadoop.security.ssl.CertificateLocalizationCtx;
 import org.apache.hadoop.yarn.api.records.ApplicationAccessType;
 import org.apache.hadoop.yarn.api.records.ApplicationId;
 import org.apache.hadoop.yarn.api.records.ContainerExitStatus;
@@ -464,10 +462,10 @@ public class ApplicationImpl implements Application {
       app.context.getApplications().remove(appId);
       app.aclsManager.removeApplication(appId);
       
-      boolean isSSLEnabled = ((NodeManager.NMContext) app.context)
-          .isSSLEnabled();
+      boolean isHopsTLSEnabled = ((NodeManager.NMContext) app.context)
+          .isHopsTLSEnabled();
       
-      if (isSSLEnabled) {
+      if (isHopsTLSEnabled) {
         try {
           app.context.getCertificateLocalizationService()
               .removeX509Material(app.getUser(), appId.toString());

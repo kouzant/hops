@@ -22,15 +22,11 @@ import static org.apache.hadoop.service.Service.STATE.STARTED;
 
 import java.io.DataInputStream;
 import java.io.File;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.attribute.PosixFilePermission;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -41,14 +37,12 @@ import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
 
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
-import org.apache.commons.io.FileUtils;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
@@ -69,8 +63,6 @@ import org.apache.hadoop.security.token.TokenIdentifier;
 import org.apache.hadoop.service.CompositeService;
 import org.apache.hadoop.service.Service;
 import org.apache.hadoop.service.ServiceStateChangeListener;
-import org.apache.hadoop.util.BackOff;
-import org.apache.hadoop.util.ExponentialBackOff;
 import org.apache.hadoop.util.StringUtils;
 import org.apache.hadoop.yarn.api.ContainerManagementProtocol;
 import org.apache.hadoop.yarn.api.protocolrecords.GetContainerStatusesRequest;
@@ -353,7 +345,9 @@ public class ContainerManagerImpl extends CompositeService implements
       cryptoMaterialVersion = p.getCryptoVersion();
     }
     
-    // TODO (Antonis): Recover JWT for app
+    if (isJWTEnabled()) {
+      materializeJWT(appId, p.getUser(), p.getUserFolder(), p.getJwt());
+    }
     
     List<ApplicationACLMapProto> aclProtoList = p.getAclsList();
     Map<ApplicationAccessType, String> acls =
@@ -879,7 +873,7 @@ public class ContainerManagerImpl extends CompositeService implements
   }
   
   private boolean isHopsTLSEnabled() {
-    return ((NodeManager.NMContext) context).isSSLEnabled();
+    return ((NodeManager.NMContext) context).isHopsTLSEnabled();
   }
   
   private boolean isJWTEnabled() {
@@ -1648,7 +1642,23 @@ public class ContainerManagerImpl extends CompositeService implements
     
     @Override
     protected void updateStateStore() throws IOException {
-      // TODO(Antonis) Ugh???
+      ApplicationId applicationId = container.getContainerId().getApplicationAttemptId().getApplicationId();
+      Application app = context.getApplications().get(applicationId);
+    
+      try {
+        X509SecurityMaterial x509SecurityMaterial = context.getCertificateLocalizationService()
+            .getX509MaterialLocation(container.getUser(), applicationId.toString());
+        
+        context.getNMStateStore().storeApplication(applicationId,
+            buildAppProto(applicationId, container.getUser(), container.getUserFolder(), container.getCredentials(),
+                container.getLaunchContext().getApplicationACLs(), container.getContainerTokenIdentifier()
+                    .getLogAggregationContext(),
+                x509SecurityMaterial.getKeyStoreMem(), String.valueOf(x509SecurityMaterial.getKeyStorePass()),
+                x509SecurityMaterial.getTrustStoreMem(), String.valueOf(x509SecurityMaterial.getTrustStorePass()),
+                app.getCryptoMaterialVersion(), jwt));
+      } catch (InterruptedException ex) {
+        throw new IOException(ex);
+      }
     }
   }
   
@@ -1700,14 +1710,20 @@ public class ContainerManagerImpl extends CompositeService implements
       ApplicationId applicationId = container.getContainerId().getApplicationAttemptId().getApplicationId();
       Application app = context.getApplications().get(applicationId);
       app.setCryptoMaterialVersion(cryptoVersion);
-      
-      // TODO(Antonis) WTF will I do with JWT update???
-      context.getNMStateStore().storeApplication(applicationId,
-          buildAppProto(applicationId, container.getUser(), container.getUserFolder(), container.getCredentials(),
-              container.getLaunchContext().getApplicationACLs(), container.getContainerTokenIdentifier()
-                  .getLogAggregationContext(),
-              keyStore, String.valueOf(keyStorePassword), trustStore, String.valueOf(trustStorePassword),
-              cryptoVersion, null));
+  
+      try {
+        JWTSecurityMaterial jwtSecurityMaterial = context.getCertificateLocalizationService()
+            .getJWTMaterialLocation(container.getUser(), applicationId.toString());
+        
+        context.getNMStateStore().storeApplication(applicationId,
+            buildAppProto(applicationId, container.getUser(), container.getUserFolder(), container.getCredentials(),
+                container.getLaunchContext().getApplicationACLs(), container.getContainerTokenIdentifier()
+                    .getLogAggregationContext(),
+                keyStore, String.valueOf(keyStorePassword), trustStore, String.valueOf(trustStorePassword),
+                cryptoVersion, jwtSecurityMaterial.getToken()));
+      } catch (InterruptedException ex) {
+        throw new IOException(ex);
+      }
     }
   }
   

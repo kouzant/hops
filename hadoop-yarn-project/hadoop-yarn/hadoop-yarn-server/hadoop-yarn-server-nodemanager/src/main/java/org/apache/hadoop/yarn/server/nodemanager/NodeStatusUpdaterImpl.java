@@ -38,7 +38,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.io.DataInputByteBuffer;
 import org.apache.hadoop.ipc.RPC;
 import org.apache.hadoop.security.Credentials;
@@ -878,7 +877,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
               }
             }
             
-            if (((NMContext) context).isSSLEnabled() || ((NMContext) context).isJWTEnabled()) {
+            if (((NMContext) context).isHopsTLSEnabled() || ((NMContext) context).isJWTEnabled()) {
               Map<ApplicationId, UpdatedCryptoForApp> cryptoMaterialToUpdate = response.getUpdatedCryptoForApps();
               if (cryptoMaterialToUpdate != null) {
                 for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : cryptoMaterialToUpdate.entrySet()) {
