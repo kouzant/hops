@@ -68,7 +68,8 @@ public class NodeInfo {
     private List<ContainerId> toCleanUpContainers;
     private List<ApplicationId> toCleanUpApplications;
     private List<ApplicationId> runningApplications;
-    private Map<ApplicationId, UpdatedCryptoForApp> appCryptoMaterialToUpdate;
+    private Map<ApplicationId, UpdatedCryptoForApp> x509MaterialToUpdate;
+    private Map<ApplicationId, UpdatedCryptoForApp> jwtMaterialToUpdate;
 
     public FakeRMNodeImpl(NodeId nodeId, String nodeAddr, String httpAddress,
         Resource perNode, String rackName, String healthReport,
@@ -85,7 +86,8 @@ public class NodeInfo {
       toCleanUpApplications = new ArrayList<ApplicationId>();
       toCleanUpContainers = new ArrayList<ContainerId>();
       runningApplications = new ArrayList<ApplicationId>();
-      appCryptoMaterialToUpdate = new ConcurrentHashMap<>();
+      x509MaterialToUpdate = new ConcurrentHashMap<>();
+      jwtMaterialToUpdate = new ConcurrentHashMap<>();
     }
 
     public NodeId getNodeID() {
@@ -216,7 +218,12 @@ public class NodeInfo {
     
     @Override
     public Map<ApplicationId, UpdatedCryptoForApp> getAppX509ToUpdate() {
-      return appCryptoMaterialToUpdate;
+      return x509MaterialToUpdate;
+    }
+  
+    @Override
+    public Map<ApplicationId, UpdatedCryptoForApp> getAppJWTToUpdate() {
+      return jwtMaterialToUpdate;
     }
   }
 

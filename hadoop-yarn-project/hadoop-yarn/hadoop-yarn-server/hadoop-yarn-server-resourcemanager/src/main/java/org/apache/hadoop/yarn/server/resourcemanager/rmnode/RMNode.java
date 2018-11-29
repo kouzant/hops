@@ -177,4 +177,6 @@ public interface RMNode {
   void setUntrackedTimeStamp(long timeStamp);
   
   Map<ApplicationId, UpdatedCryptoForApp> getAppX509ToUpdate();
+  
+  Map<ApplicationId, UpdatedCryptoForApp> getAppJWTToUpdate();
 }

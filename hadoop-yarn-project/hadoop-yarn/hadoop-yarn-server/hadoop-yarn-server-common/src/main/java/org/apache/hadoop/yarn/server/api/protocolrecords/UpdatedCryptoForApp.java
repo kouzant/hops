@@ -23,6 +23,13 @@ import java.nio.ByteBuffer;
 
 public abstract class UpdatedCryptoForApp {
   
+  public enum UPDATE_TYPE {
+    X509,
+    JWT,
+    X509_JWT,
+    UNDEFINED
+  }
+  
   public static UpdatedCryptoForApp newInstance(ByteBuffer keyStore, char[] keyStorePassword, ByteBuffer trustStore,
       char[] trustStorePassword, int version) {
     UpdatedCryptoForApp updatedCryptoForApp = Records.newRecord(UpdatedCryptoForApp.class);
@@ -58,4 +65,20 @@ public abstract class UpdatedCryptoForApp {
   public abstract String getJWT();
   
   public abstract void setJWT(String jwt);
+  
+  public UPDATE_TYPE determineUpdateType() {
+    if (getKeyStore() != null && getJWT() != null) {
+      return UPDATE_TYPE.X509_JWT;
+    }
+    
+    if (getKeyStore() != null) {
+      return UPDATE_TYPE.X509;
+    }
+    
+    if (getJWT() != null) {
+      return UPDATE_TYPE.JWT;
+    }
+    
+    return UPDATE_TYPE.UNDEFINED;
+  }
 }

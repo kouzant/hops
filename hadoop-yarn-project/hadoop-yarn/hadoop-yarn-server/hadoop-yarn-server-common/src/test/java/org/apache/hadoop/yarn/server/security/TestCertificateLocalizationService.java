@@ -233,7 +233,7 @@ public class TestCertificateLocalizationService {
       String newKeyStorePassword = "kpassword1";
       String newTrustStorePassword = "tpassword1";
       materializeCertificateUtil(delayedCertLoc, username, userFolder, keyStore, keyStorePassword, trustStore, trustStorePassword);
-      delayedCertLoc.updateCryptoMaterial(username, null, newKeyStore, newKeyStorePassword, newTrustStore, newTrustStorePassword);
+      delayedCertLoc.updateX509(username, null, newKeyStore, newKeyStorePassword, newTrustStore, newTrustStorePassword);
       X509SecurityMaterial material = delayedCertLoc.getX509MaterialLocation(username);
       
       // Make some basic checks here. Extended checks are in testUpdateMaterial
@@ -265,7 +265,7 @@ public class TestCertificateLocalizationService {
     ByteBuffer newTrustStore = ByteBuffer.wrap("trustStore1".getBytes());
     String newKeyStorePassword = "kpassword1";
     String newTrustStorePassword = "tpassword1";
-    certLocSrv.updateCryptoMaterial(username, null, newKeyStore, newKeyStorePassword,
+    certLocSrv.updateX509(username, null, newKeyStore, newKeyStorePassword,
         newTrustStore, newTrustStorePassword);
     
     X509SecurityMaterial newMaterial = certLocSrv.getX509MaterialLocation(username);

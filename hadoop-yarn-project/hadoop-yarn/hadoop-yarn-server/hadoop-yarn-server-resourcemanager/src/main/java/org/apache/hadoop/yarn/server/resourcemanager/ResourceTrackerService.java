@@ -93,6 +93,7 @@ import com.google.common.annotations.VisibleForTesting;
 import io.hops.metadata.yarn.entity.Load;
 import io.hops.util.DBUtility;
 import java.util.concurrent.atomic.AtomicInteger;
+
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplDist;
 import org.apache.hadoop.yarn.server.resourcemanager.rmnode.RMNodeImplNotDist;
 
@@ -595,9 +596,9 @@ public class ResourceTrackerService extends AbstractService implements
         nodeHeartBeatResponse);
 
     populateKeys(request, nodeHeartBeatResponse);
-    if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
-      setAppsToUpdateWithNewCryptoMaterial(nodeHeartBeatResponse, rmNode);
+    if (isHopsTLSEnabled() || isJWTEnabled()) {
+      Map<ApplicationId, UpdatedCryptoForApp> mergedUpdates = mergeNewSecurityMaterialForApps(rmNode);
+      nodeHeartBeatResponse.setUpdatedCryptoForApps(mergedUpdates);
     }
     
     ConcurrentMap<ApplicationId, ByteBuffer> systemCredentials =
@@ -643,16 +644,42 @@ public class ResourceTrackerService extends AbstractService implements
 
     return nodeHeartBeatResponse;
   }
-
+  
+  // TODO(Antonis): Replace with Stream.concat when we upgrade to Java 8 (HADOOP-11858)
   @InterfaceAudience.Private
   @VisibleForTesting
-  protected void setAppsToUpdateWithNewCryptoMaterial(NodeHeartbeatResponse response, RMNode rmNode) {
-    Set<Map.Entry<ApplicationId, UpdatedCryptoForApp>> appsToUpdate = rmNode.getAppX509ToUpdate().entrySet();
-    Map<ApplicationId, UpdatedCryptoForApp> payload = new HashMap<>(appsToUpdate.size());
-    for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : appsToUpdate) {
-      payload.put(entry.getKey(), entry.getValue());
+  protected Map<ApplicationId, UpdatedCryptoForApp> mergeNewSecurityMaterialForApps(RMNode rmNode) {
+    Map<ApplicationId, UpdatedCryptoForApp> x509Updates = rmNode.getAppX509ToUpdate();
+    final Map<ApplicationId, UpdatedCryptoForApp> jwtUpdates = rmNode.getAppJWTToUpdate();
+    Map<ApplicationId, UpdatedCryptoForApp> mergedUpdates = new HashMap<>();
+    List<ApplicationId> mergedJWTUpdates = new ArrayList<>();
+    
+    for (Map.Entry<ApplicationId, UpdatedCryptoForApp> x509Update : x509Updates.entrySet()) {
+      ApplicationId appId = x509Update.getKey();
+      UpdatedCryptoForApp update = x509Update.getValue();
+      if (jwtUpdates.containsKey(appId)) {
+        UpdatedCryptoForApp jwtUpdate = jwtUpdates.get(appId);
+        update.setJWT(jwtUpdate.getJWT());
+        mergedJWTUpdates.add(appId);
+      }
+      mergedUpdates.put(appId, update);
     }
-    response.setUpdatedCryptoForApps(payload);
+    
+    for (Map.Entry<ApplicationId, UpdatedCryptoForApp> jwtUpdate : jwtUpdates.entrySet()) {
+      ApplicationId appId = jwtUpdate.getKey();
+      UpdatedCryptoForApp update = jwtUpdate.getValue();
+      if (!mergedUpdates.containsKey(appId)) {
+        mergedUpdates.put(appId, update);
+        mergedJWTUpdates.add(appId);
+      }
+    }
+    
+    // For JWT we don't wait for confirmation
+    for (ApplicationId appId : mergedJWTUpdates) {
+      jwtUpdates.remove(appId);
+    }
+    
+    return mergedUpdates;
   }
   
   /**
@@ -772,5 +799,15 @@ public class ResourceTrackerService extends AbstractService implements
   @VisibleForTesting
   public Server getServer() {
     return this.server;
+  }
+  
+  private boolean isHopsTLSEnabled() {
+    return getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
+        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT);
+  }
+  
+  private boolean isJWTEnabled() {
+    return getConfig().getBoolean(YarnConfiguration.RM_JWT_ENABLED,
+        YarnConfiguration.DEFAULT_RM_JWT_ENABLED);
   }
 }

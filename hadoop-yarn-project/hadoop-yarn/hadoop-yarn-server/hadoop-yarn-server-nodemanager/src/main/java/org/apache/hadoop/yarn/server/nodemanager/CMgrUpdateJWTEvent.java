@@ -15,32 +15,19 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.hadoop.security.ssl;
+package org.apache.hadoop.yarn.server.nodemanager;
 
-import java.nio.file.Path;
+import org.apache.hadoop.yarn.api.records.ContainerId;
 
-public class JWTSecurityMaterial extends SecurityMaterial {
-  public static final String JWT_LOCAL_RESOURCE_FILE = "token.jwt";
-  public static final String JWT_FILE_SUFFIX = "_token.jwt";
+public class CMgrUpdateJWTEvent extends CMgrUpdateSecurityMaterialEvent {
+  private final String jwt;
   
-  private final Path tokenLocation;
-  private String token;
-  
-  public JWTSecurityMaterial(Path certFolder, Path tokenLocation, String token) {
-    super(certFolder);
-    this.tokenLocation = tokenLocation;
-    this.token = token;
+  public CMgrUpdateJWTEvent(ContainerId containerId, String jwt) {
+    super(containerId);
+    this.jwt = jwt;
   }
   
-  public Path getTokenLocation() {
-    return tokenLocation;
-  }
-  
-  public String getToken() {
-    return token;
-  }
-  
-  public synchronized void updateToken(String token) {
-    this.token = token;
+  public String getJwt() {
+    return jwt;
   }
 }

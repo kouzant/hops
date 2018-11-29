@@ -53,7 +53,6 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.apache.hadoop.classification.InterfaceAudience.Private;
 import org.apache.hadoop.conf.Configuration;
-import org.apache.hadoop.fs.CommonConfigurationKeys;
 import org.apache.hadoop.fs.CommonConfigurationKeysPublic;
 import org.apache.hadoop.io.DataOutputBuffer;
 import org.apache.hadoop.ipc.Server;
@@ -123,7 +122,8 @@ import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedContainersEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrDecreaseContainersResourceEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrSignalContainersEvent;
-import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateCryptoMaterialEvent;
+import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateJWTEvent;
+import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateX509Event;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerManagerEvent;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
@@ -217,7 +217,8 @@ public class ContainerManagerImpl extends CompositeService implements
   private long waitForContainersOnShutdownMillis;
   
   private final ExecutorService cryptoMaterialUpdaterThreadPool;
-  private final Map<ContainerId, Future> cryptoMaterialUpdaters = new HashMap<>();
+  private final Map<ContainerId, Future> x509Updaters = new HashMap<>();
+  private final Map<ContainerId, Future> jwtUpdaters = new HashMap<>();
 
   public ContainerManagerImpl(Context context, ContainerExecutor exec,
       DeletionService deletionContext, NodeStatusUpdater nodeStatusUpdater,
@@ -1550,160 +1551,152 @@ public class ContainerManagerImpl extends CompositeService implements
     }
   }
   
-  private Future removeCryptoUpdaterTask(ContainerId cid) {
+  private Future removeX509UpdaterTask(ContainerId cid) {
     Future task = null;
-    synchronized (cryptoMaterialUpdaters) {
-      task = cryptoMaterialUpdaters.remove(cid);
+    synchronized (x509Updaters) {
+      task = x509Updaters.remove(cid);
     }
     return task;
   }
   
-  private void scheduleCryptoUpdaterForContainer(CMgrUpdateCryptoMaterialEvent event) {
-    LOG.info("Scheduling crypto updater for container " + event.getContainerId());
-    Future previousTask = removeCryptoUpdaterTask(event.getContainerId());
+  private Future removeJWTUpdaterTask(ContainerId cid) {
+    Future task = null;
+    synchronized (jwtUpdaters) {
+      task = jwtUpdaters.remove(cid);
+    }
+    return task;
+  }
+  
+  private void scheduleSecurityUpdaterForContainer(ContainerManagerEvent event) {
+    if (event instanceof CMgrUpdateX509Event) {
+      scheduleX509Updater((CMgrUpdateX509Event) event);
+    } else if (event instanceof CMgrUpdateJWTEvent) {
+      scheduleJWTUpdater((CMgrUpdateJWTEvent) event);
+    }
+  }
+  
+  private void scheduleX509Updater(CMgrUpdateX509Event event) {
+    LOG.debug("Scheduling X.509 updater for container " + event.getContainerId());
+    Future previousTask = removeX509UpdaterTask(event.getContainerId());
     if (previousTask != null) {
       previousTask.cancel(true);
     }
     ContainerImpl container = (ContainerImpl) context.getContainers().get(event.getContainerId());
     if (container != null) {
-      // TODO(Antonis) Add JWT
-      ContainerCryptoMaterialUpdater updater = new ContainerCryptoMaterialUpdater(container, event.getKeyStore(),
+      ContainerX509UpdaterTask updaterTask = new ContainerX509UpdaterTask(container, event.getKeyStore(),
           event.getKeyStorePassword(), event.getTrustStore(), event.getTrustStorePassword(), event.getVersion());
-      scheduleUpdaterInternal(updater, container.getContainerId());
+      scheduleX509UpdaterTaskInternal(updaterTask, container.getContainerId());
     }
   }
   
-  private void scheduleUpdaterInternal(ContainerCryptoMaterialUpdater updater, ContainerId cid) {
+  private void scheduleJWTUpdater(CMgrUpdateJWTEvent event) {
+    LOG.debug("Scheduling JWT updater for container " + event.getContainerId());
+    Future previousTask = removeJWTUpdaterTask(event.getContainerId());
+    if (previousTask != null) {
+      previousTask.cancel(true);
+    }
+    ContainerImpl container = (ContainerImpl) context.getContainers().get(event.getContainerId());
+    if (container != null) {
+      ContainerJWTUpdaterTask updaterTask = new ContainerJWTUpdaterTask(container, event.getJwt());
+      scheduleJWTUpdaterTaskInternal(updaterTask, container.getContainerId());
+    }
+  }
+  
+  private void scheduleX509UpdaterTaskInternal(ContainerX509UpdaterTask updater, ContainerId cid) {
     // Make sure we put the task to the Map before the worker tries to remove itself from the Map
-    synchronized (cryptoMaterialUpdaters) {
+    synchronized (x509Updaters) {
       Future task = cryptoMaterialUpdaterThreadPool.submit(updater);
-      cryptoMaterialUpdaters.put(cid, task);
+      x509Updaters.put(cid, task);
     }
   }
   
-  private class ContainerCryptoMaterialUpdater implements Runnable {
-    private final ContainerImpl container;
+  private void scheduleJWTUpdaterTaskInternal(ContainerJWTUpdaterTask updater, ContainerId cid) {
+    // Make sure we put the task to the Map before the worker tries to remove itself from the Map
+    synchronized (jwtUpdaters) {
+      Future task = cryptoMaterialUpdaterThreadPool.submit(updater);
+      jwtUpdaters.put(cid, task);
+    }
+  }
+  
+  private class ContainerJWTUpdaterTask extends ContainerSecurityUpdaterTask {
+    private final String jwt;
+    
+    private ContainerJWTUpdaterTask(ContainerImpl container, String jwt) {
+      super(container);
+      this.jwt = jwt;
+    }
+    
+    @Override
+    protected void removeSecurityUpdaterTask() {
+      removeJWTUpdaterTask(container.getContainerId());
+    }
+    
+    @Override
+    protected void scheduleSecurityUpdaterTask() {
+      scheduleJWTUpdaterTaskInternal(this, container.getContainerId());
+    }
+    
+    @Override
+    protected void execute() throws IOException {
+      container.identifyCryptoMaterialLocation();
+      File jwtFile = container.getJWTLocalizedPath();
+      if (jwtFile == null) {
+        throw new IOException("Could not identify localized JWT file for container " + container.getContainerId());
+      }
+      writeStringToFile(jwtFile, jwt);
+    }
+    
+    @Override
+    protected void updateStateStore() throws IOException {
+      // TODO(Antonis) Ugh???
+    }
+  }
+  
+  private class ContainerX509UpdaterTask extends ContainerSecurityUpdaterTask {
     private final ByteBuffer keyStore;
     private final char[] keyStorePassword;
     private final ByteBuffer trustStore;
     private final char[] trustStorePassword;
     private final int cryptoVersion;
-    private final BackOff backoff;
-    private long backoffTime;
     
-    private ContainerCryptoMaterialUpdater(ContainerImpl container, ByteBuffer keyStore, char[] keyStorePassword,
+    private ContainerX509UpdaterTask(ContainerImpl container, ByteBuffer keyStore, char[] keyStorePassword,
         ByteBuffer trustStore, char[] trustStorePassword, int cryptoVersion) {
-      this.container = container;
+      super(container);
       this.keyStore = keyStore;
       this.keyStorePassword = keyStorePassword;
       this.trustStore = trustStore;
       this.trustStorePassword = trustStorePassword;
       this.cryptoVersion = cryptoVersion;
-      this.backoff = createBackOffPolicy();
-      this.backoffTime = 0L;
-    }
-
-    private BackOff createBackOffPolicy() {
-      return new ExponentialBackOff.Builder()
-          .setInitialIntervalMillis(200)
-          .setMaximumIntervalMillis(5000)
-          .setMultiplier(1.4)
-          .setMaximumRetries(6)
-          .build();
     }
     
     @Override
-    public void run() {
-      try {
-        TimeUnit.MILLISECONDS.sleep(backoffTime);
-        if (!container.getContainerState().equals(
-            org.apache.hadoop.yarn.server.nodemanager.containermanager.container.ContainerState.RUNNING)) {
-          LOG.info("Crypto updater for container " + container.getContainerId() + " run but the container is not in " +
-              "RUNNING state, instead state is: " + container.getContainerState());
-          removeCryptoUpdaterTask(container.getContainerId());
-          return;
-        }
-        container.identifyCryptoMaterialLocation();
-        File keyStorePath = container.getKeyStoreLocalizedPath();
-        File trustStorePath = container.getTrustStoreLocalizedPath();
-        File passwordFilePath = container.getPasswordFileLocalizedPath();
-        if (keyStorePath == null || trustStorePath == null || passwordFilePath == null) {
-          throw new IOException("Could not identify localized X.509 cryptographic material location for container " +
-              container.getContainerId());
-        }
-        writeByteBufferToFile(keyStorePath, keyStore);
-        writeByteBufferToFile(trustStorePath, trustStore);
-        // Assume key store password is the same for the trust store and for the key itself
-        writeStringToFile(passwordFilePath, String.valueOf(keyStorePassword));
-        
-        /*File jwtFile = container.getJWTLocalizedPath();
-        if (jwtFile == null) {
-          throw new IOException("Could not identify localized JWT  material location for container " +
-              container.getContainerId());
-        }
-        writeStringToFile(jwtFile, jwt);*/
-        removeCryptoUpdaterTask(container.getContainerId());
-        updateStateStore();
-        LOG.debug("Updated crypto material for container: " + container.getContainerId());
-      } catch (IOException ex) {
-        LOG.error(ex, ex);
-        // Re-schedule here with backoff
-        removeCryptoUpdaterTask(container.getContainerId());
-        backoffTime = backoff.getBackOffInMillis();
-        if (backoffTime != -1) {
-          LOG.warn("Re-scheduling updating crypto material for container " + container.getContainerId() + " after "
-              + backoffTime + "ms");
-          scheduleUpdaterInternal(this, container.getContainerId());
-        } else {
-          LOG.error("Reached maximum number of retries for container " + container.getContainerId() + ", giving up",
-              ex);
-        }
-      } catch (InterruptedException ex) {
-        Thread.currentThread().interrupt();
-      }
+    protected void removeSecurityUpdaterTask() {
+      removeX509UpdaterTask(container.getContainerId());
     }
     
-    private void writeByteBufferToFile(File target, ByteBuffer data) throws IOException {
-      Set<PosixFilePermission> permissions = null;
-      Path targetPath = target.toPath();
-      if (!target.canWrite()) {
-        permissions = addOwnerWritePermission(targetPath);
-      }
-      FileChannel fileChannel = new FileOutputStream(target, false).getChannel();
-      fileChannel.write(data);
-      fileChannel.close();
-      if (permissions != null) {
-        removeOwnerWritePermission(targetPath, permissions);
-      }
-    }
-  
-    private void writeStringToFile(File target, String data) throws IOException {
-      Set<PosixFilePermission> permissions = null;
-      Path targetPath = target.toPath();
-      if (!target.canWrite()) {
-        permissions = addOwnerWritePermission(targetPath);
-      }
-      FileUtils.writeStringToFile(target, data);
-      if (permissions != null) {
-        removeOwnerWritePermission(targetPath, permissions);
-      }
+    @Override
+    protected void scheduleSecurityUpdaterTask() {
+      scheduleX509UpdaterTaskInternal(this, container.getContainerId());
     }
     
-    private Set<PosixFilePermission> addOwnerWritePermission(Path target) throws IOException {
-      Set<PosixFilePermission> permissions = Files.getPosixFilePermissions(target);
-      if (permissions.add(PosixFilePermission.OWNER_WRITE)) {
-        Files.setPosixFilePermissions(target, permissions);
+    @Override
+    protected void execute() throws IOException {
+      container.identifyCryptoMaterialLocation();
+      File keyStorePath = container.getKeyStoreLocalizedPath();
+      File trustStorePath = container.getTrustStoreLocalizedPath();
+      File passwordFilePath = container.getPasswordFileLocalizedPath();
+      if (keyStorePath == null || trustStorePath == null || passwordFilePath == null) {
+        throw new IOException("Could not identify localized X.509 cryptographic material location for container " +
+            container.getContainerId());
       }
-      return permissions;
+      writeByteBufferToFile(keyStorePath, keyStore);
+      writeByteBufferToFile(trustStorePath, trustStore);
+      // Assume key store password is the same for the trust store and for the key itself
+      writeStringToFile(passwordFilePath, String.valueOf(keyStorePassword));
     }
     
-    private void removeOwnerWritePermission(Path target, Set<PosixFilePermission> permissions) throws IOException {
-      if (permissions.remove(PosixFilePermission.OWNER_WRITE)) {
-        Files.setPosixFilePermissions(target, permissions);
-      }
-    }
-    
-    private void updateStateStore() throws IOException {
+    @Override
+    protected void updateStateStore() throws IOException {
       ApplicationId applicationId = container.getContainerId().getApplicationAttemptId().getApplicationId();
       Application app = context.getApplications().get(applicationId);
       app.setCryptoMaterialVersion(cryptoVersion);
@@ -1846,7 +1839,7 @@ public class ContainerManagerImpl extends CompositeService implements
       }
       break;
     case UPDATE_CRYPTO_MATERIAL:
-      scheduleCryptoUpdaterForContainer((CMgrUpdateCryptoMaterialEvent) event);
+      scheduleSecurityUpdaterForContainer(event);
       break;
     default:
         throw new YarnRuntimeException(
@@ -1874,8 +1867,8 @@ public class ContainerManagerImpl extends CompositeService implements
   }
 
   @VisibleForTesting
-  public Map<ContainerId, Future> getCryptoMaterialUpdaters() {
-    return cryptoMaterialUpdaters;
+  public Map<ContainerId, Future> getX509Updaters() {
+    return x509Updaters;
   }
   
   public Map<String, ByteBuffer> getAuxServiceMetaData() {

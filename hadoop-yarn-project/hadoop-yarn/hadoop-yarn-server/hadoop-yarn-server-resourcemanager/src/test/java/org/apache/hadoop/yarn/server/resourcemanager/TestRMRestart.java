@@ -700,10 +700,10 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
           NMTokenSecretManagerInRM nmTokenSecretManager) {
         super(rmContext, nodesListManager, nmLivelinessMonitor, containerTokenSecretManager, nmTokenSecretManager);
       }
-      
+  
       @Override
-      protected void setAppsToUpdateWithNewCryptoMaterial(NodeHeartbeatResponse response, RMNode rmNode) {
-        response.setUpdatedCryptoForApps(new HashMap<ApplicationId, UpdatedCryptoForApp>());
+      protected Map<ApplicationId, UpdatedCryptoForApp> mergeNewSecurityMaterialForApps(RMNode rmNode) {
+        return new HashMap<>();
       }
   
       @Override

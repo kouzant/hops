@@ -1334,12 +1334,16 @@ public class RMAppImpl implements RMApp, Recoverable {
       appNewState.setJWTExpiration(jwtMaterial.getExpirationDate().toEpochMilli());
       app.rmContext.getStateStore().updateApplicationStateNoNotify(appNewState);
       
-      // TODO(Antonis) How should I notify NodeManagers???
       for (NodeId nodeId : app.ranNodes) {
         RMNodeUpdateCryptoMaterialForAppEvent<JWTSecurityHandler.JWTSecurityManagerMaterial> updateEvent =
             new RMNodeUpdateCryptoMaterialForAppEvent(nodeId, jwtMaterial);
         app.handler.handle(updateEvent);
       }
+  
+      JWTSecurityHandler.JWTMaterialParameter param =
+          new JWTSecurityHandler.JWTMaterialParameter(app.applicationId, app.user);
+      param.setExpirationDate(app.jwtExpiration);
+      app.rmContext.getRMAppSecurityManager().registerWithMaterialRenewers(param);
     }
   }
   

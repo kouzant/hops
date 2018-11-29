@@ -534,13 +534,13 @@ public class CertificateLocalizationService extends AbstractService
   }
   
   @Override
-  public void updateCryptoMaterial(String username, String applicationId, ByteBuffer keyStore,
+  public void updateX509(String username, String applicationId, ByteBuffer keyStore,
       String keyStorePassword, ByteBuffer trustStore, String trustStorePassword)
       throws IOException, InterruptedException {
     StorageKey key = StorageKey.newX509Instance(username, applicationId);
     SecurityMaterial material = materialLocation.get(key);
     if (material == null) {
-      LOG.warn("Requested to update crypto material for " + key + " but material is missing");
+      LOG.warn("Requested X.509 update for key " + key + " but material is missing");
       return;
     }
     
@@ -569,6 +569,42 @@ public class CertificateLocalizationService extends AbstractService
       x509Material.updateKeyStorePass(keyStorePassword);
       x509Material.updateTrustStoreMem(trustStore);
       x509Material.updateTrustStorePass(trustStorePassword);
+    } finally {
+      if (material != null) {
+        synchronized (material) {
+          material.changeState(SecurityMaterial.STATE.FINISHED);
+          material.notifyAll();
+        }
+      }
+      lock.unlock();
+    }
+  }
+  
+  @Override
+  public void updateJWT(String username, String applicationId, String jwt) throws InterruptedException, IOException {
+    StorageKey key = StorageKey.newJWTInstance(username, applicationId);
+    SecurityMaterial material = materialLocation.get(key);
+    if (material == null) {
+      LOG.warn("Requested JWT update for key " + key + " but material is missing");
+      return;
+    }
+    
+    synchronized (material) {
+      while (!material.getState().equals(SecurityMaterial.STATE.FINISHED)) {
+        material.wait();
+      }
+      material.changeState(SecurityMaterial.STATE.ONGOING);
+    }
+    try {
+      lock.lock();
+      material = materialLocation.get(key);
+      if (material == null) {
+        // OOps material has been removed while waiting
+        return;
+      }
+      JWTSecurityMaterial jwtMaterial = (JWTSecurityMaterial) material;
+      FileUtils.writeStringToFile(jwtMaterial.getTokenLocation().toFile(), jwt);
+      jwtMaterial.updateToken(jwt);
     } finally {
       if (material != null) {
         synchronized (material) {

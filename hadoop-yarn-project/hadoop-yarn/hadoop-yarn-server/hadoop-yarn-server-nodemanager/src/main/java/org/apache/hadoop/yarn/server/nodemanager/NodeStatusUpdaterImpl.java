@@ -878,36 +878,26 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
               }
             }
             
-            // TODO(Antonis) Update material for JWT too
-            
-            if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, CommonConfigurationKeys
-                .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+            if (((NMContext) context).isSSLEnabled() || ((NMContext) context).isJWTEnabled()) {
               Map<ApplicationId, UpdatedCryptoForApp> cryptoMaterialToUpdate = response.getUpdatedCryptoForApps();
               if (cryptoMaterialToUpdate != null) {
                 for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : cryptoMaterialToUpdate.entrySet()) {
                   Application application = context.getApplications().get(entry.getKey());
-                  
-                  if (application != null) {
-                    UpdatedCryptoForApp crypto = entry.getValue();
+                  UpdatedCryptoForApp crypto = entry.getValue();
+                  UpdatedCryptoForApp.UPDATE_TYPE updateType = crypto.determineUpdateType();
+                  if (updateType.equals(UpdatedCryptoForApp.UPDATE_TYPE.X509_JWT)) {
                     if (crypto.getVersion() > application.getCryptoMaterialVersion()) {
-                      context.getCertificateLocalizationService()
-                          .updateCryptoMaterial(application.getUser(), application.getAppId().toString(),
-                              crypto.getKeyStore(), String.valueOf(crypto.getKeyStorePassword()),
-                              crypto.getTrustStore(), String.valueOf(crypto.getTrustStorePassword()));
-  
-                      Set<ContainerId> containers = application.getContainers().keySet();
-                      for (ContainerId cid : containers) {
-                        CMgrUpdateCryptoMaterialEvent event =
-                            new CMgrUpdateCryptoMaterialEvent(cid, crypto.getKeyStore(),
-                                crypto.getKeyStorePassword(), crypto.getTrustStore(), crypto.getTrustStorePassword(),
-                                crypto.getVersion());
-                        dispatcher.getEventHandler().handle(event);
-                      }
+                      handleSecurityUpdateForX509(crypto, application, entry.getKey());
                     }
-                    applicationsWithUpdatedCryptoMaterial.add(entry.getKey());
-                  } else {
-                    LOG.warn("Received UpdatedCryptoMaterial request for missing application " + entry.getKey());
-                    applicationsWithUpdatedCryptoMaterial.add(entry.getKey());
+                    handleSecurityUpdateForJWT(crypto, application);
+                  } else if (updateType.equals(UpdatedCryptoForApp.UPDATE_TYPE.X509)) {
+                    if (crypto.getVersion() > application.getCryptoMaterialVersion()) {
+                      handleSecurityUpdateForX509(crypto, application, entry.getKey());
+                    }
+                  } else if (updateType.equals(UpdatedCryptoForApp.UPDATE_TYPE.JWT)) {
+                    if (application != null) {
+                      handleSecurityUpdateForJWT(crypto, application);
+                    }
                   }
                 }
               }
@@ -939,6 +929,37 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
         }
       }
 
+      private void handleSecurityUpdateForX509(UpdatedCryptoForApp crypto, Application application,
+          ApplicationId appId) throws IOException, InterruptedException {
+        if (application != null) {
+          context.getCertificateLocalizationService()
+              .updateX509(application.getUser(), application.getAppId().toString(),
+                  crypto.getKeyStore(), String.valueOf(crypto.getKeyStorePassword()),
+                  crypto.getTrustStore(), String.valueOf(crypto.getTrustStorePassword()));
+  
+          for (ContainerId cid : application.getContainers().keySet()) {
+            CMgrUpdateX509Event event =
+                new CMgrUpdateX509Event(cid, crypto.getKeyStore(),
+                    crypto.getKeyStorePassword(), crypto.getTrustStore(), crypto.getTrustStorePassword(),
+                    crypto.getVersion());
+            dispatcher.getEventHandler().handle(event);
+          }
+        }
+        applicationsWithUpdatedCryptoMaterial.add(appId);
+      }
+      
+      private void handleSecurityUpdateForJWT(UpdatedCryptoForApp crypto, Application application)
+        throws IOException, InterruptedException {
+        if (application != null) {
+          context.getCertificateLocalizationService().updateJWT(application.getUser(), application.getAppId().toString(),
+              crypto.getJWT());
+          for (ContainerId cid : application.getContainers().keySet()) {
+            CMgrUpdateJWTEvent event = new CMgrUpdateJWTEvent(cid, crypto.getJWT());
+            dispatcher.getEventHandler().handle(event);
+          }
+        }
+      }
+      
       private void updateMasterKeys(NodeHeartbeatResponse response) {
         // See if the master-key has rolled over
         MasterKey updatedMasterKey = response.getContainerTokenMasterKey();

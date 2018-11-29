@@ -1110,4 +1110,9 @@ public static class RecommissionNodeTransition
   public Map<ApplicationId, UpdatedCryptoForApp> getAppX509ToUpdate() {
     return appX509ToUpdate;
   }
+  
+  @Override
+  public Map<ApplicationId, UpdatedCryptoForApp> getAppJWTToUpdate() {
+    return appJWTToUpdate;
+  }
 }

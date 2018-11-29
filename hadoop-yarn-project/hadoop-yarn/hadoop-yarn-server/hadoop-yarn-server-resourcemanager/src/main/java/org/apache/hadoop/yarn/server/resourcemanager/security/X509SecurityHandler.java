@@ -622,7 +622,7 @@ public class X509SecurityHandler
         byte[] rawProtectedKeyStore = keyStoresWrapper.getRawKeyStore(TYPE.KEYSTORE);
         byte[] rawTrustStore = keyStoresWrapper.getRawKeyStore(TYPE.TRUSTSTORE);
         
-        rmContext.getCertificateLocalizationService().updateCryptoMaterial(appUser, appId.toString(),
+        rmContext.getCertificateLocalizationService().updateX509(appUser, appId.toString(),
             ByteBuffer.wrap(rawProtectedKeyStore), String.valueOf(keyStoresWrapper.keyStorePassword),
             ByteBuffer.wrap(rawTrustStore), String.valueOf(keyStoresWrapper.trustStorePassword));
         

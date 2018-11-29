@@ -52,8 +52,10 @@ public interface CertificateLocalization {
   JWTSecurityMaterial getJWTMaterialLocation(String username, String applicationId)
       throws FileNotFoundException, InterruptedException;
   
-  void updateCryptoMaterial(String username, String applicationId, ByteBuffer keyStore, String keyStorePassword,
+  void updateX509(String username, String applicationId, ByteBuffer keyStore, String keyStorePassword,
       ByteBuffer trustStore, String trustStorePassword) throws IOException, InterruptedException;
+  
+  void updateJWT(String username, String applicationId, String jwt) throws IOException, InterruptedException;
   
   String getSuperKeystoreLocation();
   

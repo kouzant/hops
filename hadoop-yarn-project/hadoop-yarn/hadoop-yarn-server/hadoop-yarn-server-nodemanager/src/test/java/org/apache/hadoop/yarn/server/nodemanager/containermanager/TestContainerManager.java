@@ -85,7 +85,7 @@ import org.apache.hadoop.yarn.server.api.ResourceManagerConstants;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrDecreaseContainersResourceEvent;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrSignalContainersEvent;
-import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateCryptoMaterialEvent;
+import org.apache.hadoop.yarn.server.nodemanager.CMgrUpdateX509Event;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor.Signal;
 import org.apache.hadoop.yarn.server.nodemanager.DefaultContainerExecutor;
 import org.apache.hadoop.yarn.server.nodemanager.DeletionService;
@@ -266,15 +266,15 @@ public class TestContainerManager extends BaseContainerManagerTest {
     
     // TODO(Antonis) JWT update test
     
-    CMgrUpdateCryptoMaterialEvent updateEvent0 = new CMgrUpdateCryptoMaterialEvent(cid0, newKeyStore, newPassword,
+    CMgrUpdateX509Event updateEvent0 = new CMgrUpdateX509Event(cid0, newKeyStore, newPassword,
         newTrustStore, newPassword, 1);
-    CMgrUpdateCryptoMaterialEvent updateEvent1 = new CMgrUpdateCryptoMaterialEvent(cid1, newKeyStore, newPassword,
+    CMgrUpdateX509Event updateEvent1 = new CMgrUpdateX509Event(cid1, newKeyStore, newPassword,
         newTrustStore, newPassword, 1);
     containerManager.handle(updateEvent0);
     containerManager.handle(updateEvent1);
     
     Thread.sleep(200);
-    Map<ContainerId, Future> cryptoMaterialUpdaters = containerManager.getCryptoMaterialUpdaters();
+    Map<ContainerId, Future> cryptoMaterialUpdaters = containerManager.getX509Updaters();
     waitForCryptoMaterialUpdatersToFinish(cid0, cryptoMaterialUpdaters);
     waitForCryptoMaterialUpdatersToFinish(cid1, cryptoMaterialUpdaters);
   
