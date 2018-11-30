@@ -213,6 +213,7 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
           .getX509MaterialLocation(attemptId.toString(), appId.toString());
       assertNotNull(x509);
       assertEquals(keystoresPassword, x509.getKeyStorePass());
+      assertEquals(0, app.getX509Version());
     }
     
     if (((NMContext) context).isJWTEnabled()) {
@@ -220,6 +221,7 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
           .getJWTMaterialLocation(attemptId.toString(), appId.toString());
       assertNotNull(jwtMaterial);
       assertEquals(jwt, jwtMaterial.getToken());
+      assertEquals(0L, app.getJWTExpiration());
     }
     
     // reset container manager and verify app recovered with proper acls
@@ -267,6 +269,7 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
           .getX509MaterialLocation(attemptId.toString(), appId.toString());
       assertNotNull(x509);
       assertEquals(keystoresPassword, x509.getKeyStorePass());
+      assertEquals(0, app.getX509Version());
     }
   
     if (((NMContext) context).isJWTEnabled()) {
@@ -274,6 +277,7 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
           .getJWTMaterialLocation(attemptId.toString(), appId.toString());
       assertNotNull(jwtMaterial);
       assertEquals(jwt, jwtMaterial.getToken());
+      assertEquals(0L, app.getJWTExpiration());
     }
 
     // simulate application completion

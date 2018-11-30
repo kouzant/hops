@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -404,7 +405,7 @@ public class ResourceTrackerService extends AbstractService implements
               resolve(host), capability, nodeManagerVersion);
     }
     RMNode oldNode = this.rmContext.getRMNodes().putIfAbsent(nodeId, rmNode);
-    Map<ApplicationId, Integer> runningsAppsWithCryptoVersion = request.getRunningApplications();
+    Map<ApplicationId, UpdatedCryptoForApp> runningsAppsWithCryptoVersion = request.getRunningApplications();
     List<ApplicationId> runningApplications = new ArrayList<>(runningsAppsWithCryptoVersion.size());
     runningApplications.addAll(runningsAppsWithCryptoVersion.keySet());
     if (oldNode == null) {
@@ -482,30 +483,41 @@ public class ResourceTrackerService extends AbstractService implements
     response.setRMVersion(YarnVersionInfo.getVersion());
     return response;
   }
-
-  private void pushCryptoUpdatedEventsForRunningApps(Map<ApplicationId, Integer> runningApps, RMNode rmNode) {
-    if (!getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, CommonConfigurationKeys
-        .IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+  
+  private void pushCryptoUpdatedEventsForRunningApps(Map<ApplicationId, UpdatedCryptoForApp> runningApps, RMNode rmNode) {
+    if (!isHopsTLSEnabled() && !isJWTEnabled()) {
       return;
     }
-    for (Map.Entry<ApplicationId, Integer> entry : runningApps.entrySet()) {
+    for (Map.Entry<ApplicationId, UpdatedCryptoForApp> entry : runningApps.entrySet()) {
       ApplicationId appId = entry.getKey();
       RMApp rmApp = rmContext.getRMApps().get(appId);
       if (rmApp != null) {
-        Integer nmCryptoMaterialVersion = entry.getValue();
-        if (rmApp.getCryptoMaterialVersion() > nmCryptoMaterialVersion) {
-          ByteBuffer keyStore = ByteBuffer.wrap(rmApp.getKeyStore());
-          char[] keyStorePassword = rmApp.getKeyStorePassword();
-          ByteBuffer trustStore = ByteBuffer.wrap(rmApp.getTrustStore());
-          char[] trustStorePassword = rmApp.getTrustStorePassword();
-          int cryptoVersion = rmApp.getCryptoMaterialVersion();
-          UpdatedCryptoForApp updatedCrypto = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
-          updatedCrypto.setKeyStore(keyStore);
-          updatedCrypto.setKeyStorePassword(keyStorePassword);
-          updatedCrypto.setTrustStore(trustStore);
-          updatedCrypto.setTrustStorePassword(trustStorePassword);
-          updatedCrypto.setVersion(cryptoVersion);
-          rmNode.getAppX509ToUpdate().putIfAbsent(appId, updatedCrypto);
+        if (isHopsTLSEnabled()) {
+          Integer nmCryptoMaterialVersion = entry.getValue().getVersion();
+          if (rmApp.getCryptoMaterialVersion() > nmCryptoMaterialVersion) {
+            ByteBuffer keyStore = ByteBuffer.wrap(rmApp.getKeyStore());
+            char[] keyStorePassword = rmApp.getKeyStorePassword();
+            ByteBuffer trustStore = ByteBuffer.wrap(rmApp.getTrustStore());
+            char[] trustStorePassword = rmApp.getTrustStorePassword();
+            int cryptoVersion = rmApp.getCryptoMaterialVersion();
+            UpdatedCryptoForApp updatedCrypto = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
+            updatedCrypto.setKeyStore(keyStore);
+            updatedCrypto.setKeyStorePassword(keyStorePassword);
+            updatedCrypto.setTrustStore(trustStore);
+            updatedCrypto.setTrustStorePassword(trustStorePassword);
+            updatedCrypto.setVersion(cryptoVersion);
+            rmNode.getAppX509ToUpdate().putIfAbsent(appId, updatedCrypto);
+          }
+        }
+        
+        if (isJWTEnabled()) {
+          long nmJWTExpiration = entry.getValue().getJWTExpiration();
+          if (rmApp.getJWTExpiration().isAfter(Instant.ofEpochMilli(nmJWTExpiration))) {
+            UpdatedCryptoForApp updateJWT = recordFactory.newRecordInstance(UpdatedCryptoForApp.class);
+            updateJWT.setJWT(rmApp.getJWT());
+            updateJWT.setJWTExpiration(rmApp.getJWTExpiration().toEpochMilli());
+            rmNode.getAppJWTToUpdate().putIfAbsent(appId, updateJWT);
+          }
         }
       }
     }
@@ -553,8 +565,7 @@ public class ResourceTrackerService extends AbstractService implements
     // Send ping
     this.nmLivelinessMonitor.receivedPing(nodeId);
     
-    if (getConfig().getBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED,
-        CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED_DEFAULT)) {
+    if (isHopsTLSEnabled()) {
       Set<ApplicationId> updatedApps = request.getUpdatedApplicationsWithNewCryptoMaterial();
       if (updatedApps != null) {
         for (ApplicationId appId : updatedApps) {
@@ -660,6 +671,7 @@ public class ResourceTrackerService extends AbstractService implements
       if (jwtUpdates.containsKey(appId)) {
         UpdatedCryptoForApp jwtUpdate = jwtUpdates.get(appId);
         update.setJWT(jwtUpdate.getJWT());
+        update.setJWTExpiration(jwtUpdate.getJWTExpiration());
         mergedJWTUpdates.add(appId);
       }
       mergedUpdates.put(appId, update);

@@ -804,6 +804,7 @@ public abstract class RMNodeImpl implements RMNode, EventHandler<RMNodeEvent> {
         JWTSecurityHandler.JWTSecurityManagerMaterial updatedMaterial =
             (JWTSecurityHandler.JWTSecurityManagerMaterial) updateEvent.getSecurityMaterial();
         updatedCrypto.setJWT(updatedMaterial.getToken());
+        updatedCrypto.setJWTExpiration(updatedMaterial.getExpirationDate().toEpochMilli());
         rmNode.appJWTToUpdate.put(updateEvent.getSecurityMaterial().getApplicationId(), updatedCrypto);
       }
     }

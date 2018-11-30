@@ -1373,8 +1373,8 @@ public class TestResourceTrackerService extends NodeLabelTestBase {
     Assert.assertEquals(5120 + 10240, metrics.getAvailableMB());
 
     // reconnect of node with changed capability and running applications
-    Map<ApplicationId, Integer> runningApps = new HashMap<>(1);
-    runningApps.put(ApplicationId.newInstance(1, 0), 0);
+    Map<ApplicationId, UpdatedCryptoForApp> runningApps = new HashMap<>(1);
+    runningApps.put(ApplicationId.newInstance(1, 0), UpdatedCryptoForApp.newInstance(0, 0));
     nm1 = rm.registerNode("host2:5678", 15360, 2, runningApps);
     rm.drainEvents();
     response = nm1.nodeHeartbeat(true);

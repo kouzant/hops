@@ -70,6 +70,7 @@ import org.apache.hadoop.yarn.event.DrainDispatcher;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.security.AMRMTokenIdentifier;
 import org.apache.hadoop.yarn.server.api.protocolrecords.NMContainerStatus;
+import org.apache.hadoop.yarn.server.api.protocolrecords.UpdatedCryptoForApp;
 import org.apache.hadoop.yarn.server.resourcemanager.amlauncher.AMLauncherEvent;
 import org.apache.hadoop.yarn.server.resourcemanager.amlauncher.ApplicationMasterLauncher;
 import org.apache.hadoop.yarn.server.resourcemanager.nodelabels.NullRMNodeLabelsManager;
@@ -667,7 +668,7 @@ public class MockRM extends ResourceManager {
   }
   
   public MockNM registerNode(String nodeIdStr, int memory, int vCores, int
-      gpus, Map<ApplicationId, Integer> runningApplications) throws Exception {
+      gpus, Map<ApplicationId, UpdatedCryptoForApp> runningApplications) throws Exception {
     MockNM nm =
         new MockNM(nodeIdStr, memory, vCores, gpus,
             getResourceTrackerService(),
@@ -678,7 +679,7 @@ public class MockRM extends ResourceManager {
   
   
   public MockNM registerNode(String nodeIdStr, int memory, int vCores,
-      Map<ApplicationId, Integer> runningApplications) throws Exception {
+      Map<ApplicationId, UpdatedCryptoForApp> runningApplications) throws Exception {
     MockNM nm =
         new MockNM(nodeIdStr, memory, vCores, 0, getResourceTrackerService(),
             YarnVersionInfo.getVersion());

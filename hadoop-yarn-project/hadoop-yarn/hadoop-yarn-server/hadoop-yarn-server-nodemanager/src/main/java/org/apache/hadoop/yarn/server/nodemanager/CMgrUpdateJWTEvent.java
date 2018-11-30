@@ -21,13 +21,19 @@ import org.apache.hadoop.yarn.api.records.ContainerId;
 
 public class CMgrUpdateJWTEvent extends CMgrUpdateSecurityMaterialEvent {
   private final String jwt;
+  private final long jwtExpiration;
   
-  public CMgrUpdateJWTEvent(ContainerId containerId, String jwt) {
+  public CMgrUpdateJWTEvent(ContainerId containerId, String jwt, long jwtExpiration) {
     super(containerId);
     this.jwt = jwt;
+    this.jwtExpiration = jwtExpiration;
   }
   
   public String getJwt() {
     return jwt;
+  }
+  
+  public long getJwtExpiration() {
+    return jwtExpiration;
   }
 }

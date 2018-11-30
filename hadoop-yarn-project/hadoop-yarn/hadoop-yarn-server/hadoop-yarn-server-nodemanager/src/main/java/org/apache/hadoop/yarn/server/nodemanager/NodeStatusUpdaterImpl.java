@@ -561,11 +561,13 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
     return containerStatuses;
   }
   
-  private Map<ApplicationId, Integer> getRunningApplications() {
+  private Map<ApplicationId, UpdatedCryptoForApp> getRunningApplications() {
     Map<ApplicationId, Application> runningApps = this.context.getApplications();
-    Map<ApplicationId, Integer> runningApplications = new HashMap<>(runningApps.size());
+    Map<ApplicationId, UpdatedCryptoForApp> runningApplications = new HashMap<>(runningApps.size());
     for (Map.Entry<ApplicationId, Application> entry : runningApps.entrySet()) {
-      runningApplications.put(entry.getKey(), entry.getValue().getCryptoMaterialVersion());
+      Application app = entry.getValue();
+      UpdatedCryptoForApp upc = UpdatedCryptoForApp.newInstance(app.getX509Version(), app.getJWTExpiration());
+      runningApplications.put(entry.getKey(), upc);
     }
     return runningApplications;
   }
@@ -885,16 +887,19 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
                   UpdatedCryptoForApp crypto = entry.getValue();
                   UpdatedCryptoForApp.UPDATE_TYPE updateType = crypto.determineUpdateType();
                   if (updateType.equals(UpdatedCryptoForApp.UPDATE_TYPE.X509_JWT)) {
-                    if (crypto.getVersion() > application.getCryptoMaterialVersion()) {
+                    if (crypto.getVersion() > application.getX509Version()) {
                       handleSecurityUpdateForX509(crypto, application, entry.getKey());
                     }
-                    handleSecurityUpdateForJWT(crypto, application);
+                    if (crypto.getJWTExpiration() > application.getJWTExpiration()) {
+                      handleSecurityUpdateForJWT(crypto, application);
+                    }
                   } else if (updateType.equals(UpdatedCryptoForApp.UPDATE_TYPE.X509)) {
-                    if (crypto.getVersion() > application.getCryptoMaterialVersion()) {
+                    if (crypto.getVersion() > application.getX509Version()) {
                       handleSecurityUpdateForX509(crypto, application, entry.getKey());
                     }
                   } else if (updateType.equals(UpdatedCryptoForApp.UPDATE_TYPE.JWT)) {
-                    if (application != null) {
+                    if (application != null
+                        && crypto.getJWTExpiration() > application.getJWTExpiration()) {
                       handleSecurityUpdateForJWT(crypto, application);
                     }
                   }
@@ -953,7 +958,7 @@ public class NodeStatusUpdaterImpl extends AbstractService implements
           context.getCertificateLocalizationService().updateJWT(application.getUser(), application.getAppId().toString(),
               crypto.getJWT());
           for (ContainerId cid : application.getContainers().keySet()) {
-            CMgrUpdateJWTEvent event = new CMgrUpdateJWTEvent(cid, crypto.getJWT());
+            CMgrUpdateJWTEvent event = new CMgrUpdateJWTEvent(cid, crypto.getJWT(), crypto.getJWTExpiration());
             dispatcher.getEventHandler().handle(event);
           }
         }

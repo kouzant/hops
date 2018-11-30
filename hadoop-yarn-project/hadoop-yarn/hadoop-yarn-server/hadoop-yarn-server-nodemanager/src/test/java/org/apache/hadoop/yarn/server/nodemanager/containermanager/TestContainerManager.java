@@ -322,8 +322,8 @@ public class TestContainerManager extends BaseContainerManagerTest {
         ByteBuffer.wrap(keystoresContent1.getBytes()), keystoresPassword1.toCharArray(), 1);
     
     // Events to update JWT for containers
-    CMgrUpdateJWTEvent jwtUpdateC0 = new CMgrUpdateJWTEvent(cid0, jwt1);
-    CMgrUpdateJWTEvent jwtUpdateC1 = new CMgrUpdateJWTEvent(cid1, jwt1);
+    CMgrUpdateJWTEvent jwtUpdateC0 = new CMgrUpdateJWTEvent(cid0, jwt1, System.currentTimeMillis());
+    CMgrUpdateJWTEvent jwtUpdateC1 = new CMgrUpdateJWTEvent(cid1, jwt1, System.currentTimeMillis());
     
     cm.handle(x509UpdateC0);
     cm.handle(x509UpdateC1);

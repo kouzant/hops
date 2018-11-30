@@ -337,6 +337,7 @@ public class ContainerManagerImpl extends CompositeService implements
     creds.readTokenStorageStream(
         new DataInputStream(p.getCredentials().newInput()));
     int cryptoMaterialVersion = -1;
+    long jwtExpiration = -1L;
     
     if (isHopsTLSEnabled()) {
       materializeX509(appId, p.getUser(), p.getUserFolder(),
@@ -347,6 +348,7 @@ public class ContainerManagerImpl extends CompositeService implements
     
     if (isJWTEnabled()) {
       materializeJWT(appId, p.getUser(), p.getUserFolder(), p.getJwt());
+      jwtExpiration = p.getJwtExpiration();
     }
     
     List<ApplicationACLMapProto> aclProtoList = p.getAclsList();
@@ -365,13 +367,12 @@ public class ContainerManagerImpl extends CompositeService implements
 
     LOG.info("Recovering application " + appId);
     ApplicationImpl app = null;
-    if (cryptoMaterialVersion == -1) {
-      // Basically if RPC TLS is disabled
+    if (isHopsTLSEnabled() || isJWTEnabled()) {
+      app = new ApplicationImpl(dispatcher, p.getUser(), appId, creds, context, p.getUserFolder(),
+          cryptoMaterialVersion, jwtExpiration);
+    } else {
       app = new ApplicationImpl(dispatcher, p.getUser(), appId,
           creds, context, p.getUserFolder());
-    } else {
-      app = new ApplicationImpl(dispatcher, p.getUser(), appId, creds, context, p.getUserFolder(),
-          cryptoMaterialVersion);
     }
     context.getApplications().put(appId, app);
     app.handle(new ApplicationInitEvent(appId, acls, logAggregationContext));
@@ -964,7 +965,7 @@ public class ContainerManagerImpl extends CompositeService implements
       String user, String userFolder, Credentials credentials,
       Map<ApplicationAccessType, String> appAcls,
       LogAggregationContext logAggregationContext, ByteBuffer keyStore, String keyStorePass,
-      ByteBuffer trustStore, String trustStorePass, int cryptoVersion, String jwt) {
+      ByteBuffer trustStore, String trustStorePass, int cryptoVersion, String jwt, long jwtExpiration) {
 
     ContainerManagerApplicationProto.Builder builder =
         ContainerManagerApplicationProto.newBuilder();
@@ -972,11 +973,11 @@ public class ContainerManagerImpl extends CompositeService implements
     builder.setUser(user);
     builder.setUserFolder(userFolder);
 
-    if (keyStore != null){
+    if (keyStore != null) {
       builder.setKeyStore(ProtoUtils.convertToProtoFormat(keyStore));
       builder.setKeyStorePassword(keyStorePass);
     }
-    if (trustStore != null){
+    if (trustStore != null) {
       builder.setTrustStore(ProtoUtils.convertToProtoFormat(trustStore));
       builder.setTrustStorePassword(trustStorePass);
     }
@@ -985,6 +986,10 @@ public class ContainerManagerImpl extends CompositeService implements
     
     if (jwt != null) {
       builder.setJwt(jwt);
+    }
+    
+    if (jwtExpiration != -1L) {
+      builder.setJwtExpiration(jwtExpiration);
     }
     
     if (logAggregationContext != null) {
@@ -1064,7 +1069,8 @@ public class ContainerManagerImpl extends CompositeService implements
     // Crypto version of this material might be greater than 0, but from the NM's perspective it's
     // the first time it receives it
     int cryptoMaterialVersion = isHopsTLSEnabled() ? 0 : -1;
-  
+    long jwtExpiration = isJWTEnabled() ? 0L : -1L;
+    
     // Sanity check for local resources
     for (Map.Entry<String, LocalResource> rsrc : launchContext
         .getLocalResources().entrySet()) {
@@ -1096,7 +1102,8 @@ public class ContainerManagerImpl extends CompositeService implements
       if (!serviceStopped) {
         // Create the application
         Application application =
-            new ApplicationImpl(dispatcher, user, applicationID, credentials, context, userFolder, cryptoMaterialVersion);
+            new ApplicationImpl(dispatcher, user, applicationID, credentials, context, userFolder,
+                cryptoMaterialVersion, jwtExpiration);
         if (null == context.getApplications().putIfAbsent(applicationID,
           application)) {
           LOG.info("Creating a new application reference for app " + applicationID);
@@ -1135,7 +1142,7 @@ public class ContainerManagerImpl extends CompositeService implements
           context.getNMStateStore().storeApplication(applicationID,
               buildAppProto(applicationID, user, userFolder, credentials, appAcls,
                   logAggregationContext, keyStore, keyStorePass, trustStore, trustStorePass, cryptoMaterialVersion,
-                  jwt));
+                  jwt, jwtExpiration));
           dispatcher.getEventHandler().handle(
             new ApplicationInitEvent(applicationID, appAcls,
               logAggregationContext));
@@ -1591,7 +1598,8 @@ public class ContainerManagerImpl extends CompositeService implements
     }
     ContainerImpl container = (ContainerImpl) context.getContainers().get(event.getContainerId());
     if (container != null) {
-      ContainerJWTUpdaterTask updaterTask = new ContainerJWTUpdaterTask(container, event.getJwt());
+      ContainerJWTUpdaterTask updaterTask = new ContainerJWTUpdaterTask(container, event.getJwt(),
+          event.getJwtExpiration());
       scheduleJWTUpdaterTaskInternal(updaterTask, container.getContainerId());
     }
   }
@@ -1614,10 +1622,12 @@ public class ContainerManagerImpl extends CompositeService implements
   
   private class ContainerJWTUpdaterTask extends ContainerSecurityUpdaterTask {
     private final String jwt;
+    private final long jwtExpiration;
     
-    private ContainerJWTUpdaterTask(ContainerImpl container, String jwt) {
+    private ContainerJWTUpdaterTask(ContainerImpl container, String jwt, long jwtExpiration) {
       super(container);
       this.jwt = jwt;
+      this.jwtExpiration = jwtExpiration;
     }
     
     @Override
@@ -1644,6 +1654,7 @@ public class ContainerManagerImpl extends CompositeService implements
     protected void updateStateStore() throws IOException {
       ApplicationId applicationId = container.getContainerId().getApplicationAttemptId().getApplicationId();
       Application app = context.getApplications().get(applicationId);
+      app.setJWTExpiration(jwtExpiration);
     
       try {
         X509SecurityMaterial x509SecurityMaterial = context.getCertificateLocalizationService()
@@ -1655,7 +1666,7 @@ public class ContainerManagerImpl extends CompositeService implements
                     .getLogAggregationContext(),
                 x509SecurityMaterial.getKeyStoreMem(), String.valueOf(x509SecurityMaterial.getKeyStorePass()),
                 x509SecurityMaterial.getTrustStoreMem(), String.valueOf(x509SecurityMaterial.getTrustStorePass()),
-                app.getCryptoMaterialVersion(), jwt));
+                app.getX509Version(), jwt, jwtExpiration));
       } catch (InterruptedException ex) {
         throw new IOException(ex);
       }
@@ -1709,7 +1720,7 @@ public class ContainerManagerImpl extends CompositeService implements
     protected void updateStateStore() throws IOException {
       ApplicationId applicationId = container.getContainerId().getApplicationAttemptId().getApplicationId();
       Application app = context.getApplications().get(applicationId);
-      app.setCryptoMaterialVersion(cryptoVersion);
+      app.setX509Version(cryptoVersion);
   
       try {
         JWTSecurityMaterial jwtSecurityMaterial = context.getCertificateLocalizationService()
@@ -1720,7 +1731,7 @@ public class ContainerManagerImpl extends CompositeService implements
                 container.getLaunchContext().getApplicationACLs(), container.getContainerTokenIdentifier()
                     .getLogAggregationContext(),
                 keyStore, String.valueOf(keyStorePassword), trustStore, String.valueOf(trustStorePassword),
-                cryptoVersion, jwtSecurityMaterial.getToken()));
+                cryptoVersion, jwtSecurityMaterial.getToken(), app.getJWTExpiration()));
       } catch (InterruptedException ex) {
         throw new IOException(ex);
       }

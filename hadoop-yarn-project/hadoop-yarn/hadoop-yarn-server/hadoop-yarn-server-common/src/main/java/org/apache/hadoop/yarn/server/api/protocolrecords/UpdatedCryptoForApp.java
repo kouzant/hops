@@ -42,6 +42,13 @@ public abstract class UpdatedCryptoForApp {
     return updatedCryptoForApp;
   }
   
+  public static UpdatedCryptoForApp newInstance(int x509Version, long jwtExpiration) {
+    UpdatedCryptoForApp updatedCryptoForApp = Records.newRecord(UpdatedCryptoForApp.class);
+    updatedCryptoForApp.setVersion(x509Version);
+    updatedCryptoForApp.setJWTExpiration(jwtExpiration);
+    return updatedCryptoForApp;
+  }
+  
   public abstract ByteBuffer getKeyStore();
   
   public abstract void setKeyStore(ByteBuffer keyStore);
@@ -65,6 +72,10 @@ public abstract class UpdatedCryptoForApp {
   public abstract String getJWT();
   
   public abstract void setJWT(String jwt);
+  
+  public abstract long getJWTExpiration();
+  
+  public abstract void setJWTExpiration(long jwtExpiration);
   
   public UPDATE_TYPE determineUpdateType() {
     if (getKeyStore() != null && getJWT() != null) {

@@ -591,6 +591,10 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     conf.setInt(YarnConfiguration.RM_AM_MAX_ATTEMPTS, YarnConfiguration.DEFAULT_RM_AM_MAX_ATTEMPTS);
     conf.setBoolean(CommonConfigurationKeys.IPC_SERVER_SSL_ENABLED, true);
     conf.set(YarnConfiguration.RM_APP_CERTIFICATE_EXPIRATION_SAFETY_PERIOD, "40s");
+    conf.setBoolean(YarnConfiguration.RM_JWT_ENABLED, true);
+    conf.set(YarnConfiguration.RM_JWT_VALIDITY_PERIOD, "50s");
+    conf.set(YarnConfiguration.RM_JWT_EXPIRATION_SAFETY_PERIOD, "40s");
+    
     // Start RM 1
     MockRM rm1 = new RMWithCustomRTService(conf);
     rms.add(rm1);
@@ -626,6 +630,9 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     while (rmNode.getAppX509ToUpdate().isEmpty()) {
       TimeUnit.MILLISECONDS.sleep(100);
     }
+    while (rmNode.getAppJWTToUpdate().isEmpty()) {
+      TimeUnit.MILLISECONDS.sleep(100);
+    }
     nmHeartbeatResponse = nm.nodeHeartbeat(true);
     // This should be empty because RM 1 is fixed not to send update crypto events
     Assert.assertTrue(nmHeartbeatResponse.getUpdatedCryptoForApps().isEmpty());
@@ -642,8 +649,10 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     
     // new NM to represent re-registration
     nm = new MockNM("127.0.0.1:1337", 20 * 1024, rm2.getResourceTrackerService());
-    Map<ApplicationId, Integer> runningApps = new HashMap<>();
-    runningApps.put(app.getApplicationId(), app.getCryptoMaterialVersion());
+    Map<ApplicationId, UpdatedCryptoForApp> runningApps = new HashMap<>();
+    UpdatedCryptoForApp upc = UpdatedCryptoForApp.newInstance(app.getCryptoMaterialVersion(), app.getJWTExpiration()
+        .toEpochMilli());
+    runningApps.put(app.getApplicationId(), upc);
     nm.registerNode(runningApps);
     nmHeartbeatResponse = nm.nodeHeartbeat(true);
     // Since crypto material didn't change the heartbeat should not contain updated crypto material
@@ -651,9 +660,14 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     
     rmNode = rm2.getRMContext().getRMNodes().get(nm.getNodeId());
     rmNode.getAppX509ToUpdate().clear();
+    rmNode.getAppJWTToUpdate().clear();
     
     LOG.info("Sleeping until the renewal triggers again");
     while (rmNode.getAppX509ToUpdate().isEmpty()) {
+      TimeUnit.MILLISECONDS.sleep(100);
+    }
+  
+    while (rmNode.getAppJWTToUpdate().isEmpty()) {
       TimeUnit.MILLISECONDS.sleep(100);
     }
     
@@ -661,7 +675,9 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     nm = new MockNM("127.0.0.1:1337", 20 * 1024, rm2.getResourceTrackerService());
     nm.registerNode(runningApps);
     Assert.assertEquals(1, rmNode.getAppX509ToUpdate().size());
+    Assert.assertEquals(1, rmNode.getAppJWTToUpdate().size());
     Assert.assertTrue(rmNode.getAppX509ToUpdate().containsKey(app.getApplicationId()));
+    Assert.assertTrue(rmNode.getAppJWTToUpdate().containsKey(app.getApplicationId()));
     nmHeartbeatResponse = nm.nodeHeartbeat(true);
     // Crypto material has changed so heartbeat should contain updated crypto material
     Assert.assertEquals(1, nmHeartbeatResponse.getUpdatedCryptoForApps().size());
@@ -669,6 +685,8 @@ public class TestRMRestart extends ParameterizedSchedulerTestBase {
     Assert.assertEquals(app.getCryptoMaterialVersion(),
         new Integer(nmHeartbeatResponse.getUpdatedCryptoForApps().get(app
         .getApplicationId()).getVersion()));
+    Assert.assertEquals(app.getJWTExpiration().toEpochMilli(), nmHeartbeatResponse.getUpdatedCryptoForApps()
+        .get(app.getApplicationId()).getJWTExpiration());
     
     rm2.stop();
   }

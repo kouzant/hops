@@ -23,6 +23,7 @@ import java.util.EnumSet;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.ReadLock;
 import java.util.concurrent.locks.ReentrantReadWriteLock.WriteLock;
@@ -82,15 +83,18 @@ public class ApplicationImpl implements Application {
   Map<ContainerId, Container> containers =
       new ConcurrentHashMap<>();
   
-  private AtomicInteger cryptoMaterialVersion;
+  private final AtomicInteger x509Version;
+  private final AtomicLong jwtExpiration;
+  
   
   public ApplicationImpl(Dispatcher dispatcher, String user, ApplicationId appId,
       Credentials credentials, Context context, String userFolder) {
-    this(dispatcher, user, appId, credentials, context, userFolder, 0);
+    this(dispatcher, user, appId, credentials, context, userFolder, 0, -1L);
   }
   
   public ApplicationImpl(Dispatcher dispatcher, String user, ApplicationId appId,
-      Credentials credentials, Context context, String userFolder, int cryptoMaterialVersion) {
+      Credentials credentials, Context context, String userFolder, int x509Version,
+      long jwtExpiration) {
     this.dispatcher = dispatcher;
     this.user = user;
     this.userFolder = userFolder;
@@ -98,7 +102,8 @@ public class ApplicationImpl implements Application {
     this.credentials = credentials;
     this.aclsManager = context.getApplicationACLsManager();
     this.context = context;
-    this.cryptoMaterialVersion = new AtomicInteger(cryptoMaterialVersion);
+    this.x509Version = new AtomicInteger(x509Version);
+    this.jwtExpiration = new AtomicLong(jwtExpiration);
     ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
     readLock = lock.readLock();
     writeLock = lock.writeLock();
@@ -141,13 +146,23 @@ public class ApplicationImpl implements Application {
   }
 
   @Override
-  public int getCryptoMaterialVersion() {
-    return cryptoMaterialVersion.get();
+  public int getX509Version() {
+    return x509Version.get();
   }
   
   @Override
-  public void setCryptoMaterialVersion(int cryptoMaterialVersion) {
-    this.cryptoMaterialVersion.set(cryptoMaterialVersion);
+  public void setX509Version(int x509Version) {
+    this.x509Version.set(x509Version);
+  }
+  
+  @Override
+  public long getJWTExpiration() {
+    return jwtExpiration.get();
+  }
+  
+  @Override
+  public void setJWTExpiration(long jwtExpiration) {
+    this.jwtExpiration.set(jwtExpiration);
   }
   
   private static final ContainerDoneTransition CONTAINER_DONE_TRANSITION =
