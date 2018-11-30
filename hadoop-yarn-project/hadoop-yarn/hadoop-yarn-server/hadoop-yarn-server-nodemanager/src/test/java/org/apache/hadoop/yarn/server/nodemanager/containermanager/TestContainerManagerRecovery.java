@@ -75,8 +75,6 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration;
 import org.apache.hadoop.yarn.exceptions.YarnException;
 import org.apache.hadoop.yarn.factory.providers.RecordFactoryProvider;
 import org.apache.hadoop.yarn.security.NMTokenIdentifier;
-import org.apache.hadoop.yarn.server.api.records.MasterKey;
-import org.apache.hadoop.yarn.server.api.records.impl.pb.MasterKeyPBImpl;
 import org.apache.hadoop.yarn.server.nodemanager.CMgrCompletedAppsEvent;
 import org.apache.hadoop.yarn.server.nodemanager.ContainerExecutor;
 import org.apache.hadoop.yarn.server.nodemanager.Context;
@@ -101,16 +99,11 @@ import org.apache.hadoop.yarn.server.nodemanager.containermanager.loghandler.Log
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMMemoryStateStoreService;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMNullStateStoreService;
 import org.apache.hadoop.yarn.server.nodemanager.recovery.NMStateStoreService;
-import org.apache.hadoop.yarn.server.nodemanager.security.NMContainerTokenSecretManager;
-import org.apache.hadoop.yarn.server.nodemanager.security.NMTokenSecretManagerInNM;
-import org.apache.hadoop.yarn.server.security.ApplicationACLsManager;
-import org.apache.hadoop.yarn.server.security.CertificateLocalizationService;
 import org.junit.Before;
 import org.junit.Test;
 
 public class TestContainerManagerRecovery extends BaseContainerManagerTest {
 
-  private CertificateLocalizationService certificateLocalizationService;
   private final String keystoresContent = "some_content";
   private final String keystoresPassword = "password";
   private final String jwt = "jwt";
@@ -160,7 +153,7 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
     NMStateStoreService stateStore = new NMMemoryStateStoreService();
     stateStore.init(conf);
     stateStore.start();
-    Context context = createContext(conf, stateStore);
+    Context context = createContext(conf, stateStore, true, true);
     ContainerManagerImpl cm = createContainerManager(context);
     cm.init(conf);
     cm.start();
@@ -628,31 +621,6 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
     };
   }
 
-  private NMContext createContext(Configuration conf,
-      NMStateStoreService stateStore) {
-    NMContext context = new NMContext(new NMContainerTokenSecretManager(
-        conf), new NMTokenSecretManagerInNM(), null,
-        new ApplicationACLsManager(conf), stateStore, true, true){
-      public int getHttpPort() {
-        return HTTP_PORT;
-      }
-    };
-    // simulate registration with RM
-    MasterKey masterKey = new MasterKeyPBImpl();
-    masterKey.setKeyId(123);
-    masterKey.setBytes(ByteBuffer.wrap(new byte[] { new Integer(123)
-      .byteValue() }));
-    context.getContainerTokenSecretManager().setMasterKey(masterKey);
-    context.getNMTokenSecretManager().setMasterKey(masterKey);
-    if (context.isHopsTLSEnabled() || context.isJWTEnabled()) {
-      certificateLocalizationService = new CertificateLocalizationService(CertificateLocalizationService.ServiceType.NM);
-      certificateLocalizationService.init(conf);
-      certificateLocalizationService.start();
-      context.setCertificateLocalizationService(certificateLocalizationService);
-    }
-    return context;
-  }
-
   private StartContainersResponse startContainer(final Context context,
       final ContainerManagerImpl cm, ContainerId cid,
       ContainerLaunchContext clc, LogAggregationContext logAggregationContext)
@@ -754,7 +722,7 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
     }
     assertEquals(state, app.getApplicationState());
   }
-
+  
   private ContainerManagerImpl createContainerManager(Context context) {
     final LogHandler logHandler = mock(LogHandler.class);
     final ResourceLocalizationService rsrcSrv =
@@ -762,57 +730,57 @@ public class TestContainerManagerRecovery extends BaseContainerManagerTest {
           @Override
           public void serviceInit(Configuration conf) throws Exception {
           }
-
+          
           @Override
           public void serviceStart() throws Exception {
             // do nothing
           }
-
+          
           @Override
           public void serviceStop() throws Exception {
             // do nothing
           }
-
+          
           @Override
           public void handle(LocalizationEvent event) {
             // do nothing
           }
-    };
-
+        };
+    
     final ContainersLauncher launcher = new ContainersLauncher(context, null,
         null, null, null) {
-          @Override
-          public void handle(ContainersLauncherEvent event) {
-            // do nothing
-          }
+      @Override
+      public void handle(ContainersLauncherEvent event) {
+        // do nothing
+      }
     };
-
+    
     return new ContainerManagerImpl(context,
         mock(ContainerExecutor.class), mock(DeletionService.class),
         mock(NodeStatusUpdater.class), metrics, null) {
-          @Override
-          protected LogHandler createLogHandler(Configuration conf,
-              Context context, DeletionService deletionService) {
-            return logHandler;
-          }
-
-          @Override
-          protected ResourceLocalizationService createResourceLocalizationService(
-              ContainerExecutor exec, DeletionService deletionContext, Context context) {
-            return rsrcSrv;
-          }
-
-          @Override
-          protected ContainersLauncher createContainersLauncher(
-              Context context, ContainerExecutor exec) {
-            return launcher;
-          }
-
-          @Override
-          public void setBlockNewContainerRequests(
-              boolean blockNewContainerRequests) {
-            // do nothing
-          }
+      @Override
+      protected LogHandler createLogHandler(Configuration conf,
+          Context context, DeletionService deletionService) {
+        return logHandler;
+      }
+      
+      @Override
+      protected ResourceLocalizationService createResourceLocalizationService(
+          ContainerExecutor exec, DeletionService deletionContext, Context context) {
+        return rsrcSrv;
+      }
+      
+      @Override
+      protected ContainersLauncher createContainersLauncher(
+          Context context, ContainerExecutor exec) {
+        return launcher;
+      }
+      
+      @Override
+      public void setBlockNewContainerRequests(
+          boolean blockNewContainerRequests) {
+        // do nothing
+      }
     };
   }
 }

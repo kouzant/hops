@@ -1887,6 +1887,11 @@ public class ContainerManagerImpl extends CompositeService implements
     return x509Updaters;
   }
   
+  @VisibleForTesting
+  public Map<ContainerId, Future> getJWTUpdaters() {
+    return jwtUpdaters;
+  }
+  
   public Map<String, ByteBuffer> getAuxServiceMetaData() {
     return this.auxiliaryServices.getMetaData();
   }
