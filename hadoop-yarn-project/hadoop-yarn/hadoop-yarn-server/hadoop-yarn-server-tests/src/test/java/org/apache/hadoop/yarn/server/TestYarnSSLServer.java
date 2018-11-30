@@ -81,7 +81,7 @@ public class TestYarnSSLServer extends HopsSSLTestUtils {
 
         conf = new YarnConfiguration();
         conf.set(YarnConfiguration.HOPS_RM_SECURITY_ACTOR_KEY,
-            "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppCertificateActions");
+            "org.apache.hadoop.yarn.server.resourcemanager.security.TestingRMAppSecurityActions");
         filesToPurge = prepareCryptoMaterial(conf, classpathDir);
         setCryptoConfig(conf, classpathDir);
 

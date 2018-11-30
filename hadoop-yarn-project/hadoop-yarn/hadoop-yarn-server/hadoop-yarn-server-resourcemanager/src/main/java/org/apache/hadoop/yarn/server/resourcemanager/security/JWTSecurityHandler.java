@@ -54,7 +54,7 @@ public class JWTSecurityHandler
   private final RMContext rmContext;
   private final RMAppSecurityManager rmAppSecurityManager;
   private final EventHandler eventHandler;
-  private final String[] JWT_AUDIENCE;
+  private String[] jwtAudience;
   
   private Configuration config;
   private boolean jwtEnabled;
@@ -71,10 +71,6 @@ public class JWTSecurityHandler
   public JWTSecurityHandler(RMContext rmContext, RMAppSecurityManager rmAppSecurityManager) {
     this.rmContext = rmContext;
     this.rmAppSecurityManager = rmAppSecurityManager;
-    
-    // TODO(Antonis): Maybe configurable???
-    JWT_AUDIENCE = new String[]{"job"};
-    
     this.renewalTasks = new ConcurrentHashMap<>();
     this.invalidationEvents = new ArrayBlockingQueue<JWTInvalidationEvent>(INVALIDATION_EVENTS_QUEUE_SIZE);
     this.eventHandler = rmContext.getDispatcher().getEventHandler();
@@ -86,7 +82,8 @@ public class JWTSecurityHandler
     this.config = config;
     jwtEnabled = config.getBoolean(YarnConfiguration.RM_JWT_ENABLED,
         YarnConfiguration.DEFAULT_RM_JWT_ENABLED);
-  
+    jwtAudience = config.getTrimmedStrings(YarnConfiguration.RM_JWT_AUDIENCE,
+        YarnConfiguration.DEFAULT_RM_JWT_AUDIENCE);
     renewalExecutorService = rmAppSecurityManager.getRenewalExecutorService();
     String validity = config.get(YarnConfiguration.RM_JWT_VALIDITY_PERIOD,
         YarnConfiguration.DEFAULT_RM_JWT_VALIDITY_PERIOD);
@@ -145,7 +142,7 @@ public class JWTSecurityHandler
   @InterfaceAudience.Private
   @VisibleForTesting
   protected void prepareJWTGenerationParameters(JWTMaterialParameter parameter) {
-    parameter.setAudiences(JWT_AUDIENCE);
+    parameter.setAudiences(jwtAudience);
     Instant now = getNow();
     Instant expirationInstant = now.plus(validityPeriod.getFirst(), validityPeriod.getSecond());
     Instant renewNotBefore = expirationInstant.plus(1L, ChronoUnit.HOURS);
